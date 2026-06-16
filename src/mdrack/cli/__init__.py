@@ -10,6 +10,7 @@ from typing import Any
 import click
 
 from mdrack import __version__
+from mdrack.cli.commands.eval import retrieval as eval_retrieval
 from mdrack.cli.commands.files import files as files_group
 from mdrack.cli.commands.read import read
 from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
@@ -108,7 +109,39 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
 def init(ctx: click.Context) -> None:
     """Initialize a local knowledge store."""
     cmd = _command_name(ctx)
-    _output(ctx, envelope_success({"status": "not yet implemented"}, command=cmd))
+    cfg = ctx.obj.get(CTX_CONFIG)
+    root: Path = ctx.obj.get(CTX_ROOT, Path("."))
+
+    try:
+        store_dir = root / cfg.paths.store
+        store_dir.mkdir(parents=True, exist_ok=True)
+        db_path = store_dir / "knowledge.db"
+
+        migrations_dir = (
+            Path(__file__).resolve().parent.parent
+            / "storage" / "sqlite" / "migrations"
+        )
+
+        from mdrack.storage.sqlite.connection import get_connection
+        from mdrack.storage.sqlite.migrations import apply_migrations
+
+        conn = get_connection(db_path)
+        try:
+            apply_migrations(conn, migrations_dir)
+            from mdrack.storage.sqlite.migrations import get_applied_migrations
+            applied = get_applied_migrations(conn)
+            schema_version = max(applied) if applied else None
+        finally:
+            conn.close()
+
+        _output(ctx, envelope_success({
+            "status": "initialized",
+            "store_path": str(store_dir),
+            "db_path": str(db_path),
+            "schema_version": schema_version,
+        }, command=cmd))
+    except Exception as exc:
+        _handle_exception(ctx, ConfigError(f"Failed to initialize store: {exc}"))
 
 
 # ---------------------------------------------------------------------------
@@ -206,11 +239,12 @@ rebuild.add_command(rebuild_embeddings_cmd, name="embeddings")
 
 
 # ---------------------------------------------------------------------------
-# Command: eval
+# Group: eval
 # ---------------------------------------------------------------------------
-@main.command()
+@main.group()
 @click.pass_context
 def eval_cmd(ctx: click.Context) -> None:
-    """Run retrieval evaluation queries."""
-    cmd = _command_name(ctx)
-    _output(ctx, envelope_success({"status": "not yet implemented"}, command=cmd))
+    """Retrieval evaluation commands."""
+
+
+eval_cmd.add_command(eval_retrieval, name="retrieval")

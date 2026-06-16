@@ -19,7 +19,7 @@ def _fresh_db(tmp_path: Path) -> Path:
     """Create a temporary database with all migrations applied."""
     store_dir = tmp_path / ".mdrack"
     store_dir.mkdir(parents=True, exist_ok=True)
-    db_path = store_dir / "index.db"
+    db_path = store_dir / "knowledge.db"
     conn = get_connection(db_path)
     apply_migrations(conn, MIGRATIONS_DIR)
     conn.close()

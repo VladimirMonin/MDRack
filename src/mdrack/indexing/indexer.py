@@ -71,7 +71,7 @@ def run_indexer(
     root = root.resolve()
     store_dir = Path(config.paths.store)
     store_dir.mkdir(parents=True, exist_ok=True)
-    db_path = store_dir / "index.db"
+    db_path = store_dir / "knowledge.db"
 
     migrations_dir = (
         Path(__file__).resolve().parent.parent / "storage" / "sqlite" / "migrations"

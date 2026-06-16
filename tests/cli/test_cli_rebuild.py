@@ -25,7 +25,7 @@ _MIGRATIONS_DIR = (
 def _setup_db(tmp_path: Path, with_chunks: bool = False) -> Path:
     store_dir = tmp_path / ".mdrack"
     store_dir.mkdir()
-    db_path = store_dir / "index.db"
+    db_path = store_dir / "knowledge.db"
     conn = get_connection(db_path)
     try:
         apply_migrations(conn, _MIGRATIONS_DIR)
@@ -156,7 +156,7 @@ class TestRebuildEmbeddings:
         assert data["profile"] == "default"
         assert data["provider"] == "fake"
 
-        db_path = tmp_path / ".mdrack" / "index.db"
+        db_path = tmp_path / ".mdrack" / "knowledge.db"
         conn = get_connection(db_path)
         try:
             rows = conn.execute("SELECT chunk_id, profile_name, embedding FROM chunk_embeddings").fetchall()
@@ -227,7 +227,7 @@ class TestRebuildEmbeddings:
         data = payload["data"]
         assert data["profile"] == "custom-profile"
 
-        db_path = tmp_path / ".mdrack" / "index.db"
+        db_path = tmp_path / ".mdrack" / "knowledge.db"
         conn = get_connection(db_path)
         try:
             rows = conn.execute(
@@ -247,7 +247,7 @@ class TestRebuildEmbeddings:
         )
         assert result1.exit_code == 0
 
-        db_path = tmp_path / ".mdrack" / "index.db"
+        db_path = tmp_path / ".mdrack" / "knowledge.db"
         conn = get_connection(db_path)
         rows1 = conn.execute(
             "SELECT chunk_id, embedding FROM chunk_embeddings ORDER BY chunk_id"

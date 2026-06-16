@@ -79,7 +79,7 @@ def test_indexer_with_fake_embeddings(temp_root_with_docs: Path):
     assert result.errors_count == 0
 
     # Verify database contents
-    db_path = Path(config.paths.store) / "index.db"
+    db_path = Path(config.paths.store) / "knowledge.db"
     assert db_path.exists()
 
     conn = get_connection(db_path)
@@ -149,7 +149,7 @@ def test_indexer_incremental_run(temp_root_with_docs: Path):
     assert result2.files_deleted == 0
 
     # Database should have same totals
-    db_path = Path(config.paths.store) / "index.db"
+    db_path = Path(config.paths.store) / "knowledge.db"
     conn = get_connection(db_path)
     try:
         files_count = count_files(conn)
@@ -168,7 +168,7 @@ def test_indexer_with_file_modification(temp_root_with_docs: Path):
 
     # Initial run
     run_indexer(temp_root_with_docs, config, provider=provider)
-    db_path = Path(config.paths.store) / "index.db"
+    db_path = Path(config.paths.store) / "knowledge.db"
     initial_chunk_count = count_chunks(get_connection(db_path))
 
     # Modify a file
@@ -213,7 +213,7 @@ def test_indexer_with_deleted_file(temp_root_with_docs: Path):
     assert result2.files_changed == 0  # Only 2 files remain, both unchanged
 
     # Verify file is gone
-    db_path = Path(config.paths.store) / "index.db"
+    db_path = Path(config.paths.store) / "knowledge.db"
     conn = get_connection(db_path)
     try:
         f2 = get_file_by_path(conn, "doc2.md")

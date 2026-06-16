@@ -22,7 +22,7 @@ def _setup_db(tmp_path: Path) -> Path:
     """Create a DB with schema migrations applied in tmp_path."""
     store_dir = tmp_path / ".mdrack"
     store_dir.mkdir()
-    db_path = store_dir / "mdrack.db"  # Match CLI expectation
+    db_path = store_dir / "knowledge.db"  # Match CLI expectation
     conn = get_connection(db_path)
     try:
         apply_migrations(conn, _MIGRATIONS_DIR)

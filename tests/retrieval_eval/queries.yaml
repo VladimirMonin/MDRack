@@ -1,0 +1,17 @@
+queries:
+  - id: Q001
+    query: "how can an agent read neighboring chunks"
+    mode: "hybrid"
+    expected:
+      file_path_contains: "retrieval"
+      heading_contains: "Neighbor"
+    metrics:
+      recall_at: 5
+
+  - id: Q002
+    query: "OperationalError no such table"
+    mode: "text"
+    expected:
+      content_contains: "OperationalError"
+    metrics:
+      recall_at: 5

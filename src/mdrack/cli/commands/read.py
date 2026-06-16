@@ -45,7 +45,7 @@ def _open_connection(ctx: click.Context) -> sqlite3.Connection:
     """
     root: Path = ctx.obj["root"]
     cfg = load_config()
-    db_path = root / cfg.paths.store / "mdrack.db"
+    db_path = root / cfg.paths.store / "knowledge.db"
     if not db_path.exists():
         raise StorageError(
             f"Database not found at {db_path}. Run 'mdrack init' first.",

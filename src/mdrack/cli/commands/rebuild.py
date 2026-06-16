@@ -85,7 +85,7 @@ def rebuild_fts_cmd(ctx: click.Context) -> None:
 
     store_dir = root / config.paths.store if config else root / ".mdrack"
     store_dir.mkdir(parents=True, exist_ok=True)
-    db_path = store_dir / "index.db"
+    db_path = store_dir / "knowledge.db"
 
     conn = get_connection(db_path)
     try:
@@ -136,7 +136,7 @@ def rebuild_embeddings_cmd(
 
     store_dir = root / config.paths.store if config else root / ".mdrack"
     store_dir.mkdir(parents=True, exist_ok=True)
-    db_path = store_dir / "index.db"
+    db_path = store_dir / "knowledge.db"
 
     provider_name: str = embedding_provider or config.embedding.provider
     provider = _create_provider(provider_name, config)
