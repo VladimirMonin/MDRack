@@ -1,0 +1,118 @@
+"""Text search across chunks using FTS5 with provenance join."""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+from dataclasses import dataclass, field
+
+from mdrack.storage.sqlite.fts import FTSQueryError, search_fts
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TextSearchItem:
+    """A single text search result with provenance."""
+
+    chunk_id: str
+    score: float
+    snippet: str
+    file_relative_path: str
+    section_title: str | None
+    heading_path: str | None
+
+
+@dataclass
+class TextSearchResult:
+    """Aggregated result of a text search query."""
+
+    query: str
+    results: list[TextSearchItem] = field(default_factory=list)
+    total_count: int = 0
+
+
+def text_search(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> TextSearchResult:
+    """Search chunks via FTS5 and enrich results with file/section provenance.
+
+    Args:
+        conn: An open SQLite connection.
+        query: FTS5 query string.
+        limit: Maximum number of results to return.
+        offset: Number of results to skip for pagination.
+
+    Returns:
+        TextSearchResult with enriched items.
+
+    Raises:
+        FTSQueryError: If the FTS query is invalid.
+    """
+    if not query.strip():
+        raise FTSQueryError("Search query must not be empty")
+
+    try:
+        # Use a larger internal limit to cover offset, then slice.
+        # FTS5 does not support OFFSET natively, so we fetch limit+offset
+        # rows and drop the first `offset` items.
+        fetch_limit = limit + offset
+        raw = _search_fts_with_offset(conn, query, fetch_limit)
+        sliced = raw[offset : offset + limit]
+        total = len(raw)
+    except FTSQueryError:
+        raise
+
+    items: list[TextSearchItem] = []
+    if sliced:
+        placeholders = ",".join("?" for _ in sliced)
+        chunk_ids = [r["chunk_id"] for r in sliced]
+        rows = conn.execute(
+            f"""
+            SELECT
+                c.id AS chunk_id,
+                c.heading_path,
+                f.relative_path,
+                s.title AS section_title
+            FROM chunks c
+            JOIN files f ON c.file_id = f.id
+            LEFT JOIN sections s ON c.section_id = s.id
+            WHERE c.id IN ({placeholders})
+            """,
+            chunk_ids,
+        ).fetchall()
+        provenance = {row["chunk_id"]: dict(row) for row in rows}
+
+        rank_map = {r["chunk_id"]: r["rank"] for r in sliced}
+        snippet_map = {r["chunk_id"]: r["snippet"] for r in sliced}
+
+        for cid in chunk_ids:
+            prov = provenance.get(cid, {})
+            items.append(
+                TextSearchItem(
+                    chunk_id=cid,
+                    score=rank_map.get(cid, 0.0),
+                    snippet=snippet_map.get(cid, ""),
+                    file_relative_path=prov.get("relative_path", ""),
+                    section_title=prov.get("section_title"),
+                    heading_path=prov.get("heading_path"),
+                )
+            )
+
+    return TextSearchResult(query=query, results=items, total_count=total)
+
+
+def _search_fts_with_offset(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int,
+) -> list[dict]:
+    """Run FTS5 search returning up to *limit* rows.
+
+    Delegates to the existing ``search_fts`` helper so we stay compatible
+    with the single FTS interface.
+    """
+    return search_fts(conn, query, limit=limit)
