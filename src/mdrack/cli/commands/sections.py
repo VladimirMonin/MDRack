@@ -5,7 +5,6 @@ Provides commands to inspect section structure of indexed files.
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from pathlib import Path
@@ -16,6 +15,7 @@ import click
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import MDRackError, StorageError
+from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.repositories import get_file, list_sections
 
@@ -44,7 +44,7 @@ def _open_connection(ctx: click.Context) -> sqlite3.Connection:
 
 def _echo_json(payload: dict[str, Any]) -> None:
     """Print a JSON payload to stdout."""
-    click.echo(json.dumps(payload, ensure_ascii=False))
+    emit_json(payload)
 
 
 # ---------------------------------------------------------------------------

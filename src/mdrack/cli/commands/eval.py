@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from mdrack.eval.retrieval import run_retrieval_eval
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import StorageError
+from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
 
 logger = logging.getLogger(__name__)
@@ -23,10 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     json_flag: bool = ctx.obj.get("json_output", True) if ctx.obj else True
-    if json_flag:
-        click.echo(json.dumps(payload, ensure_ascii=False))
-    else:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    emit_json(payload, pretty=not json_flag)
 
 
 def _open_connection(db_path: Path) -> Any:

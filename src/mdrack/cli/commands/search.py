@@ -7,7 +7,6 @@ Provides mdrack search <query> with --mode text|semantic|hybrid,
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import sqlite3
 from pathlib import Path
@@ -20,6 +19,7 @@ from mdrack.embeddings.runtime import close_async_resource, create_embedding_pro
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import StorageError
+from mdrack.output.json_output import emit_json
 from mdrack.search.hybrid import hybrid_search
 from mdrack.search.semantic import semantic_search
 from mdrack.search.text import text_search
@@ -39,10 +39,7 @@ def _open_connection(db_path: Path) -> sqlite3.Connection:
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     json_flag: bool = ctx.obj.get("json_output", True) if ctx.obj else True
-    if json_flag:
-        click.echo(json.dumps(payload, ensure_ascii=False))
-    else:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    emit_json(payload, pretty=not json_flag)
 
 
 @click.command()

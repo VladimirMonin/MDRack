@@ -13,11 +13,11 @@ import click
 from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.output.envelope import success as envelope_success
+from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.fts import rebuild_fts
 from mdrack.storage.sqlite.migrations import apply_migrations
 from mdrack.storage.sqlite.repositories import count_chunks
-from mdrack.storage.sqlite.vector import VectorIndex
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,7 @@ DEFAULT_BATCH_SIZE = 32
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     json_flag: bool = ctx.obj.get("json_output", True) if ctx.obj else True
-    if json_flag:
-        click.echo(json.dumps(payload, ensure_ascii=False))
-    else:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    emit_json(payload, pretty=not json_flag)
 
 
 def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) -> None:
@@ -56,7 +53,6 @@ def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) ->
             "INSERT INTO embedding_profiles (name, model, dimensions, endpoint) VALUES (?, ?, ?, ?)",
             (profile_name, str(model_name), dimensions, endpoint),
         )
-        conn.commit()
         logger.info("Created embedding profile: %s (dims=%d)", profile_name, dimensions)
         return
 
@@ -71,8 +67,30 @@ def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) ->
         "UPDATE embedding_profiles SET model = ?, dimensions = ?, endpoint = ? WHERE name = ?",
         (str(model_name), dimensions, endpoint, profile_name),
     )
-    conn.commit()
     logger.info("Updated embedding profile metadata: %s (dims=%d)", profile_name, dimensions)
+
+
+def _upsert_vectors(conn: Any, profile_name: str, chunk_ids: list[str], vectors: list[list[float]]) -> None:
+    now = None
+    rows: list[tuple[str, str, bytes, str]] = []
+    for chunk_id, vector in zip(chunk_ids, vectors):
+        payload = json.dumps(vector).encode("utf-8")
+        if now is None:
+            from datetime import datetime, timezone
+
+            now = datetime.now(timezone.utc).isoformat()
+        rows.append((chunk_id, profile_name, payload, now))
+
+    conn.executemany(
+        """
+        INSERT INTO chunk_embeddings (chunk_id, profile_name, embedding, embedded_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (chunk_id, profile_name)
+        DO UPDATE SET embedding = excluded.embedding,
+                     embedded_at = excluded.embedded_at
+        """,
+        rows,
+    )
 
 
 def rebuild_embeddings_in_db(
@@ -80,13 +98,12 @@ def rebuild_embeddings_in_db(
     provider: EmbeddingProvider,
     profile_name: str = "default",
 ) -> dict[str, Any]:
-    """Rebuild every embedding vector for the selected profile in one database."""
+    """Rebuild every embedding vector for the selected profile in batches."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = get_connection(db_path)
     try:
         apply_migrations(conn, _MIGRATIONS_DIR)
-        _ensure_embedding_profile(conn, profile_name, provider)
 
         rows = conn.execute(
             "SELECT id, embedding_text FROM chunks WHERE embedding_text IS NOT NULL ORDER BY id",
@@ -100,17 +117,30 @@ def rebuild_embeddings_in_db(
                 "profile": profile_name,
             }
 
-        chunk_ids = [row["id"] for row in rows]
-        texts = [row["embedding_text"] for row in rows]
-        vectors = asyncio.run(provider.embed(texts, profile=profile_name))
+        conn.execute("BEGIN")
+        try:
+            _ensure_embedding_profile(conn, profile_name, provider)
+            conn.execute(
+                "DELETE FROM chunk_embeddings WHERE profile_name = ?",
+                (profile_name,),
+            )
 
-        vi = VectorIndex(conn)
-        vi.delete_all(profile_name)
-        for chunk_id, vec in zip(chunk_ids, vectors):
-            vi.upsert(chunk_id, profile_name, vec)
+            embedded_count = 0
+            for start in range(0, len(rows), DEFAULT_BATCH_SIZE):
+                batch_rows = rows[start : start + DEFAULT_BATCH_SIZE]
+                chunk_ids = [row["id"] for row in batch_rows]
+                texts = [row["embedding_text"] for row in batch_rows]
+                vectors = asyncio.run(provider.embed(texts, profile=profile_name))
+                _upsert_vectors(conn, profile_name, chunk_ids, vectors)
+                embedded_count += len(chunk_ids)
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
         return {
-            "embedded_count": len(chunk_ids),
+            "embedded_count": embedded_count,
             "total_chunks": total_chunks,
             "profile": profile_name,
         }

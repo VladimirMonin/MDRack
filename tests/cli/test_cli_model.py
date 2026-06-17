@@ -92,7 +92,12 @@ class StubModelSwitchControlClient:
     def list_models(self) -> list[LMStudioModelInfo]:
         self.calls.append(("list_models", ()))
         return [
-            LMStudioModelInfo(key=MODEL_SMALL, state="downloaded", loaded=True),
+            LMStudioModelInfo(
+                key=MODEL_SMALL,
+                state="downloaded",
+                loaded=True,
+                instance_ids=("instance-small",),
+            ),
             LMStudioModelInfo(key=MODEL_LARGE, state="downloaded", loaded=False),
         ]
 
@@ -103,6 +108,9 @@ class StubModelSwitchControlClient:
             state="loaded",
             instance_id=f"instance-{model_name.rsplit('/', 1)[-1]}",
         )
+
+    def unload_model(self, instance_id: str) -> None:
+        self.calls.append(("unload_model", (instance_id,)))
 
     def probe_embedding_dimensions(self, model_name: str) -> int:
         self.calls.append(("probe_embedding_dimensions", (model_name,)))
@@ -127,6 +135,7 @@ class AliasModelSwitchControlClient(StubModelSwitchControlClient):
                 display_name="Qwen3 Embedding 0.6B",
                 state="downloaded",
                 loaded=True,
+                instance_ids=("instance-small",),
             ),
             LMStudioModelInfo(
                 key=self.LARGE_KEY,
@@ -405,11 +414,23 @@ def test_model_switch_persists_config_after_successful_rebuild(
         "state": "loaded",
         "instance_id": "instance-Qwen3-Embedding-4B-GGUF",
     }
+    assert payload["data"]["unload_previous"] == {
+        "attempted": True,
+        "model": MODEL_SMALL,
+        "status": "unloaded",
+        "results": [
+            {
+                "instance_id": "instance-small",
+                "status": "unloaded",
+            }
+        ],
+    }
     assert payload["meta"]["command"] == "model switch"
     assert client.calls == [
         ("list_models", ()),
         ("load_model", (MODEL_LARGE,)),
         ("probe_embedding_dimensions", (MODEL_LARGE,)),
+        ("unload_model", ("instance-small",)),
     ]
 
     assert captured["model_name"] == MODEL_LARGE
@@ -493,9 +514,53 @@ def test_model_switch_resolves_user_alias_to_lmstudio_key(
     payload = json.loads(result.output)
     assert payload["data"]["requested_model"] == MODEL_LARGE
     assert payload["data"]["new_model"] == AliasModelSwitchControlClient.LARGE_KEY
+    assert payload["data"]["unload_previous"] == {
+        "attempted": True,
+        "model": AliasModelSwitchControlClient.SMALL_KEY,
+        "status": "unloaded",
+        "results": [
+            {
+                "instance_id": "instance-small",
+                "status": "unloaded",
+            }
+        ],
+    }
     assert client.calls == [
         ("list_models", ()),
         ("load_model", (AliasModelSwitchControlClient.LARGE_KEY,)),
         ("probe_embedding_dimensions", (AliasModelSwitchControlClient.LARGE_KEY,)),
+        ("unload_model", ("instance-small",)),
     ]
     assert captured["model_name"] == AliasModelSwitchControlClient.LARGE_KEY
+
+
+def test_model_switch_skips_unload_when_switching_to_same_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_config(tmp_path, MODEL_SMALL, SMALL_DIMENSIONS)
+    client = StubModelSwitchControlClient()
+
+    monkeypatch.setattr(
+        "mdrack.cli.commands.model.create_model_control_client",
+        lambda ctx: client,
+    )
+    monkeypatch.setattr(
+        "mdrack.cli.commands.model._run_switch_rebuild",
+        lambda **kwargs: {"performed": True, "mode": kwargs["rebuild_mode"]},
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--root", str(tmp_path), "model", "switch", MODEL_SMALL])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["data"]["unload_previous"] == {
+        "attempted": False,
+        "model": MODEL_SMALL,
+        "reason": "same_model",
+    }
+    assert client.calls == [
+        ("list_models", ()),
+        ("probe_embedding_dimensions", (MODEL_SMALL,)),
+    ]

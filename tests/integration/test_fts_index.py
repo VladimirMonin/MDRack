@@ -52,6 +52,12 @@ def _seed_chunks(conn):
         VALUES ('c2', 'f1', 'SQLite FTS5 is powerful', 'code', 1, 'Intro > FTS')
         """,
     )
+    conn.execute(
+        """
+        INSERT INTO chunks (id, file_id, content, content_type, chunk_index, heading_path)
+        VALUES ('c3', 'f1', 'GPU-time accounting matters for cloud limits', 'text', 2, 'Intro > Pricing')
+        """,
+    )
     conn.commit()
 
 
@@ -62,12 +68,26 @@ class TestUpsertAndSearch:
             _seed_chunks(conn)
             upsert_fts(conn, "c1", "Hello world from MDRack", "text", "Intro > Welcome")
             upsert_fts(conn, "c2", "SQLite FTS5 is powerful", "code", "Intro > FTS")
+            upsert_fts(conn, "c3", "GPU-time accounting matters for cloud limits", "text", "Intro > Pricing")
 
             results = search_fts(conn, "Hello")
             assert len(results) == 1
             assert results[0]["chunk_id"] == "c1"
             assert "rank" in results[0]
             assert "snippet" in results[0]
+        finally:
+            conn.close()
+            db_path.unlink(missing_ok=True)
+
+    def test_plain_text_query_with_hyphen_falls_back_to_phrase(self):
+        conn, db_path = _fresh_db()
+        try:
+            _seed_chunks(conn)
+            upsert_fts(conn, "c3", "GPU-time accounting matters for cloud limits", "text", "Intro > Pricing")
+
+            results = search_fts(conn, "GPU-time")
+            assert len(results) == 1
+            assert results[0]["chunk_id"] == "c3"
         finally:
             conn.close()
             db_path.unlink(missing_ok=True)

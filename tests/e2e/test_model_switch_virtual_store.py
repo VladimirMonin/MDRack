@@ -81,20 +81,45 @@ class StubModelControlClient:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.loaded_instance_ids: dict[str, tuple[str, ...]] = {
+            MODEL_SMALL: ("instance-Qwen3-Embedding-0.6B-GGUF",),
+            MODEL_LARGE: (),
+        }
 
     def list_models(self) -> list[LMStudioModelInfo]:
         return [
-            LMStudioModelInfo(key=MODEL_SMALL, state="downloaded", loaded=True),
-            LMStudioModelInfo(key=MODEL_LARGE, state="downloaded", loaded=False),
+            LMStudioModelInfo(
+                key=MODEL_SMALL,
+                state="downloaded",
+                loaded=bool(self.loaded_instance_ids[MODEL_SMALL]),
+                instance_ids=self.loaded_instance_ids[MODEL_SMALL],
+            ),
+            LMStudioModelInfo(
+                key=MODEL_LARGE,
+                state="downloaded",
+                loaded=bool(self.loaded_instance_ids[MODEL_LARGE]),
+                instance_ids=self.loaded_instance_ids[MODEL_LARGE],
+            ),
         ]
 
     def load_model(self, model_name: str) -> LMStudioLoadResult:
         self.calls.append(("load_model", model_name))
+        instance_id = f"instance-{model_name.rsplit('/', 1)[-1]}"
+        self.loaded_instance_ids[model_name] = (instance_id,)
         return LMStudioLoadResult(
             key=model_name,
             state="loaded",
-            instance_id=f"instance-{model_name.rsplit('/', 1)[-1]}",
+            instance_id=instance_id,
         )
+
+    def unload_model(self, instance_id: str) -> None:
+        self.calls.append(("unload_model", instance_id))
+        for model_name, loaded_instances in self.loaded_instance_ids.items():
+            if instance_id in loaded_instances:
+                self.loaded_instance_ids[model_name] = tuple(
+                    item for item in loaded_instances if item != instance_id
+                )
+                break
 
     def probe_embedding_dimensions(self, model_name: str) -> int:
         self.calls.append(("probe_embedding_dimensions", model_name))
@@ -231,6 +256,17 @@ def test_model_switch_rebuilds_virtual_store_vectors_end_to_end(
     assert switch_to_large["data"]["new_dimensions"] == LARGE_DIMENSIONS
     assert switch_to_large["data"]["rebuild"]["performed"] is True
     assert switch_to_large["data"]["rebuild"]["embedded_count"] == len(initial_vectors)
+    assert switch_to_large["data"]["unload_previous"] == {
+        "attempted": True,
+        "model": MODEL_SMALL,
+        "status": "unloaded",
+        "results": [
+            {
+                "instance_id": "instance-Qwen3-Embedding-0.6B-GGUF",
+                "status": "unloaded",
+            }
+        ],
+    }
 
     status_large = _invoke_json(runner, root, "status")
     assert status_large["data"]["configured_model"] == MODEL_LARGE
@@ -258,6 +294,22 @@ def test_model_switch_rebuilds_virtual_store_vectors_end_to_end(
     assert switch_back["data"]["new_dimensions"] == SMALL_DIMENSIONS
     assert switch_back["data"]["rebuild"]["performed"] is True
     assert switch_back["data"]["rebuild"]["embedded_count"] == len(initial_vectors)
+    assert switch_back["data"]["load"] == {
+        "key": MODEL_SMALL,
+        "state": "loaded",
+        "instance_id": "instance-Qwen3-Embedding-0.6B-GGUF",
+    }
+    assert switch_back["data"]["unload_previous"] == {
+        "attempted": True,
+        "model": MODEL_LARGE,
+        "status": "unloaded",
+        "results": [
+            {
+                "instance_id": "instance-Qwen3-Embedding-4B-GGUF",
+                "status": "unloaded",
+            }
+        ],
+    }
 
     status_small = _invoke_json(runner, root, "status")
     assert status_small["data"]["configured_model"] == MODEL_SMALL
@@ -275,5 +327,8 @@ def test_model_switch_rebuilds_virtual_store_vectors_end_to_end(
     assert control_client.calls == [
         ("load_model", MODEL_LARGE),
         ("probe_embedding_dimensions", MODEL_LARGE),
+        ("unload_model", "instance-Qwen3-Embedding-0.6B-GGUF"),
+        ("load_model", MODEL_SMALL),
         ("probe_embedding_dimensions", MODEL_SMALL),
+        ("unload_model", "instance-Qwen3-Embedding-4B-GGUF"),
     ]

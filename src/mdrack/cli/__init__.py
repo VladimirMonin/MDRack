@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ from mdrack.config.loader import load_config, resolve_config_path
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, MDRackError
+from mdrack.output.json_output import emit_json
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +58,7 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     Respects the --json flag: when False, pretty-prints with indent=2.
     """
     json_flag: bool = ctx.obj.get(CTX_JSON, True) if ctx.obj else True
-    if json_flag:
-        click.echo(json.dumps(payload, ensure_ascii=False))
-    else:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    emit_json(payload, pretty=not json_flag)
 
 
 def _command_name(ctx: click.Context) -> str:
@@ -106,7 +103,7 @@ def _handle_exception(ctx: click.Context, exc: Exception) -> None:
 )
 @click.pass_context
 def main(ctx: click.Context, root: str, json_output: bool, config_file: str | None) -> None:
-    """MDRack — Local command-line Markdown knowledge rack for AI agents."""
+    """MDRack - Local command-line Markdown knowledge rack for AI agents."""
     _configure_logging()
     ctx.ensure_object(dict)
     resolved_root = Path(root).resolve()

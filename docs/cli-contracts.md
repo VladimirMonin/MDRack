@@ -915,6 +915,7 @@ Behavior summary:
 - loads the target model unless `--no-load` is used;
 - probes the real vector dimension if `--dimensions` is omitted;
 - persists the updated config only after rebuild succeeds;
+- unloads the previously active model instance after a successful switch when possible;
 - rebuilds vectors for the whole active profile by default.
 
 Example success payload:
@@ -941,6 +942,17 @@ Example success payload:
       "key": "text-embedding-qwen3-embedding-4b",
       "state": "loaded",
       "instance_id": "text-embedding-qwen3-embedding-4b"
+    },
+    "unload_previous": {
+      "attempted": true,
+      "model": "text-embedding-qwen3-embedding-0.6b",
+      "status": "unloaded",
+      "results": [
+        {
+          "instance_id": "text-embedding-qwen3-embedding-0.6b",
+          "status": "unloaded"
+        }
+      ]
     }
   },
   "meta": { "command": "model switch" }
@@ -952,6 +964,8 @@ Notes:
 - When the target model is already loaded, `load.state` becomes `"already_loaded"`.
 - `new_model` may differ from `requested_model` because MDRack stores the resolved
   LM Studio key after a successful switch.
+- `unload_previous.reason` may be `"same_model"` or `"previous_model_not_loaded"`
+  when there is nothing to unload.
 
 ---
 

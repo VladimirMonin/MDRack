@@ -63,14 +63,14 @@ def _seed(conn):
     conn.execute(
         """INSERT INTO chunks
            (id, file_id, section_id, content, content_type, chunk_index, heading_path)
-           VALUES ('c4', 'f2', 's2', 'Python integration example', 'text', 1, 'API > Endpoints')""",
+           VALUES ('c4', 'f2', 's2', 'Python integration and GPU-time example', 'text', 1, 'API > Endpoints')""",
     )
     conn.commit()
 
     upsert_fts(conn, "c1", "Hello world from MDRack", "text", "Welcome")
     upsert_fts(conn, "c2", "Another welcome paragraph", "text", "Welcome")
     upsert_fts(conn, "c3", "SQLite FTS5 is powerful", "code", "API > Endpoints")
-    upsert_fts(conn, "c4", "Python integration example", "text", "API > Endpoints")
+    upsert_fts(conn, "c4", "Python integration and GPU-time example", "text", "API > Endpoints")
 
 
 class TestBasicSearch:
@@ -109,6 +109,17 @@ class TestBasicSearch:
             _seed(conn)
             result = text_search(conn, "welcome")
             assert len(result.results) == 2
+        finally:
+            conn.close()
+            db_path.unlink(missing_ok=True)
+
+    def test_plain_text_query_with_hyphen(self):
+        conn, db_path = _fresh_db()
+        try:
+            _seed(conn)
+            result = text_search(conn, "GPU-time")
+            assert len(result.results) == 1
+            assert result.results[0].chunk_id == "c4"
         finally:
             conn.close()
             db_path.unlink(missing_ok=True)

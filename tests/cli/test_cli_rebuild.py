@@ -7,9 +7,11 @@ import sqlite3
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import pytest
 from click.testing import CliRunner
 
 from mdrack.cli import main
+from mdrack.cli.commands.rebuild import DEFAULT_BATCH_SIZE, rebuild_embeddings_in_db
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations
 
@@ -74,6 +76,52 @@ def _seed_chunks(conn: sqlite3.Connection) -> None:
         ),
     )
     conn.commit()
+
+
+def _seed_many_chunks(conn: sqlite3.Connection, count: int) -> None:
+    conn.execute(
+        "INSERT INTO files (id, relative_path, source_hash, indexed_at) VALUES (?, ?, ?, ?)",
+        ("file-many", "docs/many.md", "hash-many", "2024-01-01T00:00:00Z"),
+    )
+    for index in range(count):
+        conn.execute(
+            (
+                "INSERT INTO chunks "
+                "(id, file_id, content, content_type, chunk_index, embedding_text) "
+                "VALUES (?, ?, ?, ?, ?, ?)"
+            ),
+            (
+                f"chunk-many-{index:03d}",
+                "file-many",
+                f"Chunk content {index}",
+                "text",
+                index,
+                f"docs/many.md :: Section {index} ||| Chunk content {index}",
+            ),
+        )
+    conn.commit()
+
+
+class CountingProvider:
+    def __init__(self, *, model_name: str = "counting-model", dimensions: int = 3) -> None:
+        self.model_name = model_name
+        self.dimensions = dimensions
+        self.endpoint = "http://localhost:1234/v1"
+        self.calls: list[int] = []
+
+    async def embed(self, texts: list[str], profile: str = "default") -> list[list[float]]:
+        del profile
+        self.calls.append(len(texts))
+        return [[float(len(text))] * self.dimensions for text in texts]
+
+
+class FailingSecondBatchProvider(CountingProvider):
+    async def embed(self, texts: list[str], profile: str = "default") -> list[list[float]]:
+        del profile
+        self.calls.append(len(texts))
+        if len(self.calls) == 2:
+            raise RuntimeError("second batch failed")
+        return [[float(len(text))] * self.dimensions for text in texts]
 
 
 class TestRebuildFTS:
@@ -302,5 +350,60 @@ class TestRebuildEmbeddings:
             assert row["model"] == "qwen3-embedding-0.6b"
             assert row["dimensions"] == 1024
             assert row["endpoint"] == "http://localhost:1234/v1"
+        finally:
+            conn.close()
+
+    def test_rebuild_embeddings_batches_large_rebuilds(self, tmp_path: Path) -> None:
+        db_path = _setup_db(tmp_path, with_chunks=False)
+        conn = get_connection(db_path)
+        try:
+            _seed_many_chunks(conn, DEFAULT_BATCH_SIZE + 3)
+        finally:
+            conn.close()
+
+        provider = CountingProvider()
+        data = rebuild_embeddings_in_db(db_path, provider, "default")
+
+        assert data["embedded_count"] == DEFAULT_BATCH_SIZE + 3
+        assert provider.calls == [DEFAULT_BATCH_SIZE, 3]
+
+        conn = get_connection(db_path)
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM chunk_embeddings WHERE profile_name = 'default'"
+            ).fetchone()["cnt"]
+            assert count == DEFAULT_BATCH_SIZE + 3
+        finally:
+            conn.close()
+
+    def test_rebuild_embeddings_rolls_back_vectors_and_profile_on_batch_failure(self, tmp_path: Path) -> None:
+        db_path = _setup_db(tmp_path, with_chunks=False)
+        conn = get_connection(db_path)
+        try:
+            _seed_many_chunks(conn, DEFAULT_BATCH_SIZE + 3)
+        finally:
+            conn.close()
+
+        initial_provider = CountingProvider(model_name="initial-model", dimensions=3)
+        rebuild_embeddings_in_db(db_path, initial_provider, "default")
+
+        failing_provider = FailingSecondBatchProvider(model_name="failed-model", dimensions=5)
+        with pytest.raises(RuntimeError, match="second batch failed"):
+            rebuild_embeddings_in_db(db_path, failing_provider, "default")
+
+        conn = get_connection(db_path)
+        try:
+            profile = conn.execute(
+                "SELECT model, dimensions, endpoint FROM embedding_profiles WHERE name = 'default'"
+            ).fetchone()
+            assert profile is not None
+            assert profile["model"] == "initial-model"
+            assert profile["dimensions"] == 3
+            assert profile["endpoint"] == "http://localhost:1234/v1"
+
+            count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM chunk_embeddings WHERE profile_name = 'default'"
+            ).fetchone()["cnt"]
+            assert count == DEFAULT_BATCH_SIZE + 3
         finally:
             conn.close()

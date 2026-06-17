@@ -6,7 +6,6 @@ from the SQLite knowledge store.
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from pathlib import Path
@@ -17,6 +16,7 @@ import click
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import MDRackError, StorageError
+from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.repositories import (
     get_chunk,
@@ -56,10 +56,7 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     Respects the --json flag: when False, pretty-prints with indent=2.
     """
     json_flag: bool = ctx.obj.get("json_output", True)
-    if json_flag:
-        click.echo(json.dumps(payload, ensure_ascii=False))
-    else:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    emit_json(payload, pretty=not json_flag)
 
 
 # ---------------------------------------------------------------------------

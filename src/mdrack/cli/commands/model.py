@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import json
 import logging
 import re
 from inspect import isawaitable
@@ -22,6 +21,7 @@ from mdrack.indexing.indexer import run_indexer
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, EmbeddingError, MDRackError
+from mdrack.output.json_output import emit_json
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +46,7 @@ def create_model_control_client(ctx: click.Context) -> object:
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     json_flag: bool = ctx.obj.get("json_output", True) if ctx.obj else True
-    if json_flag:
-        click.echo(json.dumps(payload, ensure_ascii=False))
-    else:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    emit_json(payload, pretty=not json_flag)
 
 
 def _command_name(ctx: click.Context) -> str:
@@ -320,6 +317,98 @@ def _already_loaded_result(
     return None
 
 
+def _loaded_instance_ids_for_model(client: object, model: Any | None) -> tuple[str, ...]:
+    if model is None:
+        return ()
+
+    instance_ids = tuple(getattr(model, "instance_ids", ()) or ())
+    if instance_ids:
+        return instance_ids
+
+    model_key = getattr(model, "key", None)
+    if not isinstance(model_key, str) or not model_key:
+        return ()
+
+    try:
+        loaded_models = _invoke_client_method(client, "list_loaded_models")
+    except Exception:
+        logger.debug("Loaded-model instance lookup failed", exc_info=True)
+        return ()
+
+    return tuple(
+        instance_id
+        for item in loaded_models
+        for instance_id in (getattr(item, "instance_id", None),)
+        if getattr(item, "key", None) == model_key and isinstance(instance_id, str) and instance_id
+    )
+
+
+def _unload_previous_model(
+    client: object,
+    *,
+    previous_model_name: str,
+    new_model_name: str,
+    instance_ids: tuple[str, ...],
+) -> dict[str, Any]:
+    if previous_model_name == new_model_name:
+        return {
+            "attempted": False,
+            "model": previous_model_name,
+            "reason": "same_model",
+        }
+
+    if not instance_ids:
+        return {
+            "attempted": False,
+            "model": previous_model_name,
+            "reason": "previous_model_not_loaded",
+        }
+
+    unloaded: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    for instance_id in instance_ids:
+        try:
+            result = _invoke_client_method(client, "unload_model", instance_id)
+        except Exception as exc:
+            logger.warning(
+                "cli.model.switch.unload_previous.failed previous_model=%s new_model=%s instance_id=%s error_type=%s",
+                previous_model_name,
+                new_model_name,
+                instance_id,
+                type(exc).__name__,
+            )
+            errors.append(
+                {
+                    "instance_id": instance_id,
+                    "message": str(exc),
+                }
+            )
+            continue
+
+        payload = _to_jsonable(result)
+        if not isinstance(payload, dict):
+            payload = {}
+        payload.setdefault("instance_id", instance_id)
+        payload.setdefault("status", "unloaded")
+        unloaded.append(payload)
+
+    status = "unloaded"
+    if errors and unloaded:
+        status = "partial_failure"
+    elif errors:
+        status = "failed"
+
+    data: dict[str, Any] = {
+        "attempted": True,
+        "model": previous_model_name,
+        "status": status,
+        "results": unloaded,
+    }
+    if errors:
+        data["errors"] = errors
+    return data
+
+
 def _run_switch_rebuild(
     *,
     ctx: click.Context,
@@ -387,20 +476,20 @@ def _run_switch_rebuild(
 @click.group()
 @click.pass_context
 def model(ctx: click.Context) -> None:
-    """Manage LM Studio model lifecycle operations."""
+    """Download, load, unload, and switch LM Studio embedding models."""
 
 
 @model.command("list")
 @click.pass_context
 def model_list(ctx: click.Context) -> None:
-    """List LM Studio models visible to MDRack."""
+    """List LM Studio models visible through the configured endpoint."""
     _run_model_command(ctx, method_name="list_models", collection_key="models")
 
 
 @model.command("loaded")
 @click.pass_context
 def model_loaded(ctx: click.Context) -> None:
-    """Show currently loaded LM Studio model instances."""
+    """Show loaded LM Studio model instances and their instance ids."""
     _run_model_command(ctx, method_name="list_loaded_models", collection_key="models")
 
 
@@ -408,7 +497,7 @@ def model_loaded(ctx: click.Context) -> None:
 @click.argument("model_name", metavar="MODEL")
 @click.pass_context
 def model_download(ctx: click.Context, model_name: str) -> None:
-    """Download a model through LM Studio."""
+    """Request model download through LM Studio."""
     cmd = _command_name(ctx)
     logger.info("cli.command.started command=%s", cmd)
     client: object | None = None
@@ -435,7 +524,7 @@ def model_download(ctx: click.Context, model_name: str) -> None:
 @model.command("download-status")
 @click.pass_context
 def model_download_status(ctx: click.Context) -> None:
-    """Show LM Studio model download status."""
+    """Show active or recent LM Studio download tasks."""
     _run_model_command(
         ctx,
         method_name="get_download_status",
@@ -447,7 +536,7 @@ def model_download_status(ctx: click.Context) -> None:
 @click.argument("model_name", metavar="MODEL")
 @click.pass_context
 def model_load(ctx: click.Context, model_name: str) -> None:
-    """Load a model into LM Studio."""
+    """Load a model into LM Studio unless it is already loaded."""
     cmd = _command_name(ctx)
     logger.info("cli.command.started command=%s", cmd)
     client: object | None = None
@@ -481,7 +570,7 @@ def model_load(ctx: click.Context, model_name: str) -> None:
 @click.argument("instance_id", metavar="INSTANCE_ID")
 @click.pass_context
 def model_unload(ctx: click.Context, instance_id: str) -> None:
-    """Unload a running LM Studio model instance."""
+    """Unload a running LM Studio model instance from `model loaded`."""
     _run_model_command(
         ctx,
         method_name="unload_model",
@@ -525,7 +614,7 @@ def model_switch(
     rebuild_mode: str,
     yes: bool,
 ) -> None:
-    """Switch the active embedding model and rebuild vectors safely."""
+    """Switch the active embedding model, rebuild vectors, and unload the previous model."""
     cmd = _command_name(ctx)
     config = ctx.obj.get("config") if ctx.obj else None
     config_path = ctx.obj.get("config_path") if ctx.obj else None
@@ -549,6 +638,13 @@ def model_switch(
         models = _invoke_client_method(client, "list_models")
         resolved_model_name = _resolve_model_key(models, model_name) or model_name
         existing_model = _find_model(models, model_name)
+        previous_model = _find_model(models, config.embedding.model)
+        previous_model_name = (
+            getattr(previous_model, "key", None)
+            or _resolve_model_key(models, config.embedding.model)
+            or config.embedding.model
+        )
+        previous_instance_ids = _loaded_instance_ids_for_model(client, previous_model)
         download_info: list[dict[str, Any]] = []
 
         if existing_model is None:
@@ -608,6 +704,13 @@ def model_switch(
         if ctx.obj is not None:
             ctx.obj["config"] = switched_config
 
+        unload_previous = _unload_previous_model(
+            client,
+            previous_model_name=previous_model_name,
+            new_model_name=resolved_model_name,
+            instance_ids=previous_instance_ids,
+        )
+
         data = {
             "old_model": config.embedding.model,
             "requested_model": model_name,
@@ -618,6 +721,7 @@ def model_switch(
             "rebuild": rebuild_data,
             "download": download_info,
             "load": _to_jsonable(load_result) if load_result is not None else None,
+            "unload_previous": unload_previous,
         }
     except Exception as exc:
         _handle_error(ctx, cmd, exc)

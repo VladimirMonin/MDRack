@@ -53,7 +53,7 @@ Assumptions:
 - sqlite-vec is allowed because it is an SQLite extension, not a separate specialized vector database.
 - LM Studio is already installed by the user.
 - The user will run LM Studio server manually before indexing or semantic search.
-- The user may manage embedding model download/load/unload/switch through `mdrack model ...` commands.
+- The user may manage embedding model download/load/unload/switch through `mdrack model ...` commands, and a successful `model switch` should unload the previous model instance when possible.
 - Qwen3-Embedding-0.6B is available in LM Studio.
 - LM Studio may expose a different internal model key than the human-facing model name; MDRack must resolve and persist the effective key safely.
 - Embedding dimension defaults to 1024.
