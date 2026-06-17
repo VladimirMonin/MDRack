@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
 import click
 
-from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.embeddings.lmstudio import LMStudioProvider
 from mdrack.embeddings.protocol import EmbeddingProvider
+from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.eval.queries import load_queries
 from mdrack.eval.retrieval import run_retrieval_eval
 from mdrack.output.envelope import error as envelope_error
@@ -37,31 +35,6 @@ def _open_connection(db_path: Path) -> Any:
             f"Database not found at {db_path}. Run 'mdrack scan' first.",
         )
     return get_connection(db_path)
-
-
-def _create_provider(provider_name: str, config: Any) -> EmbeddingProvider:
-    if provider_name == "fake":
-        return FakeEmbeddingProvider(
-            dimensions=config.embedding.dimensions,
-            provider_name="fake",
-        )
-    return LMStudioProvider(
-        endpoint=config.embedding.endpoint,
-        model=config.embedding.model,
-        dimensions=config.embedding.dimensions,
-        timeout=config.embedding.timeout_secs,
-    )
-
-
-async def _close_provider(provider: EmbeddingProvider | None) -> None:
-    if provider is None:
-        return
-    close = getattr(provider, "close", None)
-    if close is None:
-        return
-    result = close()
-    if isawaitable(result):
-        await result
 
 
 @click.command()
@@ -120,7 +93,7 @@ def retrieval(
     try:
         provider: EmbeddingProvider | None = None
         provider_name: str = embedding_provider or config.embedding.provider
-        provider = _create_provider(provider_name, config)
+        provider = create_embedding_provider(provider_name, config)
 
         report = run_retrieval_eval(
             conn, query_set, provider, config, profile="default", k=k,
@@ -157,6 +130,6 @@ def retrieval(
         try:
             import asyncio
 
-            asyncio.run(_close_provider(provider))
+            asyncio.run(close_async_resource(provider))
         except Exception:
             logger.debug("Failed to close embedding provider", exc_info=True)

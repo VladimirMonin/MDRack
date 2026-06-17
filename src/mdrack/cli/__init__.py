@@ -12,12 +12,13 @@ import click
 from mdrack import __version__
 from mdrack.cli.commands.eval import retrieval as eval_retrieval
 from mdrack.cli.commands.files import files as files_group
+from mdrack.cli.commands.model import model as model_group
 from mdrack.cli.commands.read import read
 from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
 from mdrack.cli.commands.scan import cli_scan
 from mdrack.cli.commands.search import cli_search
 from mdrack.cli.commands.sections import sections as sections_group
-from mdrack.config.loader import load_config
+from mdrack.config.loader import load_config, resolve_config_path
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, MDRackError
@@ -30,6 +31,7 @@ CTX_ROOT = "root"
 CTX_JSON = "json_output"
 CTX_STORE_DIR = "store_dir"
 CTX_DB_PATH = "db_path"
+CTX_CONFIG_PATH = "config_path"
 
 
 def _resolve_store_dir(root: Path, store: str) -> Path:
@@ -114,12 +116,12 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
     # Load configuration
     try:
         toml_path = Path(config_file) if config_file else None
-        if toml_path is not None and not toml_path.is_absolute():
-            toml_path = resolved_root / toml_path
-        if toml_path is not None and not toml_path.is_file():
+        resolved_config_path = resolve_config_path(root=resolved_root, toml_path=toml_path)
+        if toml_path is not None and not resolved_config_path.is_file():
             raise ConfigError(f"Config file not found: {toml_path}")
         config = load_config(toml_path=toml_path, root=resolved_root)
         ctx.obj[CTX_CONFIG] = config
+        ctx.obj[CTX_CONFIG_PATH] = resolved_config_path
         ctx.obj[CTX_STORE_DIR] = _resolve_store_dir(resolved_root, config.paths.store)
         ctx.obj[CTX_DB_PATH] = ctx.obj[CTX_STORE_DIR] / "knowledge.db"
     except Exception as exc:
@@ -202,6 +204,12 @@ main.add_command(sections_group)
 
 
 # ---------------------------------------------------------------------------
+# Group: model (imported from cli.commands.model)
+# ---------------------------------------------------------------------------
+main.add_command(model_group)
+
+
+# ---------------------------------------------------------------------------
 # Command: status
 # ---------------------------------------------------------------------------
 @main.command()
@@ -209,6 +217,7 @@ main.add_command(sections_group)
 def status(ctx: click.Context) -> None:
     """Show index status summary."""
     cmd = _command_name(ctx)
+    config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
     db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
 
     if not db_path.is_file():
@@ -217,7 +226,13 @@ def status(ctx: click.Context) -> None:
                 "files_count": 0,
                 "chunks_count": 0,
                 "embeddings_count": 0,
-                "active_profile": None,
+                "active_profile": "default",
+                "configured_model": config.embedding.model if config is not None else None,
+                "configured_dimensions": config.embedding.dimensions if config is not None else None,
+                "configured_endpoint": config.embedding.endpoint if config is not None else None,
+                "profile_model": None,
+                "profile_dimensions": None,
+                "profile_endpoint": None,
                 "schema_version": None,
             },
             command=cmd,
@@ -234,6 +249,15 @@ def status(ctx: click.Context) -> None:
     finally:
         conn.close()
 
+    if config is not None:
+        status_data.update(
+            {
+                "configured_model": config.embedding.model,
+                "configured_dimensions": config.embedding.dimensions,
+                "configured_endpoint": config.embedding.endpoint,
+            }
+        )
+
     _output(ctx, envelope_success(status_data, command=cmd))
 
 
@@ -245,6 +269,7 @@ def status(ctx: click.Context) -> None:
 def doctor(ctx: click.Context) -> None:
     """Run diagnostics on the knowledge store."""
     cmd = _command_name(ctx)
+    config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
     db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
 
     from mdrack.diagnostics.doctor import DoctorFinding, DoctorReport, report_to_dict, run_doctor
@@ -270,7 +295,13 @@ def doctor(ctx: click.Context) -> None:
 
     conn = get_connection(db_path)
     try:
-        report = run_doctor(conn)
+        report = run_doctor(
+            conn,
+            expected_profile="default",
+            expected_model=config.embedding.model if config is not None else None,
+            expected_dimensions=config.embedding.dimensions if config is not None else None,
+            expected_endpoint=config.embedding.endpoint if config is not None else None,
+        )
     finally:
         conn.close()
 

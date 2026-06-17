@@ -137,6 +137,25 @@ def _build_config(raw: dict[str, Any]) -> MDRackConfig:
     )
 
 
+def resolve_config_path(root: Path | None = None, toml_path: Path | None = None) -> Path:
+    """Resolve the effective TOML config path for a project root."""
+    defaults = get_defaults().model_dump()
+    resolved_root = root.resolve() if root is not None else None
+    candidate = toml_path or Path(defaults["paths"]["config_file"])
+    if resolved_root is not None and not candidate.is_absolute():
+        candidate = resolved_root / candidate
+    return candidate
+
+
+def write_config(config: MDRackConfig, toml_path: Path) -> None:
+    """Persist config to TOML using an atomic replace in the target directory."""
+    toml_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = toml_path.with_suffix(f"{toml_path.suffix}.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as handle:
+        toml.dump(config.model_dump(mode="python"), handle)
+    tmp_path.replace(toml_path)
+
+
 def load_config(
     toml_path: Path | None = None,
     root: Path | None = None,
@@ -154,13 +173,9 @@ def load_config(
         Merged MDRackConfig instance.
     """
     defaults = get_defaults().model_dump()
-    resolved_root = root.resolve() if root is not None else None
 
     # Layer 1: TOML file
-    if toml_path is None:
-        toml_path = Path(defaults["paths"]["config_file"])
-    if resolved_root is not None and not toml_path.is_absolute():
-        toml_path = resolved_root / toml_path
+    toml_path = resolve_config_path(root=root, toml_path=toml_path)
     toml_raw = _read_toml(toml_path)
 
     merged = _merge_section(defaults, toml_raw)

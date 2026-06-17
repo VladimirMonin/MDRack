@@ -54,6 +54,7 @@ def run_indexer(
     config,
     provider: object | None = None,
     profile: str = "default",
+    force_reindex: bool = False,
 ) -> IndexerResult:
     """Run the full indexing pipeline.
 
@@ -90,7 +91,10 @@ def run_indexer(
         stats["files_seen"] = len(scanned)
 
         change_plan = detect_changes(conn, scanned, root)
-        files_to_process = change_plan.new_files + change_plan.changed_files
+        if force_reindex:
+            files_to_process = scanned
+        else:
+            files_to_process = change_plan.new_files + change_plan.changed_files
         stats["files_changed"] = len(files_to_process)
 
         chunking_cfg = {

@@ -689,6 +689,12 @@ Show summary statistics of the knowledge store.
     "chunks_count": 142,
     "embeddings_count": 142,
     "active_profile": "default",
+    "profile_model": "text-embedding-qwen3-embedding-4b",
+    "profile_dimensions": 2560,
+    "profile_endpoint": "http://localhost:1234/v1",
+    "configured_model": "text-embedding-qwen3-embedding-4b",
+    "configured_dimensions": 2560,
+    "configured_endpoint": "http://localhost:1234/v1",
     "schema_version": "0003"
   },
   "meta": { "command": "status" }
@@ -701,6 +707,12 @@ Show summary statistics of the knowledge store.
 | `chunks_count` | integer | Total chunks across all files. |
 | `embeddings_count` | integer | Embeddings for the `"default"` profile. |
 | `active_profile` | string | Always `"default"`. |
+| `profile_model` | string or null | Model recorded in `embedding_profiles` for the active profile. |
+| `profile_dimensions` | integer or null | Stored vector dimension for the active profile. |
+| `profile_endpoint` | string or null | Stored LM Studio endpoint for the active profile. |
+| `configured_model` | string or null | Current model from the resolved MDRack config. |
+| `configured_dimensions` | integer or null | Current dimension from the resolved MDRack config. |
+| `configured_endpoint` | string or null | Current LM Studio endpoint from the resolved MDRack config. |
 | `schema_version` | string or null | Maximum applied migration version, or `null` if none. |
 
 ### Success (store does not exist)
@@ -772,10 +784,178 @@ Run diagnostic checks on the knowledge store.
 - The inner `data.ok` indicates store health.
 - `summary` contains stable severity counts.
 - `findings` contains the real diagnostics output from `diagnostics/doctor.py`.
+- Doctor now reports profile metadata presence and config/profile mismatch explicitly.
 
 ---
 
-## 12. `mdrack rebuild fts`
+## 12. `mdrack model ...`
+
+```
+mdrack model <subcommand>
+```
+
+Manage LM Studio model lifecycle operations through MDRack.
+
+### 12a. `mdrack model list`
+
+```
+mdrack model list
+```
+
+Returns models visible to the LM Studio native API.
+
+Example success payload:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "models": [
+      {
+        "key": "text-embedding-qwen3-embedding-4b",
+        "state": null,
+        "loaded": false,
+        "display_name": "Qwen3 Embedding 4B",
+        "model_type": "embedding",
+        "publisher": "Qwen",
+        "selected_variant": null,
+        "variants": [],
+        "instance_ids": []
+      }
+    ]
+  },
+  "meta": { "command": "model list" }
+}
+```
+
+### 12b. `mdrack model loaded`
+
+```
+mdrack model loaded
+```
+
+Returns the currently loaded LM Studio model instances that MDRack can see.
+
+Example success payload:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "models": [
+      {
+        "key": "text-embedding-qwen3-embedding-0.6b",
+        "instance_id": "text-embedding-qwen3-embedding-0.6b",
+        "state": null
+      }
+    ]
+  },
+  "meta": { "command": "model loaded" }
+}
+```
+
+### 12c. `mdrack model download`
+
+```
+mdrack model download <model>
+```
+
+Requests a model download through LM Studio. When the requested name is an alias
+of a visible model, MDRack resolves it to the LM Studio key before sending the
+request.
+
+### 12d. `mdrack model download-status`
+
+```
+mdrack model download-status
+```
+
+Returns LM Studio download state for active download jobs.
+
+### 12e. `mdrack model load`
+
+```
+mdrack model load <model>
+```
+
+Loads an embedding model into LM Studio. If the target model is already loaded,
+the command returns:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "key": "text-embedding-qwen3-embedding-0.6b",
+    "state": "already_loaded",
+    "instance_id": "text-embedding-qwen3-embedding-0.6b"
+  },
+  "meta": { "command": "model load" }
+}
+```
+
+### 12f. `mdrack model unload`
+
+```
+mdrack model unload <instance_id>
+```
+
+Unloads a specific LM Studio model instance by instance id.
+
+### 12g. `mdrack model switch`
+
+```
+mdrack model switch <model> [--download] [--load/--no-load] [--dimensions N] [--rebuild embeddings|full|none] [--yes]
+```
+
+Switches the active embedding model for the selected project root.
+
+Behavior summary:
+- resolves human-friendly names to LM Studio model keys when possible;
+- optionally downloads the target model;
+- loads the target model unless `--no-load` is used;
+- probes the real vector dimension if `--dimensions` is omitted;
+- persists the updated config only after rebuild succeeds;
+- rebuilds vectors for the whole active profile by default.
+
+Example success payload:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "old_model": "text-embedding-qwen3-embedding-0.6b",
+    "requested_model": "Qwen/Qwen3-Embedding-4B-GGUF",
+    "new_model": "text-embedding-qwen3-embedding-4b",
+    "old_dimensions": 1024,
+    "new_dimensions": 2560,
+    "config_path": "C:/tmp/project/.mdrack/config.toml",
+    "rebuild": {
+      "embedded_count": 3,
+      "total_chunks": 3,
+      "profile": "default",
+      "performed": true,
+      "mode": "embeddings"
+    },
+    "download": [],
+    "load": {
+      "key": "text-embedding-qwen3-embedding-4b",
+      "state": "loaded",
+      "instance_id": "text-embedding-qwen3-embedding-4b"
+    }
+  },
+  "meta": { "command": "model switch" }
+}
+```
+
+Notes:
+- `--rebuild none` is blocked unless `--yes` is provided.
+- When the target model is already loaded, `load.state` becomes `"already_loaded"`.
+- `new_model` may differ from `requested_model` because MDRack stores the resolved
+  LM Studio key after a successful switch.
+
+---
+
+## 13. `mdrack rebuild fts`
 
 ```
 mdrack rebuild fts
@@ -811,7 +991,7 @@ Rebuild the FTS5 full-text index from the chunks table.
 
 ---
 
-## 13. `mdrack rebuild embeddings`
+## 14. `mdrack rebuild embeddings`
 
 ```
 mdrack rebuild embeddings [--provider lmstudio|fake] [--profile <name>]
@@ -874,7 +1054,7 @@ calls are made:
 
 ---
 
-## 14. `mdrack eval retrieval`
+## 15. `mdrack eval retrieval`
 
 ```
 mdrack eval retrieval --queries <path> [--k N] [--provider lmstudio|fake]
@@ -950,6 +1130,7 @@ All commands read and write the same database file:
 |---|---|
 | `scan` | `<store>/knowledge.db` |
 | `search` | `<store>/knowledge.db` |
+| `model switch` | `<store>/knowledge.db` when rebuild is enabled |
 | `read chunk` | `<store>/knowledge.db` |
 | `read section` | `<store>/knowledge.db` |
 | `read file` | `<store>/knowledge.db` |
@@ -1003,3 +1184,7 @@ rrf_k = 60
 [profiling]
 embedding_profiles = ["default"]
 ```
+
+After a successful `mdrack model switch`, MDRack may persist the resolved LM Studio
+model key (for example `text-embedding-qwen3-embedding-0.6b`) rather than the
+human-friendly alias that was requested.

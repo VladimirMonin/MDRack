@@ -10,15 +10,13 @@ import asyncio
 import json
 import logging
 import sqlite3
-from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
 import click
 
-from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.embeddings.lmstudio import LMStudioProvider
 from mdrack.embeddings.protocol import EmbeddingProvider
+from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import StorageError
@@ -45,31 +43,6 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
         click.echo(json.dumps(payload, ensure_ascii=False))
     else:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
-
-
-def _create_provider(provider_name: str, config: Any) -> EmbeddingProvider:
-    if provider_name == "fake":
-        return FakeEmbeddingProvider(
-            dimensions=config.embedding.dimensions,
-            provider_name="fake",
-        )
-    return LMStudioProvider(
-        endpoint=config.embedding.endpoint,
-        model=config.embedding.model,
-        dimensions=config.embedding.dimensions,
-        timeout=config.embedding.timeout_secs,
-    )
-
-
-async def _close_provider(provider: EmbeddingProvider | None) -> None:
-    if provider is None:
-        return
-    close = getattr(provider, "close", None)
-    if close is None:
-        return
-    result = close()
-    if isawaitable(result):
-        await result
 
 
 @click.command()
@@ -128,11 +101,11 @@ def cli_search(
             _run_text_search(conn, query, limit_val, ctx, cmd)
         elif mode == "semantic":
             provider_name: str = embedding_provider or config.embedding.provider
-            provider = _create_provider(provider_name, config)
+            provider = create_embedding_provider(provider_name, config)
             asyncio.run(_run_semantic_search(conn, query, provider, limit_val, ctx, cmd))
         else:
             provider_name = embedding_provider or config.embedding.provider
-            provider = _create_provider(provider_name, config)
+            provider = create_embedding_provider(provider_name, config)
             asyncio.run(_run_hybrid_search(conn, query, provider, config, limit_val, ctx, cmd))
     except FTSQueryError as exc:
         _output(ctx, envelope_error(str(exc), "FTS_ERROR", cmd))
@@ -142,7 +115,7 @@ def cli_search(
     finally:
         if provider is not None:
             try:
-                asyncio.run(_close_provider(provider))
+                asyncio.run(close_async_resource(provider))
             except Exception:
                 logger.debug("Failed to close embedding provider", exc_info=True)
         conn.close()

@@ -57,7 +57,13 @@ def _get_active_profile(conn: sqlite3.Connection) -> str:
     return "default"
 
 
-def run_doctor(conn: sqlite3.Connection) -> DoctorReport:
+def run_doctor(
+    conn: sqlite3.Connection,
+    expected_profile: str = "default",
+    expected_model: str | None = None,
+    expected_dimensions: int | None = None,
+    expected_endpoint: str | None = None,
+) -> DoctorReport:
     """Run all diagnostic checks on the knowledge store.
 
     Checks performed:
@@ -75,7 +81,7 @@ def run_doctor(conn: sqlite3.Connection) -> DoctorReport:
     findings: list[DoctorFinding] = []
 
     try:
-        status = get_store_status(conn)
+        status = get_store_status(conn, profile_name=expected_profile)
     except Exception as exc:
         findings.append(
             DoctorFinding(
@@ -87,7 +93,83 @@ def run_doctor(conn: sqlite3.Connection) -> DoctorReport:
         return DoctorReport(findings=findings, ok=False)
 
     chunks_count = status.get("chunks_count", 0)
-    active_profile = _get_active_profile(conn)
+    active_profile = expected_profile or _get_active_profile(conn)
+
+    profile_model = status.get("profile_model")
+    profile_dimensions = status.get("profile_dimensions")
+    profile_endpoint = status.get("profile_endpoint")
+
+    if profile_model is None:
+        findings.append(
+            DoctorFinding(
+                severity="warning",
+                code="PROFILE_METADATA_MISSING",
+                message=(
+                    f'Embedding profile "{active_profile}" has no stored metadata. '
+                    "Run 'mdrack rebuild embeddings' to repair it."
+                ),
+                details={"profile": active_profile},
+            )
+        )
+    else:
+        findings.append(
+            DoctorFinding(
+                severity="info",
+                code="PROFILE_METADATA_PRESENT",
+                message=f'Embedding profile "{active_profile}" metadata is present',
+                details={
+                    "profile": active_profile,
+                    "model": profile_model,
+                    "dimensions": profile_dimensions,
+                    "endpoint": profile_endpoint,
+                },
+            )
+        )
+
+    mismatch_details: dict[str, object] = {"profile": active_profile}
+    has_mismatch = False
+    if expected_model is not None and profile_model != expected_model:
+        mismatch_details["expected_model"] = expected_model
+        mismatch_details["actual_model"] = profile_model
+        has_mismatch = True
+    if expected_dimensions is not None and profile_dimensions != expected_dimensions:
+        mismatch_details["expected_dimensions"] = expected_dimensions
+        mismatch_details["actual_dimensions"] = profile_dimensions
+        has_mismatch = True
+    if expected_endpoint is not None and profile_endpoint != expected_endpoint:
+        mismatch_details["expected_endpoint"] = expected_endpoint
+        mismatch_details["actual_endpoint"] = profile_endpoint
+        has_mismatch = True
+
+    if has_mismatch:
+        findings.append(
+            DoctorFinding(
+                severity="warning",
+                code="PROFILE_CONFIG_MISMATCH",
+                message=(
+                    f'Embedding profile "{active_profile}" metadata does not match '
+                    "the current MDRack configuration"
+                ),
+                details=mismatch_details,
+            )
+        )
+    elif profile_model is not None and expected_model is not None:
+        findings.append(
+            DoctorFinding(
+                severity="info",
+                code="PROFILE_CONFIG_MATCH",
+                message=(
+                    f'Embedding profile "{active_profile}" metadata matches '
+                    "the current MDRack configuration"
+                ),
+                details={
+                    "profile": active_profile,
+                    "model": profile_model,
+                    "dimensions": profile_dimensions,
+                    "endpoint": profile_endpoint,
+                },
+            )
+        )
 
     # Check 1: Missing FTS rows
     cursor = conn.execute(

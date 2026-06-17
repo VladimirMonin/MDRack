@@ -5,15 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
 import click
 
-from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.embeddings.lmstudio import LMStudioProvider
 from mdrack.embeddings.protocol import EmbeddingProvider
+from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.output.envelope import success as envelope_success
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.fts import rebuild_fts
@@ -39,31 +37,6 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
         click.echo(json.dumps(payload, ensure_ascii=False))
     else:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
-
-
-def _create_provider(provider_name: str, config: Any) -> EmbeddingProvider:
-    if provider_name == "fake":
-        return FakeEmbeddingProvider(
-            dimensions=config.embedding.dimensions,
-            provider_name="fake",
-        )
-    return LMStudioProvider(
-        endpoint=config.embedding.endpoint,
-        model=config.embedding.model,
-        dimensions=config.embedding.dimensions,
-        timeout=config.embedding.timeout_secs,
-    )
-
-
-async def _close_provider(provider: EmbeddingProvider | None) -> None:
-    if provider is None:
-        return
-    close = getattr(provider, "close", None)
-    if close is None:
-        return
-    result = close()
-    if isawaitable(result):
-        await result
 
 
 def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) -> None:
@@ -100,6 +73,49 @@ def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) ->
     )
     conn.commit()
     logger.info("Updated embedding profile metadata: %s (dims=%d)", profile_name, dimensions)
+
+
+def rebuild_embeddings_in_db(
+    db_path: Path,
+    provider: EmbeddingProvider,
+    profile_name: str = "default",
+) -> dict[str, Any]:
+    """Rebuild every embedding vector for the selected profile in one database."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = get_connection(db_path)
+    try:
+        apply_migrations(conn, _MIGRATIONS_DIR)
+        _ensure_embedding_profile(conn, profile_name, provider)
+
+        rows = conn.execute(
+            "SELECT id, embedding_text FROM chunks WHERE embedding_text IS NOT NULL ORDER BY id",
+        ).fetchall()
+        total_chunks = count_chunks(conn)
+
+        if not rows:
+            return {
+                "embedded_count": 0,
+                "total_chunks": total_chunks,
+                "profile": profile_name,
+            }
+
+        chunk_ids = [row["id"] for row in rows]
+        texts = [row["embedding_text"] for row in rows]
+        vectors = asyncio.run(provider.embed(texts, profile=profile_name))
+
+        vi = VectorIndex(conn)
+        vi.delete_all(profile_name)
+        for chunk_id, vec in zip(chunk_ids, vectors):
+            vi.upsert(chunk_id, profile_name, vec)
+
+        return {
+            "embedded_count": len(chunk_ids),
+            "total_chunks": total_chunks,
+            "profile": profile_name,
+        }
+    finally:
+        conn.close()
 
 
 @click.command()
@@ -161,62 +177,18 @@ def rebuild_embeddings_cmd(
     if config is None or db_path is None:
         return
 
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-
     provider_name: str = embedding_provider or config.embedding.provider
-    provider = _create_provider(provider_name, config)
-
-    conn = get_connection(db_path)
+    provider = create_embedding_provider(provider_name, config)
     try:
-        apply_migrations(conn, _MIGRATIONS_DIR)
-        _ensure_embedding_profile(conn, profile_name, provider)
-
-        rows = conn.execute(
-            "SELECT id, embedding_text FROM chunks WHERE embedding_text IS NOT NULL",
-        ).fetchall()
-
-        chunk_ids: list[str] = []
-        texts: list[str] = []
-        for row in rows:
-            chunk_ids.append(row["id"])
-            texts.append(row["embedding_text"])
-
-        if not texts:
-            _output(
-                ctx,
-                envelope_success(
-                    {
-                        "embedded_count": 0,
-                        "total_chunks": count_chunks(conn),
-                        "profile": profile_name,
-                        "provider": provider_name,
-                    },
-                    command=cmd,
-                ),
-            )
-            return
-
-        vectors = asyncio.run(provider.embed(texts, profile=profile_name))
-        vi = VectorIndex(conn)
-
-        for chunk_id, vec in zip(chunk_ids, vectors):
-            vi.upsert(chunk_id, profile_name, vec)
+        data = rebuild_embeddings_in_db(db_path, provider, profile_name)
+        data["provider"] = provider_name
 
         _output(
             ctx,
-            envelope_success(
-                {
-                    "embedded_count": len(chunk_ids),
-                    "total_chunks": count_chunks(conn),
-                    "profile": profile_name,
-                    "provider": provider_name,
-                },
-                command=cmd,
-            ),
+            envelope_success(data, command=cmd),
         )
     finally:
-        conn.close()
         try:
-            asyncio.run(_close_provider(provider))
+            asyncio.run(close_async_resource(provider))
         except Exception:
             logger.debug("Failed to close embedding provider", exc_info=True)

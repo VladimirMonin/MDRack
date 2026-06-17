@@ -9,7 +9,7 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 - SQLite for all persistent storage
 - Click for CLI
 - Pydantic for configuration
-- LM Studio HTTP API for embeddings only
+- LM Studio HTTP API for embeddings and model lifecycle control
 - FTS5 for full-text search
 - Custom vector search (cosine similarity in Python)
 
@@ -53,7 +53,7 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 
 ### `cli/`
 - Main Click group with global options: `--root`, `--config-file`, `--json`
-- Subcommand registration: `scan`, `search`, `status`, `doctor`, `rebuild`, `read` (group), `files` (group), `sections` (group)
+- Subcommand registration: `scan`, `search`, `status`, `doctor`, `rebuild`, `model`, `read` (group), `files` (group), `sections` (group)
 - Centralized error handling via JSON envelope
 - Commands delegate to service layer
 
@@ -74,7 +74,8 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 
 ### `embeddings/`
 - **`protocol.py`**: `EmbeddingProvider` protocol (async `embed()`, `embed_query()`, `health()`), `EmbeddingError`, `EmbeddingHealth`
-- **`lmstudio.py`**: LM Studio provider — HTTP POST to `/v1/embeddings`, async, configurable endpoint/timeout/dimensions
+- **`lmstudio.py`**: LM Studio provider and control client — `/v1/embeddings` for vectors, `/api/v1/models*` for model list/load/unload/download, async, configurable endpoint/timeout/dimensions
+- **`runtime.py`**: shared provider/control-client construction and safe async cleanup helpers
 - **`fake.py`**: Deterministic fake provider for testing (hash-based vectors)
 - **`hashing.py`**: Text hashing utilities for embedding cache keys
 
@@ -91,9 +92,9 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
   explicit degraded-mode reporting when semantic embedding fails
 
 ### `diagnostics/`
-- **`integrity.py`**: `get_store_status(conn)` — returns files_count, chunks_count, embeddings_count, active_profile, schema_version
+- **`integrity.py`**: `get_store_status(conn)` — returns files_count, chunks_count, embeddings_count, active_profile, schema_version, and active profile metadata
 - **`doctor.py`**: comprehensive health checks for FTS coverage, embeddings,
-  stale vectors, and schema migration status
+  stale vectors, schema migration status, and config/profile mismatch
 
 ### `output/`
 - **`envelope.py`**: `success(payload, command)` and `error(message, code, command, details)` — standardize JSON output structure
