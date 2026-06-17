@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +31,7 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
-def _open_connection(root: Path, store: str) -> Any:
-    db_path = root / store / "knowledge.db"
+def _open_connection(db_path: Path) -> Any:
     if not db_path.is_file():
         raise StorageError(
             f"Database not found at {db_path}. Run 'mdrack scan' first.",
@@ -51,6 +51,17 @@ def _create_provider(provider_name: str, config: Any) -> EmbeddingProvider:
         dimensions=config.embedding.dimensions,
         timeout=config.embedding.timeout_secs,
     )
+
+
+async def _close_provider(provider: EmbeddingProvider | None) -> None:
+    if provider is None:
+        return
+    close = getattr(provider, "close", None)
+    if close is None:
+        return
+    result = close()
+    if isawaitable(result):
+        await result
 
 
 @click.command()
@@ -83,9 +94,9 @@ def retrieval(
     """Run retrieval evaluation against the indexed store."""
     cmd = "eval retrieval"
     config = ctx.obj.get("config") if ctx.obj else None
-    root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+    db_path = ctx.obj.get("db_path") if ctx.obj else None
 
-    if config is None:
+    if config is None or db_path is None:
         _output(ctx, envelope_error("Configuration not available", "CONFIG_ERROR", cmd))
         ctx.exit(1)
         return
@@ -100,13 +111,14 @@ def retrieval(
         return
 
     try:
-        conn = _open_connection(root, config.paths.store)
+        conn = _open_connection(db_path)
     except StorageError as exc:
         _output(ctx, envelope_error(str(exc), exc.code, cmd))
         ctx.exit(1)
         return
 
     try:
+        provider: EmbeddingProvider | None = None
         provider_name: str = embedding_provider or config.embedding.provider
         provider = _create_provider(provider_name, config)
 
@@ -127,6 +139,7 @@ def retrieval(
                 "retrieved_count": len(r.retrieved_ids),
                 "expected_count": len(r.expected_ids),
                 "conditions_met": r.conditions_met,
+                "error": r.error,
             })
 
         data: dict[str, Any] = {
@@ -141,3 +154,9 @@ def retrieval(
         _output(ctx, envelope_error(str(exc), "INTERNAL_ERROR", cmd))
     finally:
         conn.close()
+        try:
+            import asyncio
+
+            asyncio.run(_close_provider(provider))
+        except Exception:
+            logger.debug("Failed to close embedding provider", exc_info=True)

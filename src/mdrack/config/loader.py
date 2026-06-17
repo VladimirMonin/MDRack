@@ -139,6 +139,7 @@ def _build_config(raw: dict[str, Any]) -> MDRackConfig:
 
 def load_config(
     toml_path: Path | None = None,
+    root: Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
 ) -> MDRackConfig:
     """Load configuration with precedence:
@@ -146,16 +147,20 @@ def load_config(
 
     Args:
         toml_path: Path to a TOML config file. If None, uses default location.
+        root: Project root used to resolve relative config paths.
         cli_overrides: Flat dict of CLI overrides keyed by "section.field".
 
     Returns:
         Merged MDRackConfig instance.
     """
     defaults = get_defaults().model_dump()
+    resolved_root = root.resolve() if root is not None else None
 
     # Layer 1: TOML file
     if toml_path is None:
         toml_path = Path(defaults["paths"]["config_file"])
+    if resolved_root is not None and not toml_path.is_absolute():
+        toml_path = resolved_root / toml_path
     toml_raw = _read_toml(toml_path)
 
     merged = _merge_section(defaults, toml_raw)

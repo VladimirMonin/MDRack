@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +31,7 @@ from mdrack.storage.sqlite.fts import FTSQueryError
 logger = logging.getLogger(__name__)
 
 
-def _open_connection(root: Path, store: str) -> sqlite3.Connection:
-    db_path = root / store / "knowledge.db"
+def _open_connection(db_path: Path) -> sqlite3.Connection:
     if not db_path.is_file():
         raise StorageError(
             f"Database not found at {db_path}. Run 'mdrack scan' first.",
@@ -59,6 +59,17 @@ def _create_provider(provider_name: str, config: Any) -> EmbeddingProvider:
         dimensions=config.embedding.dimensions,
         timeout=config.embedding.timeout_secs,
     )
+
+
+async def _close_provider(provider: EmbeddingProvider | None) -> None:
+    if provider is None:
+        return
+    close = getattr(provider, "close", None)
+    if close is None:
+        return
+    result = close()
+    if isawaitable(result):
+        await result
 
 
 @click.command()
@@ -94,18 +105,19 @@ def cli_search(
     """Search indexed chunks by text, semantic meaning, or hybrid."""
     cmd = "search"
     config = ctx.obj.get("config") if ctx.obj else None
-    root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+    db_path = ctx.obj.get("db_path") if ctx.obj else None
 
-    if config is None:
+    if config is None or db_path is None:
         _output(ctx, envelope_error("Configuration not available", "CONFIG_ERROR", cmd))
         ctx.exit(1)
         return
 
     mode: str = search_mode or config.search.default_mode
     limit_val: int = limit or config.search.top_k
+    provider: EmbeddingProvider | None = None
 
     try:
-        conn = _open_connection(root, config.paths.store)
+        conn = _open_connection(db_path)
     except StorageError as exc:
         _output(ctx, envelope_error(str(exc), exc.code, cmd))
         ctx.exit(1)
@@ -128,6 +140,11 @@ def cli_search(
         logger.exception("Search command failed")
         _output(ctx, envelope_error(str(exc), "INTERNAL_ERROR", cmd))
     finally:
+        if provider is not None:
+            try:
+                asyncio.run(_close_provider(provider))
+            except Exception:
+                logger.debug("Failed to close embedding provider", exc_info=True)
         conn.close()
 
 
@@ -169,7 +186,7 @@ async def _run_semantic_search(
 ) -> None:
     result = await semantic_search(conn, query, provider, limit=limit_val)
     if result.error:
-        _output(ctx, envelope_error(result.error, "SEARCH_ERROR", cmd))
+        _output(ctx, envelope_error(result.error, "EMBEDDING_ERROR", cmd))
         return
     items: list[dict[str, Any]] = [
         {
@@ -201,6 +218,9 @@ async def _run_hybrid_search(
     cmd: str,
 ) -> None:
     result = await hybrid_search(conn, query, provider, config, limit=limit_val)
+    if result.error and not result.results:
+        _output(ctx, envelope_error(result.error, "EMBEDDING_ERROR", cmd))
+        return
     items: list[dict[str, Any]] = [
         {
             "chunk_id": r.chunk_id,
@@ -222,4 +242,7 @@ async def _run_hybrid_search(
         "results": items,
         "total_count": result.total_count,
     }
+    if result.degraded:
+        data["degraded"] = True
+        data["degraded_reason"] = result.error
     _output(ctx, envelope_success(data, command=cmd))

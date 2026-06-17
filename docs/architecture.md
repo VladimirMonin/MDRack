@@ -81,16 +81,19 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 ### `indexing/`
 - **`scanner.py`**: `scan_markdown_files(root, include, exclude)` — walks filesystem, applies glob patterns (`**/*.md` by default), excludes `.git`, `node_modules`, `.venv`, `.mdrack`, `tests/**`
 - **`change_detector.py`**: `detect_changes(conn, current_files, root)` — compares disk SHA-256 vs. `source_hash` in DB → `ChangePlan` (new/changed/unchanged/deleted)
-- Future: indexer pipeline (not yet implemented)
+- **`indexer.py`**: end-to-end indexing pipeline — scan, change detection,
+  parse, section build, chunk build, embed, persist, and record diagnostics
 
 ### `search/`
 - **`text.py`**: Full-text search via FTS5 — `text_search(conn, query, limit, offset)` returns `TextSearchResult` with `TextSearchItem` (chunk_id, rank, snippet, file_relative_path, section_title, heading_path). Enriches FTS results with provenance via joins.
 - **`semantic.py`**: Semantic search — `semantic_search(conn, query, provider, profile, limit)` embeds query → `VectorIndex.search()` → joins to get file/section context → returns `SemanticSearchResult` with `SearchResultItem` (content_preview, scores). Handles embedding failures gracefully.
-- **`__init__.py`** (future): Hybrid search using Reciprocal Rank Fusion (RRF)
+- **`hybrid.py`**: Hybrid search using Reciprocal Rank Fusion (RRF) with
+  explicit degraded-mode reporting when semantic embedding fails
 
 ### `diagnostics/`
 - **`integrity.py`**: `get_store_status(conn)` — returns files_count, chunks_count, embeddings_count, active_profile, schema_version
-- Future: `doctor` command with comprehensive health checks
+- **`doctor.py`**: comprehensive health checks for FTS coverage, embeddings,
+  stale vectors, and schema migration status
 
 ### `output/`
 - **`envelope.py`**: `success(payload, command)` and `error(message, code, command, details)` — standardize JSON output structure

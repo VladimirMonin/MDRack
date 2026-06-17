@@ -6,6 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from mdrack.cli import main
@@ -28,6 +29,27 @@ def _setup_db(tmp_path: Path) -> Path:
     finally:
         conn.close()
     return db_path
+
+
+def _setup_db_at_store(root: Path, store_name: str) -> Path:
+    store_dir = root / store_name
+    store_dir.mkdir()
+    db_path = store_dir / "knowledge.db"
+    conn = get_connection(db_path)
+    try:
+        apply_migrations(conn, _MIGRATIONS_DIR)
+    finally:
+        conn.close()
+    return db_path
+
+
+def _write_config(root: Path, store: str) -> None:
+    config_dir = root / ".mdrack"
+    config_dir.mkdir(exist_ok=True)
+    (config_dir / "config.toml").write_text(
+        f"[paths]\nstore = \"{store}\"\n",
+        encoding="utf-8",
+    )
 
 
 def _make_config(tmp_path: Path) -> MDRackConfig:
@@ -123,3 +145,32 @@ def test_sections_list_empty(tmp_path: Path) -> None:
     payload = json.loads(result.output)
     assert payload["ok"] is True
     assert payload["data"]["sections"] == []
+
+
+def test_sections_use_root_relative_store_from_ctx(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    _write_config(root, ".custom-store")
+
+    db_path = _setup_db_at_store(root, ".custom-store")
+    conn = get_connection(db_path)
+    try:
+        _insert_sample_file(conn, "file-1", "docs/readme.md")
+        _insert_sample_section(conn, "section-1", "file-1", "Introduction", 1, 10)
+    finally:
+        conn.close()
+
+    external_cwd = tmp_path / "outside"
+    external_cwd.mkdir()
+    monkeypatch.chdir(external_cwd)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--root", str(root), "sections", "list", "file-1"])
+
+    assert result.exit_code == 0, f"sections list failed: {result.output}"
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["data"]["sections"][0]["id"] == "section-1"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
@@ -54,22 +55,51 @@ def _create_provider(provider_name: str, config: Any) -> EmbeddingProvider:
     )
 
 
+async def _close_provider(provider: EmbeddingProvider | None) -> None:
+    if provider is None:
+        return
+    close = getattr(provider, "close", None)
+    if close is None:
+        return
+    result = close()
+    if isawaitable(result):
+        await result
+
+
 def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) -> None:
     existing = conn.execute(
-        "SELECT name FROM embedding_profiles WHERE name = ?",
+        "SELECT name, model, dimensions, endpoint FROM embedding_profiles WHERE name = ?",
         (profile_name,),
     ).fetchone()
-    if existing is not None:
-        return
 
     dimensions = getattr(provider, "dimensions", 768)
-    model_name = getattr(provider, "_model_name", "default")
+    model_name = getattr(
+        provider, "model_name", getattr(provider, "_model_name", "default")
+    )
+    endpoint = getattr(provider, "endpoint", getattr(provider, "_endpoint", None))
+
+    if existing is None:
+        conn.execute(
+            "INSERT INTO embedding_profiles (name, model, dimensions, endpoint) VALUES (?, ?, ?, ?)",
+            (profile_name, str(model_name), dimensions, endpoint),
+        )
+        conn.commit()
+        logger.info("Created embedding profile: %s (dims=%d)", profile_name, dimensions)
+        return
+
+    if (
+        existing["model"] == str(model_name)
+        and existing["dimensions"] == dimensions
+        and existing["endpoint"] == endpoint
+    ):
+        return
+
     conn.execute(
-        "INSERT INTO embedding_profiles (name, model, dimensions) VALUES (?, ?, ?)",
-        (profile_name, str(model_name), dimensions),
+        "UPDATE embedding_profiles SET model = ?, dimensions = ?, endpoint = ? WHERE name = ?",
+        (str(model_name), dimensions, endpoint, profile_name),
     )
     conn.commit()
-    logger.info("Created embedding profile: %s (dims=%d)", profile_name, dimensions)
+    logger.info("Updated embedding profile metadata: %s (dims=%d)", profile_name, dimensions)
 
 
 @click.command()
@@ -77,15 +107,12 @@ def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) ->
 def rebuild_fts_cmd(ctx: click.Context) -> None:
     """Rebuild the FTS index from the chunks table."""
     cmd = "rebuild fts"
-    config = ctx.obj.get("config") if ctx.obj else None
-    root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+    db_path = ctx.obj.get("db_path") if ctx.obj else None
 
-    if config is None:
+    if db_path is None:
         return
 
-    store_dir = root / config.paths.store if config else root / ".mdrack"
-    store_dir.mkdir(parents=True, exist_ok=True)
-    db_path = store_dir / "knowledge.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = get_connection(db_path)
     try:
@@ -129,14 +156,12 @@ def rebuild_embeddings_cmd(
     """Rebuild all embeddings for the current active profile."""
     cmd = "rebuild embeddings"
     config = ctx.obj.get("config") if ctx.obj else None
-    root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+    db_path = ctx.obj.get("db_path") if ctx.obj else None
 
-    if config is None:
+    if config is None or db_path is None:
         return
 
-    store_dir = root / config.paths.store if config else root / ".mdrack"
-    store_dir.mkdir(parents=True, exist_ok=True)
-    db_path = store_dir / "knowledge.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
     provider_name: str = embedding_provider or config.embedding.provider
     provider = _create_provider(provider_name, config)
@@ -191,3 +216,7 @@ def rebuild_embeddings_cmd(
         )
     finally:
         conn.close()
+        try:
+            asyncio.run(_close_provider(provider))
+        except Exception:
+            logger.debug("Failed to close embedding provider", exc_info=True)

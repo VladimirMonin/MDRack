@@ -69,7 +69,8 @@ def run_indexer(
     9. Complete the index run with statistics.
     """
     root = root.resolve()
-    store_dir = Path(config.paths.store)
+    store_path = Path(config.paths.store)
+    store_dir = store_path if store_path.is_absolute() else root / store_path
     store_dir.mkdir(parents=True, exist_ok=True)
     db_path = store_dir / "knowledge.db"
 
@@ -293,17 +294,33 @@ def _ensure_embedding_profile(
     conn, profile_name: str, provider: object,
 ) -> None:
     existing = conn.execute(
-        "SELECT name FROM embedding_profiles WHERE name = ?",
+        "SELECT name, model, dimensions, endpoint FROM embedding_profiles WHERE name = ?",
         (profile_name,),
     ).fetchone()
-    if existing is not None:
-        return
 
     dimensions = getattr(provider, "dimensions", 768)
-    model = "default"
+    model = getattr(provider, "model_name", getattr(provider, "_model_name", "default"))
+    endpoint = getattr(provider, "endpoint", getattr(provider, "_endpoint", None))
+
+    if existing is None:
+        conn.execute(
+            "INSERT INTO embedding_profiles (name, model, dimensions, endpoint) VALUES (?, ?, ?, ?)",
+            (profile_name, str(model), dimensions, endpoint),
+        )
+        conn.commit()
+        logger.info("Created embedding profile: %s (dims=%d)", profile_name, dimensions)
+        return
+
+    if (
+        existing["model"] == str(model)
+        and existing["dimensions"] == dimensions
+        and existing["endpoint"] == endpoint
+    ):
+        return
+
     conn.execute(
-        "INSERT INTO embedding_profiles (name, model, dimensions) VALUES (?, ?, ?)",
-        (profile_name, str(model), dimensions),
+        "UPDATE embedding_profiles SET model = ?, dimensions = ?, endpoint = ? WHERE name = ?",
+        (str(model), dimensions, endpoint, profile_name),
     )
     conn.commit()
-    logger.info("Created embedding profile: %s (dims=%d)", profile_name, dimensions)
+    logger.info("Updated embedding profile metadata: %s (dims=%d)", profile_name, dimensions)

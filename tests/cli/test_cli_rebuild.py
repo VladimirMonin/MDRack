@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from click.testing import CliRunner
 
@@ -271,3 +272,35 @@ class TestRebuildEmbeddings:
             vec1 = json.loads(r1["embedding"])
             vec2 = json.loads(r2["embedding"])
             assert vec1 == vec2
+
+    def test_rebuild_embeddings_stores_lmstudio_profile_metadata(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        _setup_db(tmp_path, with_chunks=True)
+        monkeypatch.setattr(
+            "mdrack.embeddings.lmstudio.LMStudioProvider.embed",
+            AsyncMock(return_value=[[0.1] * 1024, [0.2] * 1024]),
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["--root", str(tmp_path), "rebuild", "embeddings"],
+        )
+
+        assert result.exit_code == 0, f"rebuild embeddings failed: {result.output}"
+
+        db_path = tmp_path / ".mdrack" / "knowledge.db"
+        conn = get_connection(db_path)
+        try:
+            row = conn.execute(
+                "SELECT model, dimensions, endpoint FROM embedding_profiles WHERE name = 'default'"
+            ).fetchone()
+            assert row is not None
+            assert row["model"] == "qwen3-embedding-0.6b"
+            assert row["dimensions"] == 1024
+            assert row["endpoint"] == "http://localhost:1234/v1"
+        finally:
+            conn.close()

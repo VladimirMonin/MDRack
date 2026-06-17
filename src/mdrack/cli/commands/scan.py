@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import logging
+from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
 import click
 
 from mdrack.embeddings.fake import FakeEmbeddingProvider
+from mdrack.embeddings.lmstudio import LMStudioProvider
 from mdrack.indexing.indexer import IndexerResult, run_indexer
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
@@ -28,6 +30,17 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
+async def _close_provider(provider: object | None) -> None:
+    if provider is None:
+        return
+    close = getattr(provider, "close", None)
+    if close is None:
+        return
+    result = close()
+    if isawaitable(result):
+        await result
+
+
 @click.command()
 @click.option(
     "--changed",
@@ -38,9 +51,9 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
 @click.option(
     "--provider",
     "embedding_provider",
-    type=click.Choice(["fake"]),
+    type=click.Choice(["lmstudio", "fake"]),
     default=None,
-    help="Embedding provider: 'fake' for testing (default: no embeddings).",
+    help="Embedding provider for scan embeddings (default from config).",
 )
 @click.pass_context
 def cli_scan(
@@ -58,12 +71,8 @@ def cli_scan(
         ctx.exit(1)
         return
 
-    provider: object | None = None
-    if embedding_provider == "fake":
-        provider = FakeEmbeddingProvider(
-            dimensions=config.embedding.dimensions,
-            provider_name="fake",
-        )
+    provider_name: str = embedding_provider or config.embedding.provider
+    provider = _create_provider(provider_name, config)
 
     try:
         result: IndexerResult = run_indexer(
@@ -84,3 +93,25 @@ def cli_scan(
         logger.exception("Scan command failed")
         _output(ctx, envelope_error(str(exc), "INTERNAL_ERROR", cmd))
         ctx.exit(1)
+    finally:
+        if provider is not None:
+            try:
+                import asyncio
+
+                asyncio.run(_close_provider(provider))
+            except Exception:
+                logger.debug("Failed to close embedding provider", exc_info=True)
+
+
+def _create_provider(provider_name: str, config: Any) -> object:
+    if provider_name == "fake":
+        return FakeEmbeddingProvider(
+            dimensions=config.embedding.dimensions,
+            provider_name="fake",
+        )
+    return LMStudioProvider(
+        endpoint=config.embedding.endpoint,
+        model=config.embedding.model,
+        dimensions=config.embedding.dimensions,
+        timeout=config.embedding.timeout_secs,
+    )

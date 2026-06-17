@@ -6,6 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from mdrack.cli import main
@@ -28,6 +29,27 @@ def _setup_db(tmp_path: Path) -> Path:
     finally:
         conn.close()
     return db_path
+
+
+def _setup_db_at_store(root: Path, store_name: str) -> Path:
+    store_dir = root / store_name
+    store_dir.mkdir()
+    db_path = store_dir / "knowledge.db"
+    conn = get_connection(db_path)
+    try:
+        apply_migrations(conn, _MIGRATIONS_DIR)
+    finally:
+        conn.close()
+    return db_path
+
+
+def _write_config(root: Path, store: str) -> None:
+    config_dir = root / ".mdrack"
+    config_dir.mkdir(exist_ok=True)
+    (config_dir / "config.toml").write_text(
+        f"[paths]\nstore = \"{store}\"\n",
+        encoding="utf-8",
+    )
 
 
 def _make_config(tmp_path: Path) -> MDRackConfig:
@@ -181,3 +203,31 @@ def test_files_info_not_found(tmp_path: Path) -> None:
     assert payload["ok"] is False
     assert payload["error"]["code"] == "NOT_FOUND"
     assert "not found" in payload["error"]["message"].lower()
+
+
+def test_files_commands_use_root_relative_store_from_ctx(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    _write_config(root, ".custom-store")
+
+    db_path = _setup_db_at_store(root, ".custom-store")
+    conn = get_connection(db_path)
+    try:
+        _insert_sample_file(conn, "file-ctx", "docs/from-config.md")
+    finally:
+        conn.close()
+
+    external_cwd = tmp_path / "outside"
+    external_cwd.mkdir()
+    monkeypatch.chdir(external_cwd)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--root", str(root), "files", "info", "file-ctx"])
+
+    assert result.exit_code == 0, f"files info failed: {result.output}"
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["data"]["file"]["id"] == "file-ctx"

@@ -33,6 +33,7 @@ class EvalQueryResult:
     mrr: float
     precision_at_k: float
     conditions_met: bool = True
+    error: str | None = None
 
 
 @dataclass
@@ -41,6 +42,13 @@ class EvalReport:
 
     results: list[EvalQueryResult] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
+
+
+def _effective_k(query: EvalQuery, default_k: int) -> int:
+    recall_at = query.metrics.get("recall_at")
+    if isinstance(recall_at, int) and recall_at > 0:
+        return recall_at
+    return default_k
 
 
 def _find_relevant_chunks(
@@ -113,41 +121,55 @@ async def _run_single_query(
     Returns:
         EvalQueryResult with metrics.
     """
+    query_k = _effective_k(query, k)
     expected_ids: list[str] = []
     conditions_met = True
+    error: str | None = None
     try:
         expected_ids = _find_relevant_chunks(conn, query.expected)
     except Exception:
         logger.exception("Failed to find relevant chunks for query %s", query.id)
         conditions_met = False
+        error = "Failed to resolve expected clauses against the indexed store"
+
+    if not error and not expected_ids:
+        conditions_met = False
+        error = "Expected clauses matched zero chunks"
 
     retrieved_ids: list[str] = []
     try:
         if query.mode == "text":
-            result = text_search(conn, query.query, limit=k)
+            result = text_search(conn, query.query, limit=query_k)
             retrieved_ids = [r.chunk_id for r in result.results]
 
         elif query.mode == "semantic":
             result = await semantic_search(
-                conn, query.query, provider, profile=profile, limit=k,
+                conn, query.query, provider, profile=profile, limit=query_k,
             )
             retrieved_ids = [r.chunk_id for r in result.results]
+            if result.error:
+                conditions_met = False
+                error = result.error
 
         elif query.mode == "hybrid":
             if config is None:
                 config = MDRackConfig()
             result = await hybrid_search(
-                conn, query.query, provider, config, limit=k,
+                conn, query.query, provider, config, limit=query_k,
             )
             retrieved_ids = [r.chunk_id for r in result.results]
+            if result.error:
+                conditions_met = False
+                error = result.error
     except Exception:
         logger.exception("Search failed for query %s", query.id)
         conditions_met = False
+        error = "Search execution failed"
 
     expected_set = set(expected_ids)
-    rec_k = recall_at_k(expected_set, retrieved_ids, k)
+    rec_k = recall_at_k(expected_set, retrieved_ids, query_k)
     mr = mrr(expected_set, retrieved_ids)
-    prec_k = precision_at_k(expected_set, retrieved_ids, k)
+    prec_k = precision_at_k(expected_set, retrieved_ids, query_k)
 
     return EvalQueryResult(
         query_id=query.id,
@@ -155,11 +177,12 @@ async def _run_single_query(
         mode=query.mode,
         retrieved_ids=retrieved_ids,
         expected_ids=expected_ids,
-        k=k,
+        k=query_k,
         recall_at_k=rec_k,
         mrr=mr,
         precision_at_k=prec_k,
         conditions_met=conditions_met,
+        error=error,
     )
 
 
@@ -209,10 +232,14 @@ def run_retrieval_eval(
         precision_values = [r.precision_at_k for r in async_results]
         n = len(async_results)
         n_success = sum(1 for r in async_results if r.conditions_met)
+        n_failed = n - n_success
+        n_zero_gold = sum(1 for r in async_results if not r.expected_ids)
 
         report.summary = {
             "queries_total": n,
             "queries_successful": n_success,
+            "queries_failed": n_failed,
+            "queries_with_zero_gold": n_zero_gold,
             "avg_recall_at_k": sum(recall_values) / n if n else 0.0,
             "avg_mrr": sum(mrr_values) / n if n else 0.0,
             "avg_precision_at_k": sum(precision_values) / n if n else 0.0,
@@ -221,6 +248,8 @@ def run_retrieval_eval(
         report.summary = {
             "queries_total": 0,
             "queries_successful": 0,
+            "queries_failed": 0,
+            "queries_with_zero_gold": 0,
             "avg_recall_at_k": 0.0,
             "avg_mrr": 0.0,
             "avg_precision_at_k": 0.0,

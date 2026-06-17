@@ -31,6 +31,27 @@ def _setup_db(tmp_path: Path) -> Path:
     return db_path
 
 
+def _setup_db_at_store(root: Path, store_name: str) -> Path:
+    store_dir = root / store_name
+    store_dir.mkdir()
+    db_path = store_dir / "knowledge.db"
+    conn = get_connection(db_path)
+    try:
+        apply_migrations(conn, _MIGRATIONS_DIR)
+    finally:
+        conn.close()
+    return db_path
+
+
+def _write_config(root: Path, store: str) -> None:
+    config_dir = root / ".mdrack"
+    config_dir.mkdir(exist_ok=True)
+    (config_dir / "config.toml").write_text(
+        f"[paths]\nstore = \"{store}\"\n",
+        encoding="utf-8",
+    )
+
+
 def _seed_data(conn: sqlite3.Connection) -> None:
     """Insert sample files, sections, chunks."""
     conn.execute(
@@ -247,3 +268,31 @@ def test_read_non_existent_file_returns_error(seeded_db: sqlite3.Connection, tmp
     assert payload["ok"] is False
     assert "error" in payload
     assert payload["error"]["code"] == "NOT_FOUND"
+
+
+def test_read_commands_use_root_relative_store_from_ctx(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    _write_config(root, ".custom-store")
+
+    db_path = _setup_db_at_store(root, ".custom-store")
+    conn = get_connection(db_path)
+    try:
+        _seed_data(conn)
+    finally:
+        conn.close()
+
+    external_cwd = tmp_path / "outside"
+    external_cwd.mkdir()
+    monkeypatch.chdir(external_cwd)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--root", str(root), "read", "chunk", "chunk1"])
+
+    assert result.exit_code == 0, f"read chunk failed: {result.output}"
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["data"]["chunk"]["id"] == "chunk1"

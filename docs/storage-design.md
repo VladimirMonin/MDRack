@@ -2,7 +2,7 @@
 
 ## SQLite Schema Overview
 
-MDRack uses a single SQLite database file (`.mdrack/index.db`) to store all indexed content, metadata, and search indexes. The schema is versioned via migrations and includes:
+MDRack uses a single SQLite database file (`.mdrack/knowledge.db`) to store all indexed content, metadata, and search indexes. The schema is versioned via migrations and includes:
 
 **Core Tables:**
 - `files` — indexed Markdown documents
@@ -262,7 +262,7 @@ Current schema version = maximum `version` from `schema_migrations`. Used in `st
 
 MDRack does not perform automatic backups. Recommended:
 
-1. Copy `.mdrack/index.db` (and WAL/SHM files if present)
+1. Copy `.mdrack/knowledge.db` (and WAL/SHM files if present)
 2. Use `sqlite3 .backup` for hot backup without stopping application
 3. To restore, replace DB files and run `mdrack rebuild fts` to re-sync FTS index
 

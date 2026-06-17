@@ -48,6 +48,8 @@ class HybridSearchResult:
     query: str
     results: list[HybridSearchResultItem]
     total_count: int
+    error: str | None = None
+    degraded: bool = False
 
 
 async def hybrid_search(
@@ -87,6 +89,40 @@ async def hybrid_search(
     semantic_result: SemanticSearchResult = await semantic_search_func(
         conn, query, provider, limit=semantic_limit
     )
+
+    if semantic_result.error:
+        if not text_result.results:
+            return HybridSearchResult(
+                query=query,
+                results=[],
+                total_count=0,
+                error=semantic_result.error,
+            )
+        logger.warning(
+            "hybrid.search.degraded reason=semantic_provider_error text_results=%d",
+            len(text_result.results),
+        )
+        return HybridSearchResult(
+            query=query,
+            results=[
+                HybridSearchResultItem(
+                    chunk_id=item.chunk_id,
+                    combined_score=item.score,
+                    text_rank=index,
+                    semantic_rank=None,
+                    text_score=item.score,
+                    semantic_score=None,
+                    content_preview=item.snippet,
+                    file_relative_path=item.file_relative_path,
+                    section_title=item.section_title,
+                    heading_path=item.heading_path,
+                )
+                for index, item in enumerate(text_result.results, start=1)
+            ][:limit],
+            total_count=min(len(text_result.results), limit),
+            error=semantic_result.error,
+            degraded=True,
+        )
 
     # If both returned nothing, return empty result
     if not text_result.results and not semantic_result.results:

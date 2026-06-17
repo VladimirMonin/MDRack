@@ -28,6 +28,26 @@ logger = logging.getLogger(__name__)
 CTX_CONFIG = "config"
 CTX_ROOT = "root"
 CTX_JSON = "json_output"
+CTX_STORE_DIR = "store_dir"
+CTX_DB_PATH = "db_path"
+
+
+def _resolve_store_dir(root: Path, store: str) -> Path:
+    """Resolve the configured store path against the selected root."""
+    store_path = Path(store)
+    if store_path.is_absolute():
+        return store_path
+    return root / store_path
+
+
+def _configure_logging() -> None:
+    """Enable CLI logging when the application has no logger setup."""
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        return
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
@@ -78,21 +98,30 @@ def _handle_exception(ctx: click.Context, exc: Exception) -> None:
 @click.option("--json", "json_output", is_flag=True, default=True, help="Output JSON (default: True).")
 @click.option(
     "--config-file",
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(dir_okay=False),
     default=None,
     help="Path to TOML config file.",
 )
 @click.pass_context
 def main(ctx: click.Context, root: str, json_output: bool, config_file: str | None) -> None:
     """MDRack — Local command-line Markdown knowledge rack for AI agents."""
+    _configure_logging()
     ctx.ensure_object(dict)
-    ctx.obj[CTX_ROOT] = Path(root).resolve()
+    resolved_root = Path(root).resolve()
+    ctx.obj[CTX_ROOT] = resolved_root
     ctx.obj[CTX_JSON] = json_output
 
     # Load configuration
     try:
         toml_path = Path(config_file) if config_file else None
-        ctx.obj[CTX_CONFIG] = load_config(toml_path=toml_path)
+        if toml_path is not None and not toml_path.is_absolute():
+            toml_path = resolved_root / toml_path
+        if toml_path is not None and not toml_path.is_file():
+            raise ConfigError(f"Config file not found: {toml_path}")
+        config = load_config(toml_path=toml_path, root=resolved_root)
+        ctx.obj[CTX_CONFIG] = config
+        ctx.obj[CTX_STORE_DIR] = _resolve_store_dir(resolved_root, config.paths.store)
+        ctx.obj[CTX_DB_PATH] = ctx.obj[CTX_STORE_DIR] / "knowledge.db"
     except Exception as exc:
         _handle_exception(ctx, ConfigError(f"Failed to load config: {exc}"))
         return
@@ -109,13 +138,11 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
 def init(ctx: click.Context) -> None:
     """Initialize a local knowledge store."""
     cmd = _command_name(ctx)
-    cfg = ctx.obj.get(CTX_CONFIG)
-    root: Path = ctx.obj.get(CTX_ROOT, Path("."))
+    store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
+    db_path: Path = ctx.obj.get(CTX_DB_PATH, store_dir / "knowledge.db")
 
     try:
-        store_dir = root / cfg.paths.store
         store_dir.mkdir(parents=True, exist_ok=True)
-        db_path = store_dir / "knowledge.db"
 
         migrations_dir = (
             Path(__file__).resolve().parent.parent
@@ -182,11 +209,7 @@ main.add_command(sections_group)
 def status(ctx: click.Context) -> None:
     """Show index status summary."""
     cmd = _command_name(ctx)
-    cfg = ctx.obj.get(CTX_CONFIG)
-    root: Path = ctx.obj.get(CTX_ROOT, Path("."))
-
-    store_dir = root / cfg.paths.store
-    db_path = store_dir / "knowledge.db"
+    db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
 
     if not db_path.is_file():
         payload = envelope_success(
@@ -222,7 +245,36 @@ def status(ctx: click.Context) -> None:
 def doctor(ctx: click.Context) -> None:
     """Run diagnostics on the knowledge store."""
     cmd = _command_name(ctx)
-    _output(ctx, envelope_success({"status": "not yet implemented"}, command=cmd))
+    db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
+
+    from mdrack.diagnostics.doctor import DoctorFinding, DoctorReport, report_to_dict, run_doctor
+    from mdrack.storage.sqlite.connection import get_connection
+
+    if not db_path.is_file():
+        report = DoctorReport(
+            findings=[
+                DoctorFinding(
+                    severity="error",
+                    code="DATABASE_NOT_FOUND",
+                    message=(
+                        f"Knowledge store database not found at {db_path}. "
+                        "Run 'mdrack init' and 'mdrack scan' first."
+                    ),
+                    details={"db_path": str(db_path)},
+                )
+            ],
+            ok=False,
+        )
+        _output(ctx, envelope_success(report_to_dict(report), command=cmd))
+        return
+
+    conn = get_connection(db_path)
+    try:
+        report = run_doctor(conn)
+    finally:
+        conn.close()
+
+    _output(ctx, envelope_success(report_to_dict(report), command=cmd))
 
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,21 @@ class DoctorReport:
     ok: bool
 
 
+def report_to_dict(report: DoctorReport) -> dict[str, object]:
+    """Convert a doctor report into a stable JSON-safe structure."""
+    summary = {
+        "total": len(report.findings),
+        "errors": sum(1 for finding in report.findings if finding.severity == "error"),
+        "warnings": sum(1 for finding in report.findings if finding.severity == "warning"),
+        "info": sum(1 for finding in report.findings if finding.severity == "info"),
+    }
+    return {
+        "ok": report.ok,
+        "summary": summary,
+        "findings": [dataclasses.asdict(finding) for finding in report.findings],
+    }
+
+
 def _get_active_profile(conn: sqlite3.Connection) -> str:
     """Determine the active embedding profile.
 

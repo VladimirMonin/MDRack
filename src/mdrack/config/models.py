@@ -48,10 +48,10 @@ class EmbeddingConfig(BaseModel):
     """Embedding provider configuration."""
 
     provider: Literal["lmstudio"] = Field(default="lmstudio")
-    model: str = Field(default="nomic-embed-text")
+    model: str = Field(default="qwen3-embedding-0.6b")
     endpoint: str = Field(default="http://localhost:1234/v1")
     timeout_secs: int = Field(default=120, ge=1)
-    dimensions: int = Field(default=768, gt=0)
+    dimensions: int = Field(default=1024, gt=0)
 
     model_config = {"frozen": True}
 

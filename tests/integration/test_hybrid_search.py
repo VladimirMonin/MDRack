@@ -9,8 +9,10 @@ import pytest
 
 from mdrack.config.models import MDRackConfig, SearchConfig
 from mdrack.embeddings.fake import FakeEmbeddingProvider
+from mdrack.embeddings.protocol import EmbeddingError, EmbeddingHealth
 from mdrack.search.hybrid import HybridSearchResult, hybrid_search
 from mdrack.storage.sqlite.connection import get_connection
+from mdrack.storage.sqlite.fts import upsert_fts
 from mdrack.storage.sqlite.migrations import apply_migrations
 from mdrack.storage.sqlite.vector import VectorIndex
 
@@ -78,6 +80,7 @@ def seeded_hybrid_db() -> tuple:
             "VALUES (?, ?, ?, ?, ?, ?)",
             (cid, fid, sid, content, "text", idx),
         )
+        upsert_fts(conn, cid, content, "text", "")
     conn.commit()
 
     # Generate and store embeddings
@@ -239,3 +242,38 @@ async def test_hybrid_search_chunk_without_section(seeded_hybrid_db: tuple) -> N
     if chunk5 is not None:
         assert chunk5.section_title is None
         assert chunk5.file_relative_path == "docs/a.md"
+
+
+@pytest.mark.asyncio()
+async def test_hybrid_search_surfaces_semantic_degradation(
+    seeded_hybrid_db: tuple,
+) -> None:
+    """Hybrid search should not silently hide semantic provider failure."""
+    conn, _, _ = seeded_hybrid_db
+    config = _make_config()
+
+    class FailingProvider:
+        dimensions = 128
+
+        async def embed(self, texts, profile="default"):
+            raise EmbeddingError("LM Studio unavailable")
+
+        async def embed_query(self, text, profile="default"):
+            raise EmbeddingError("LM Studio unavailable")
+
+        async def health(self):
+            return EmbeddingHealth(
+                ok=False,
+                provider="lmstudio",
+                model="test-model",
+                dimensions=128,
+                error="LM Studio unavailable",
+            )
+
+    result = await hybrid_search(conn, "Python", FailingProvider(), config, limit=10)
+
+    assert isinstance(result, HybridSearchResult)
+    assert result.degraded is True
+    assert result.error is not None
+    assert "LM Studio" in result.error
+    assert len(result.results) > 0

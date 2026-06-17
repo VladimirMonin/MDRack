@@ -59,7 +59,7 @@ async def semantic_search(
         # Embed the query
         query_vector = await provider.embed_query(query, profile=profile)
     except EmbeddingError as e:
-        logger.error("Failed to embed query: %s", e)
+        logger.error("semantic.search.failed stage=embed reason=provider_error")
         return SemanticSearchResult(
             query=query, results=[], total_count=0, error=str(e)
         )

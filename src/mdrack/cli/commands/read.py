@@ -14,7 +14,6 @@ from typing import Any
 
 import click
 
-from mdrack.config.loader import load_config
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import MDRackError, StorageError
@@ -32,10 +31,10 @@ logger = logging.getLogger(__name__)
 
 
 def _open_connection(ctx: click.Context) -> sqlite3.Connection:
-    """Open a SQLite connection using the root from Click context.
+    """Open a SQLite connection using the resolved path from Click context.
 
     Args:
-        ctx: Click context containing project root.
+        ctx: Click context containing the resolved database path.
 
     Returns:
         An open SQLite connection.
@@ -43,9 +42,7 @@ def _open_connection(ctx: click.Context) -> sqlite3.Connection:
     Raises:
         StorageError: If the database file does not exist.
     """
-    root: Path = ctx.obj["root"]
-    cfg = load_config()
-    db_path = root / cfg.paths.store / "knowledge.db"
+    db_path: Path = ctx.obj["db_path"]
     if not db_path.exists():
         raise StorageError(
             f"Database not found at {db_path}. Run 'mdrack init' first.",

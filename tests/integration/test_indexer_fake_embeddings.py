@@ -223,3 +223,17 @@ def test_indexer_with_deleted_file(temp_root_with_docs: Path):
         assert files_count == 2
     finally:
         conn.close()
+
+
+def test_indexer_resolves_relative_store_against_root(temp_root_with_docs: Path):
+    """Relative store paths should be created under the selected root."""
+    from mdrack.config.models import MDRackConfig, PathsConfig
+
+    config = MDRackConfig(
+        paths=PathsConfig(root=".", store=".custom-store", config_file=".mdrack/config.toml")
+    )
+
+    result = run_indexer(temp_root_with_docs, config, provider=FakeEmbeddingProvider(dimensions=128))
+
+    assert result.files_seen == 3
+    assert (temp_root_with_docs / ".custom-store" / "knowledge.db").is_file()

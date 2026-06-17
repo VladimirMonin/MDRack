@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from click.testing import CliRunner
 
 from mdrack.cli import main
 from mdrack.embeddings.fake import FakeEmbeddingProvider
+from mdrack.search.hybrid import HybridSearchResult, HybridSearchResultItem
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations
 
@@ -70,11 +72,11 @@ def _seed_semantic_data(conn: sqlite3.Connection) -> None:
     conn.execute(
         "INSERT INTO embedding_profiles (name, model, dimensions, endpoint) "
         "VALUES (?, ?, ?, ?)",
-        ("default", "fake-hash-v1", 768, ""),
+        ("default", "fake-hash-v1", 1024, ""),
     )
     # Seed embeddings with vectors derived from the same query text
     # so the fake provider finds matching results.
-    vector_python = _embed_text("Python programming language", 768)
+    vector_python = _embed_text("Python programming language", 1024)
     conn.execute(
         "INSERT INTO chunk_embeddings (chunk_id, profile_name, embedding, embedded_at) "
         "VALUES (?, ?, ?, ?)",
@@ -85,7 +87,7 @@ def _seed_semantic_data(conn: sqlite3.Connection) -> None:
             "2024-01-01T00:00:00Z",
         ),
     )
-    vector_js = _embed_text("JavaScript web scripting", 768)
+    vector_js = _embed_text("JavaScript web scripting", 1024)
     conn.execute(
         "INSERT INTO chunk_embeddings (chunk_id, profile_name, embedding, embedded_at) "
         "VALUES (?, ?, ?, ?)",
@@ -218,3 +220,52 @@ def test_semantic_search_no_db(tmp_path: Path) -> None:
     payload = json.loads(result.output)
     assert payload["ok"] is False
     assert "not found" in payload["error"]["message"].lower()
+
+
+def test_hybrid_search_reports_degraded_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _setup_db(tmp_path)
+    monkeypatch.setattr(
+        "mdrack.cli.commands.search.hybrid_search",
+        AsyncMock(
+            return_value=HybridSearchResult(
+                query="Python",
+                results=[
+                    HybridSearchResultItem(
+                        chunk_id="chunk-001",
+                        combined_score=0.9,
+                        text_rank=1,
+                        semantic_rank=None,
+                        text_score=0.9,
+                        semantic_score=None,
+                        content_preview="Python is a high-level programming language.",
+                        file_relative_path="docs/python.md",
+                        section_title="Python Intro",
+                        heading_path=None,
+                    )
+                ],
+                total_count=1,
+                error="Failed to reach LM Studio embeddings endpoint",
+                degraded=True,
+            )
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "--root", str(tmp_path),
+            "search", "Python",
+            "--mode", "hybrid",
+            "--provider", "fake",
+        ],
+    )
+
+    assert result.exit_code == 0, f"search failed: {result.output}"
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["data"]["degraded"] is True
+    assert "LM Studio" in payload["data"]["degraded_reason"]

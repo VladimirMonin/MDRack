@@ -39,10 +39,10 @@ class TestDefaultConfig:
     def test_default_embedding(self) -> None:
         config = get_defaults()
         assert config.embedding.provider == "lmstudio"
-        assert config.embedding.model == "nomic-embed-text"
+        assert config.embedding.model == "qwen3-embedding-0.6b"
         assert config.embedding.endpoint == "http://localhost:1234/v1"
         assert config.embedding.timeout_secs == 120
-        assert config.embedding.dimensions == 768
+        assert config.embedding.dimensions == 1024
 
     def test_default_search(self) -> None:
         config = get_defaults()
@@ -253,4 +253,4 @@ top_k = 15
         assert config.search.top_k == 3
         # From defaults
         assert config.chunking.hard_limit_chars == 2200
-        assert config.embedding.dimensions == 768
+        assert config.embedding.dimensions == 1024

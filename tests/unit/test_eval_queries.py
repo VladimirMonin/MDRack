@@ -94,6 +94,61 @@ queries:
         with pytest.raises(EvalQueryError, match="must be a mapping"):
             load_queries(_write_temp_yaml(raw))
 
+    def test_empty_expected_mapping_raises_error(self) -> None:
+        raw = """
+queries:
+  - id: QX
+    query: "test query"
+    mode: "text"
+    expected: {}
+    metrics:
+      recall_at: 3
+"""
+        with pytest.raises(EvalQueryError, match="must not be empty"):
+            load_queries(_write_temp_yaml(raw))
+
+    def test_unsupported_expected_clause_raises_error(self) -> None:
+        raw = """
+queries:
+  - id: QX
+    query: "test query"
+    mode: "text"
+    expected:
+      unsupported_clause: "foo"
+    metrics:
+      recall_at: 3
+"""
+        with pytest.raises(EvalQueryError, match="Unsupported expected clauses"):
+            load_queries(_write_temp_yaml(raw))
+
+    def test_blank_expected_clause_value_raises_error(self) -> None:
+        raw = """
+queries:
+  - id: QX
+    query: "test query"
+    mode: "text"
+    expected:
+      content_contains: "   "
+    metrics:
+      recall_at: 3
+"""
+        with pytest.raises(EvalQueryError, match="must be a non-empty string"):
+            load_queries(_write_temp_yaml(raw))
+
+    def test_unsupported_metric_raises_error(self) -> None:
+        raw = """
+queries:
+  - id: QX
+    query: "test query"
+    mode: "text"
+    expected:
+      content_contains: "foo"
+    metrics:
+      mrr: true
+"""
+        with pytest.raises(EvalQueryError, match="Unsupported metrics"):
+            load_queries(_write_temp_yaml(raw))
+
 
 class TestMissingFile:
     """Verify error when YAML file does not exist."""

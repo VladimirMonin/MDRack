@@ -69,24 +69,28 @@ Initialise a local knowledge store.
 ```json
 {
   "ok": true,
-  "data": { "status": "not yet implemented" },
+  "data": {
+    "status": "initialized",
+    "store_path": "C:/vault/.mdrack",
+    "db_path": "C:/vault/.mdrack/knowledge.db",
+    "schema_version": "0002"
+  },
   "meta": { "command": "init" }
 }
 ```
 
 ### Notes
 
-- Returns the `"not yet implemented"` stub unconditionally.
-- The knowledge store directory (default `.mdrack/`) and database are
-  created lazily by `mdrack scan` — running `init` is **not required**
-  before scanning.
+- Creates the knowledge store directory and applies migrations to
+  `<store>/knowledge.db`.
+- `init` is idempotent and safe to run before `scan`.
 
 ---
 
 ## 2. `mdrack scan`
 
 ```
-mdrack scan [--changed] [--provider fake]
+mdrack scan [--changed] [--provider lmstudio|fake]
 ```
 
 Scan Markdown files under the project root and build/update the
@@ -95,7 +99,7 @@ knowledge index.
 | Flag | Type | Description |
 |---|---|---|
 | `--changed` | flag | Accepted but currently **ignored** — the indexer always detects and processes changed, new, and deleted files. |
-| `--provider` | `fake` | Embedding provider. When set to `fake`, deterministic random vectors are generated for each chunk. When omitted, **no embeddings** are computed. |
+| `--provider` | `lmstudio` / `fake` | Embedding provider. When omitted, the configured provider from `[embedding].provider` is used. |
 
 ### Success
 
@@ -138,13 +142,15 @@ Additional error codes: `INTERNAL_ERROR`.
 
 ### Notes
 
-- The database file written is `<store>/index.db` (default `.mdrack/index.db`).
+- The database file written is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Changelist is computed by comparing file hashes in the database against
   current disk content.
 - Scan includes `**/*.md` by default and excludes `tests/**`,
   `node_modules/**`, `.git/**`, `.venv/**`.
 - When `--provider fake` is used, embeddings are deterministic random
-  vectors of `config.embedding.dimensions` (default 768).
+  vectors of `config.embedding.dimensions`.
+- When `--provider lmstudio` is used, embeddings are computed during scan
+  and persisted under the active profile.
 
 ---
 
@@ -369,7 +375,7 @@ Additional error codes: `STORAGE_ERROR`.
 
 ### Notes
 
-- Database read is `<store>/mdrack.db` (default `.mdrack/mdrack.db`).
+- Database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Chunks are linked via `previous_chunk_id` and `next_chunk_id` columns.
 - `heading_path` is stored as a JSON-encoded array of heading titles.
 
@@ -423,7 +429,7 @@ Read a section and all its chunks by section UUID.
 
 ### Notes
 
-- Database read is `<store>/mdrack.db` (default `.mdrack/mdrack.db`).
+- Database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Chunks are ordered by `chunk_index` ascending.
 - Sections form a tree via `parent_id`. `heading_path` denormalizes the
   ancestry for fast retrieval.
@@ -484,7 +490,7 @@ Read file metadata and list all sections by file UUID.
 
 ### Notes
 
-- Database read is `<store>/mdrack.db` (default `.mdrack/mdrack.db`).
+- Database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Sections are ordered by `start_line` ascending.
 
 ---
@@ -736,17 +742,36 @@ Run diagnostic checks on the knowledge store.
 ```json
 {
   "ok": true,
-  "data": { "status": "not yet implemented" },
+  "data": {
+    "ok": true,
+    "summary": {
+      "total": 3,
+      "errors": 0,
+      "warnings": 0,
+      "info": 3
+    },
+    "findings": [
+      {
+        "severity": "info",
+        "code": "FTS_OK",
+        "message": "All chunks have FTS entries",
+        "details": {
+          "fts_count": 0,
+          "chunk_count": 0
+        }
+      }
+    ]
+  },
   "meta": { "command": "doctor" }
 }
 ```
 
 ### Notes
 
-- Returns the `"not yet implemented"` stub unconditionally.
-- The `DoctorReport` infrastructure exists in `diagnostics/doctor.py` and
-  supports checks for missing FTS rows, missing embeddings, stale embeddings,
-  and schema version mismatches, but it is not wired into the CLI yet.
+- The outer envelope `ok` indicates CLI execution success.
+- The inner `data.ok` indicates store health.
+- `summary` contains stable severity counts.
+- `findings` contains the real diagnostics output from `diagnostics/doctor.py`.
 
 ---
 
@@ -778,7 +803,7 @@ Rebuild the FTS5 full-text index from the chunks table.
 
 ### Notes
 
-- Database file: `<store>/index.db` (default `.mdrack/index.db`).
+- Database file: `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Automatically applies pending migrations before rebuilding.
 - Deletes all existing FTS rows and bulk-inserts every chunk.
 - If `fts_count != chunk_count`, some chunks are missing FTS entries
@@ -839,7 +864,7 @@ calls are made:
 
 ### Notes
 
-- Database file: `<store>/index.db` (default `.mdrack/index.db`).
+- Database file: `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Automatically applies pending migrations before rebuilding.
 - Creates the embedding profile if it does not exist.
 - Vectors are upserted into `chunk_embeddings` using the composite key
@@ -849,29 +874,56 @@ calls are made:
 
 ---
 
-## 14. `mdrack eval`
+## 14. `mdrack eval retrieval`
 
 ```
-mdrack eval
+mdrack eval retrieval --queries <path> [--k N] [--provider lmstudio|fake]
 ```
 
-Run retrieval evaluation queries.
+Run retrieval evaluation queries against the indexed store.
 
 ### Success
 
 ```json
 {
   "ok": true,
-  "data": { "status": "not yet implemented" },
-  "meta": { "command": "eval" }
+  "data": {
+    "queries_path": "tests/retrieval_eval/queries.yaml",
+    "k": 5,
+    "results": [
+      {
+        "query_id": "Q001",
+        "query": "how can an agent read neighboring chunks",
+        "mode": "hybrid",
+        "k": 5,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.5,
+        "retrieved_count": 2,
+        "expected_count": 1,
+        "conditions_met": true,
+        "error": null
+      }
+    ],
+    "summary": {
+      "queries_total": 1,
+      "queries_successful": 1,
+      "queries_failed": 0,
+      "queries_with_zero_gold": 0,
+      "avg_recall_at_k": 1.0,
+      "avg_mrr": 1.0,
+      "avg_precision_at_k": 0.5
+    }
+  },
+  "meta": { "command": "eval retrieval" }
 }
 ```
 
 ### Notes
 
-- Returns the `"not yet implemented"` stub unconditionally.
-- No `--queries` flag or `retrieval` subcommand exists in the current
-  implementation.
+- Query loading validates supported `expected` and `metrics` clauses.
+- Per-query `metrics.recall_at` overrides the top-level `--k` for that query.
+- Failed semantic or hybrid queries surface an `error` field in per-query output.
 
 ---
 
@@ -892,26 +944,25 @@ Run retrieval evaluation queries.
 
 ## Database File Summary
 
-Different commands read from different database file names:
+All commands read and write the same database file:
 
 | Command | Database file |
 |---|---|
-| `scan` | `<store>/index.db` |
+| `scan` | `<store>/knowledge.db` |
 | `search` | `<store>/knowledge.db` |
-| `read chunk` | `<store>/mdrack.db` |
-| `read section` | `<store>/mdrack.db` |
-| `read file` | `<store>/mdrack.db` |
+| `read chunk` | `<store>/knowledge.db` |
+| `read section` | `<store>/knowledge.db` |
+| `read file` | `<store>/knowledge.db` |
 | `files list` | `<store>/knowledge.db` |
 | `files info` | `<store>/knowledge.db` |
 | `sections list` | `<store>/knowledge.db` |
 | `status` | `<store>/knowledge.db` |
-| `rebuild fts` | `<store>/index.db` |
-| `rebuild embeddings` | `<store>/index.db` |
+| `rebuild fts` | `<store>/knowledge.db` |
+| `rebuild embeddings` | `<store>/knowledge.db` |
+| `eval retrieval` | `<store>/knowledge.db` |
+| `doctor` | `<store>/knowledge.db` |
 
-The scan/indexer writes to `index.db` while most read commands use
-`knowledge.db` or `mdrack.db`.  This is a known discrepancy — in
-practice the indexer should write to a single file read by all other
-commands.
+Relative store paths are resolved against the selected `--root`.
 
 ---
 
@@ -937,10 +988,10 @@ overlap_chars = 180
 
 [embedding]
 provider = "lmstudio"
-model = "nomic-embed-text"
+model = "qwen3-embedding-0.6b"
 endpoint = "http://localhost:1234/v1"
 timeout_secs = 120
-dimensions = 768
+dimensions = 1024
 
 [search]
 default_mode = "hybrid"
