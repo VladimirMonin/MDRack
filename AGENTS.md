@@ -149,6 +149,15 @@ or image description.
 
 - **Speak to the user in their language.** If the user writes in Russian,
   reply in Russian. Match the language of the conversation.
+- **Assign subagent tasks in technical English.** Prompts, handoff notes,
+  and execution instructions for subagents should be written in precise,
+  implementation-focused English.
+- **Write documentation in English or technical Russian.** When creating or
+  editing documentation, use either English or Russian with accurate technical
+  terminology.
+- **Write user-facing feedback and work reports in plain Russian.** Avoid
+  anglicisms in reports and status summaries, and explain the result in enough
+  detail for non-programmers to understand what was done.
 - **Keep it simple.** Avoid anglicisms, jargon, and specialist terminology
   unless the user uses them first.
 - **Be direct and brief.** Answer the question, then stop. Do not add
