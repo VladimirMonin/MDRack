@@ -16,17 +16,10 @@ from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.fts import rebuild_fts
-from mdrack.storage.sqlite.migrations import apply_migrations
+from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
 from mdrack.storage.sqlite.repositories import count_chunks
 
 logger = logging.getLogger(__name__)
-
-_MIGRATIONS_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "storage"
-    / "sqlite"
-    / "migrations"
-)
 
 DEFAULT_BATCH_SIZE = 32
 
@@ -103,7 +96,7 @@ def rebuild_embeddings_in_db(
 
     conn = get_connection(db_path)
     try:
-        apply_migrations(conn, _MIGRATIONS_DIR)
+        apply_migrations(conn, get_migrations_dir())
 
         rows = conn.execute(
             "SELECT id, embedding_text FROM chunks WHERE embedding_text IS NOT NULL ORDER BY id",
@@ -162,7 +155,7 @@ def rebuild_fts_cmd(ctx: click.Context) -> None:
 
     conn = get_connection(db_path)
     try:
-        apply_migrations(conn, _MIGRATIONS_DIR)
+        apply_migrations(conn, get_migrations_dir())
         rebuild_fts(conn)
         cursor = conn.execute("SELECT COUNT(*) FROM chunks_fts")
         fts_count = cursor.fetchone()[0]

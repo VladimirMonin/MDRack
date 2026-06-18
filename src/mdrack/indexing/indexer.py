@@ -31,7 +31,7 @@ from mdrack.markdown.parser import parse_markdown
 from mdrack.markdown.section_builder import build_sections
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.fts import upsert_fts
-from mdrack.storage.sqlite.migrations import apply_migrations
+from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
 from mdrack.storage.sqlite.vector import VectorIndex
 
 logger = logging.getLogger(__name__)
@@ -75,13 +75,9 @@ def run_indexer(
     store_dir.mkdir(parents=True, exist_ok=True)
     db_path = store_dir / "knowledge.db"
 
-    migrations_dir = (
-        Path(__file__).resolve().parent.parent / "storage" / "sqlite" / "migrations"
-    )
-
     conn = get_connection(db_path)
     try:
-        apply_migrations(conn, migrations_dir)
+        apply_migrations(conn, get_migrations_dir())
         run_id = start_index_run(conn)
 
         stats = _build_stats()

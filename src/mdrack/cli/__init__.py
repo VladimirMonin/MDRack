@@ -143,17 +143,12 @@ def init(ctx: click.Context) -> None:
     try:
         store_dir.mkdir(parents=True, exist_ok=True)
 
-        migrations_dir = (
-            Path(__file__).resolve().parent.parent
-            / "storage" / "sqlite" / "migrations"
-        )
-
         from mdrack.storage.sqlite.connection import get_connection
-        from mdrack.storage.sqlite.migrations import apply_migrations
+        from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
 
         conn = get_connection(db_path)
         try:
-            apply_migrations(conn, migrations_dir)
+            apply_migrations(conn, get_migrations_dir())
             from mdrack.storage.sqlite.migrations import get_applied_migrations
             applied = get_applied_migrations(conn)
             schema_version = max(applied) if applied else None

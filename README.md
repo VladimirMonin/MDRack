@@ -14,6 +14,10 @@ uv sync
 uv run mdrack --help
 ```
 
+## Windows EXE
+
+For a reproducible Windows build, see `docs/windows-exe-build.md`.
+
 ## License
 
 MIT

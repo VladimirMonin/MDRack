@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 _MIGRATION_PATTERN = re.compile(r"^(\d{4})_(.+)\.sql$")
 
 
+def get_migrations_dir() -> Path:
+    """Return the package-local directory containing SQL migrations."""
+    return Path(__file__).resolve().with_name("migrations")
+
+
 def _ensure_schema_migrations(conn: sqlite3.Connection) -> None:
     """Create the schema_migrations table if it does not exist."""
     conn.execute(

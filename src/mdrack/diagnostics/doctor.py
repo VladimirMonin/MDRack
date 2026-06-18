@@ -5,11 +5,10 @@ from __future__ import annotations
 import dataclasses
 import re
 import sqlite3
-from pathlib import Path
 
 from mdrack.diagnostics.integrity import get_store_status
 from mdrack.embeddings.hashing import hash_embedding_text
-from mdrack.storage.sqlite.migrations import get_applied_migrations
+from mdrack.storage.sqlite.migrations import get_applied_migrations, get_migrations_dir
 
 
 @dataclasses.dataclass
@@ -301,10 +300,8 @@ def run_doctor(
 
     # Check 4: Schema version check
     try:
-        import mdrack.storage.sqlite.migrations as migrations_mod
-
         applied = get_applied_migrations(conn)
-        migrations_dir = Path(migrations_mod.__file__).parent / "migrations"
+        migrations_dir = get_migrations_dir()
 
         file_versions: set[str] = set()
         for path in sorted(migrations_dir.glob("*.sql")):

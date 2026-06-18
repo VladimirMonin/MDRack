@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from mdrack.storage.sqlite.connection import get_connection
-from mdrack.storage.sqlite.migrations import apply_migrations, get_applied_migrations
+from mdrack.storage.sqlite.migrations import apply_migrations, get_applied_migrations, get_migrations_dir
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "src" / "mdrack" / "storage" / "sqlite" / "migrations"
 
@@ -90,3 +90,15 @@ def test_schema_migrations_table_populated() -> None:
     finally:
         conn.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_get_migrations_dir_points_to_sql_files() -> None:
+    """The packaged migration directory should resolve to the checked-in SQL files."""
+    migrations_dir = get_migrations_dir()
+
+    assert migrations_dir.is_dir()
+    assert sorted(path.name for path in migrations_dir.glob("*.sql")) == [
+        "0000_schema_migrations.sql",
+        "0001_initial.sql",
+        "0002_fts.sql",
+    ]
