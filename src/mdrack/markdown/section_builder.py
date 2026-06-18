@@ -41,6 +41,16 @@ def _title_from_file_id(file_id: str) -> str:
     return file_id
 
 
+def _document_title(
+    file_id: str,
+    h1_headings: list[tuple[MarkdownBlock, int, str]],
+) -> str:
+    """Choose the best synthetic title for document-level sections."""
+    if h1_headings:
+        return h1_headings[0][2]
+    return _title_from_file_id(file_id)
+
+
 def build_sections(
     blocks: list[MarkdownBlock],
     file_id: str,
@@ -85,9 +95,11 @@ def build_sections(
             )
         ]
 
+    doc_end = max((b.end_line for b in blocks), default=1)
+
     # ── only H1, no H2-H4 → synthetic section with H1 title ─────────
     if not section_headings:
-        h1_text = h1_headings[0][2] if h1_headings else file_id
+        h1_text = _document_title(file_id, h1_headings)
         h1_block = h1_headings[0][0] if h1_headings else None
         return [
             SectionNode(
@@ -96,7 +108,7 @@ def build_sections(
                 heading_path=[h1_text],
                 level=2,
                 start_line=h1_block.start_line if h1_block else 1,
-                end_line=h1_block.end_line if h1_block else 1,
+                end_line=doc_end,
             )
         ]
 
@@ -134,7 +146,6 @@ def build_sections(
     sections.sort(key=lambda s: s.start_line)
 
     # ── compute end_line (one line before next same-or-higher section, or EOF) ─
-    doc_end = max((b.end_line for b in blocks), default=1)
     for i, section in enumerate(sections):
         next_end: int | None = None
         for j in range(i + 1, len(sections)):
@@ -142,5 +153,22 @@ def build_sections(
                 next_end = sections[j].start_line - 1
                 break
         section.end_line = next_end if next_end is not None else doc_end
+
+    # ── synthetic preamble before first H2-H4 so intro content is indexable ──
+    first_section_start = min((section.start_line for section in sections), default=doc_end + 1)
+    preamble_start = min((block.start_line for block in blocks), default=1)
+    if preamble_start < first_section_start:
+        title = _document_title(file_id, h1_headings)
+        preamble = SectionNode(
+            document_id=file_id,
+            title=title,
+            heading_path=[title],
+            level=2,
+            start_line=preamble_start,
+            end_line=first_section_start - 1,
+            parent_id=None,
+        )
+        sections.append(preamble)
+        sections.sort(key=lambda s: s.start_line)
 
     return sections

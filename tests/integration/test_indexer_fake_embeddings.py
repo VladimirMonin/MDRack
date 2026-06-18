@@ -104,9 +104,10 @@ def test_indexer_with_fake_embeddings(temp_root_with_docs: Path):
 
         # Check sections
         sections = list_sections(conn, f1["id"])
-        assert len(sections) == 2
-        assert sections[0]["title"] == "Introduction"
-        assert sections[1]["title"] == "Features"
+        assert len(sections) == 3
+        assert sections[0]["title"] == "Document 1"
+        assert sections[1]["title"] == "Introduction"
+        assert sections[2]["title"] == "Features"
 
         # Check chunks
         chunk_count = count_chunks(conn)

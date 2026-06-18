@@ -70,7 +70,7 @@ class TestTextSearchSmoke:
 
     def test_search_finds_heading_content(self, seeded_store_with_fake: tuple) -> None:
         conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Subtitle", limit=10)
+        result = text_search(conn, "Introduction", limit=10)
         assert isinstance(result, TextSearchResult)
         assert len(result.results) > 0
 
@@ -94,7 +94,7 @@ class TestTextSearchSmoke:
 
     def test_search_results_have_provenance(self, seeded_store_with_fake: tuple) -> None:
         conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Subtitle", limit=10)
+        result = text_search(conn, "Introduction", limit=10)
         assert len(result.results) > 0
         for item in result.results:
             assert item.chunk_id

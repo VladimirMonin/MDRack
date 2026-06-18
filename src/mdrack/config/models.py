@@ -36,10 +36,10 @@ class ScanConfig(BaseModel):
 class ChunkingConfig(BaseModel):
     """Chunking parameters configuration."""
 
-    min_chunk_chars: int = Field(default=600, ge=1)
-    target_chunk_chars: int = Field(default=1200, ge=1)
-    hard_limit_chars: int = Field(default=2200, ge=1)
-    overlap_chars: int = Field(default=180, ge=0)
+    min_chunk_chars: int = Field(default=1200, ge=1)
+    target_chunk_chars: int = Field(default=3200, ge=1)
+    hard_limit_chars: int = Field(default=8000, ge=1)
+    overlap_chars: int = Field(default=300, ge=0)
 
     model_config = {"frozen": True}
 

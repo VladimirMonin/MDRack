@@ -8,18 +8,13 @@ from mdrack.markdown.chunk_builder import (
     _split_text_by_words,
     build_chunks,
 )
-from mdrack.markdown.ir import (
-    BlockType,
-    ContentType,
-    MarkdownBlock,
-    SectionNode,
-)
+from mdrack.markdown.ir import BlockType, ContentType, MarkdownBlock, SectionNode
+from mdrack.markdown.section_builder import build_sections
 
 FILE_ID = "/docs/test.md"
 
 
 def _sec(title: str = "Intro", start: int = 1, end: int = 100) -> SectionNode:
-    """Helper to create a SectionNode."""
     return SectionNode(
         document_id=FILE_ID,
         title=title,
@@ -30,312 +25,354 @@ def _sec(title: str = "Intro", start: int = 1, end: int = 100) -> SectionNode:
     )
 
 
+def _heading(content: str, start: int) -> MarkdownBlock:
+    return MarkdownBlock(type=BlockType.HEADING, content=content, start_line=start, end_line=start)
+
+
 def _para(content: str, start: int = 1, end: int = 1) -> MarkdownBlock:
-    """Helper to create a paragraph block."""
-    return MarkdownBlock(
-        type=BlockType.PARAGRAPH,
-        content=content,
-        start_line=start,
-        end_line=end,
-    )
+    return MarkdownBlock(type=BlockType.PARAGRAPH, content=content, start_line=start, end_line=end)
+
+
+def _list(content: str, start: int = 1, end: int = 1) -> MarkdownBlock:
+    return MarkdownBlock(type=BlockType.LIST, content=content, start_line=start, end_line=end)
+
+
+def _blockquote(content: str, start: int = 1, end: int = 1) -> MarkdownBlock:
+    return MarkdownBlock(type=BlockType.BLOCKQUOTE, content=content, start_line=start, end_line=end)
 
 
 def _code(content: str, lang: str = "python", start: int = 1, end: int = 1) -> MarkdownBlock:
-    """Helper to create a code block."""
-    return MarkdownBlock(
-        type=BlockType.CODE,
-        content=content,
-        start_line=start,
-        end_line=end,
-        language=lang,
-    )
+    return MarkdownBlock(type=BlockType.CODE, content=content, start_line=start, end_line=end, language=lang)
 
 
 def _mermaid(content: str, start: int = 1, end: int = 1) -> MarkdownBlock:
-    """Helper to create a mermaid code block."""
     return _code(content, lang="mermaid", start=start, end=end)
 
 
 def _table(content: str, start: int = 1, end: int = 1) -> MarkdownBlock:
-    """Helper to create a table block."""
-    return MarkdownBlock(
-        type=BlockType.TABLE,
-        content=content,
-        start_line=start,
-        end_line=end,
-    )
+    return MarkdownBlock(type=BlockType.TABLE, content=content, start_line=start, end_line=end)
 
 
-# ── code blocks ───────────────────────────────────────────────────────
+def _break(start: int = 1) -> MarkdownBlock:
+    return MarkdownBlock(type=BlockType.THEMATIC_BREAK, content="---", start_line=start, end_line=start)
 
 
-class TestCodeBlocksNotSplit:
-    def test_single_code_block(self) -> None:
-        code = "def foo():\n    return 42"
-        blocks = [_code(code)]
-        sec = _sec()
-        chunks = build_chunks(blocks, [sec], FILE_ID)
+class TestChunkContentSelection:
+    def test_h1_body_is_not_lost(self) -> None:
+        blocks = [
+            _heading("# Title", 1),
+            _para("Important body text stays here.", 2, 3),
+        ]
+        sections = build_sections(blocks, FILE_ID)
+        chunks = build_chunks(blocks, sections, FILE_ID)
         assert len(chunks) == 1
-        assert chunks[0].content == code
-        assert chunks[0].content_type == ContentType.CODE
+        assert "Important body text stays here." in chunks[0].content
 
-    def test_code_block_with_text_before(self) -> None:
-        """Code block should stay intact even if preceded by text."""
-        sec = _sec()
-        para = _para("Some intro text.", start=1, end=1)
-        code = _code("x = 1\ny = 2\nprint(x + y)", start=2, end=5)
-        chunks = build_chunks([para, code], [sec], FILE_ID)
-        code_chunks = [c for c in chunks if c.content_type == ContentType.CODE]
-        assert len(code_chunks) == 1
-        assert "x = 1" in code_chunks[0].content
+    def test_preamble_before_first_h2_is_chunked(self) -> None:
+        blocks = [
+            _heading("# Guide", 1),
+            _para("Intro paragraph before sections.", 2, 3),
+            _heading("## Main", 5),
+            _para("Main body paragraph.", 6, 7),
+        ]
+        sections = build_sections(blocks, FILE_ID)
+        chunks = build_chunks(blocks, sections, FILE_ID)
+        assert any("Intro paragraph before sections." in chunk.content for chunk in chunks)
+        assert any("Main body paragraph." in chunk.content for chunk in chunks)
 
-    def test_multiple_code_blocks(self) -> None:
-        sec = _sec()
-        c1 = _code("print('a')", lang="python", start=1, end=1)
-        c2 = _code("print('b')", lang="python", start=2, end=2)
-        chunks = build_chunks([c1, c2], [sec], FILE_ID)
-        code_chunks = [c for c in chunks if c.content_type == ContentType.CODE]
-        assert len(code_chunks) == 2
-
-
-# ── mermaid blocks ────────────────────────────────────────────────────
-
-
-class TestMermaidBlocksKeptIntact:
-    def test_mermaid_detected(self) -> None:
-        content = "graph TD\n    A-->B\n    B-->C"
-        blocks = [_mermaid(content)]
-        sec = _sec()
-        chunks = build_chunks(blocks, [sec], FILE_ID)
+    def test_thematic_break_does_not_create_chunk(self) -> None:
+        blocks = [_heading("## Intro", 1), _break(2), _para("Body text.", 3, 3)]
+        sections = [_sec(start=1, end=3)]
+        chunks = build_chunks(blocks, sections, FILE_ID)
         assert len(chunks) == 1
-        assert chunks[0].content_type == ContentType.MERMAID
-        assert chunks[0].content == content
+        assert all(chunk.content.strip() != "---" for chunk in chunks)
 
-    def test_mermaid_not_confused_with_code(self) -> None:
-        blocks = [_mermaid("flowchart LR\n  X-->Y")]
-        sec = _sec()
-        chunks = build_chunks(blocks, [sec], FILE_ID)
-        assert chunks[0].content_type != ContentType.CODE
-        assert chunks[0].content_type == ContentType.MERMAID
+    def test_heading_only_chunk_is_not_emitted(self) -> None:
+        blocks = [_heading("## Lonely", 1)]
+        sections = [_sec(start=1, end=1)]
+        assert build_chunks(blocks, sections, FILE_ID) == []
 
-
-# ── table blocks ──────────────────────────────────────────────────────
-
-
-class TestTablesKeptIntact:
-    def test_single_table(self) -> None:
-        table_content = "| Name | Value |\n|------|-------|\n| A    | 1     |\n| B    | 2     |"
-        blocks = [_table(table_content)]
-        sec = _sec()
-        chunks = build_chunks(blocks, [sec], FILE_ID)
-        assert len(chunks) == 1
-        assert chunks[0].content_type == ContentType.TABLE
-        assert chunks[0].content == table_content
-
-    def test_table_with_surrounding_text(self) -> None:
-        sec = _sec()
-        before = _para("Here is data:")
-        tbl = _table("| X | Y |\n|---|---|\n| 1 | 2 |")
-        after = _para("That's the table.")
-        chunks = build_chunks([before, tbl, after], [sec], FILE_ID)
-        table_chunks = [c for c in chunks if c.content_type == ContentType.TABLE]
-        assert len(table_chunks) == 1
+    def test_nested_child_content_is_not_duplicated(self) -> None:
+        blocks = [
+            _heading("## Parent", 1),
+            _para("Parent intro.", 2, 2),
+            _heading("### Child", 4),
+            _para("Child body appears once.", 5, 5),
+        ]
+        sections = build_sections(blocks, FILE_ID)
+        chunks = build_chunks(blocks, sections, FILE_ID)
+        combined = "\n".join(chunk.content for chunk in chunks)
+        assert combined.count("Child body appears once.") == 1
 
 
-# ── text chunking with size limits ───────────────────────────────────
-
-
-class TestTextChunkingSizes:
-    def test_small_text_stays_single(self) -> None:
-        text = "Hello world. This is a short paragraph."
-        blocks = [_para(text)]
-        sec = _sec()
-        chunks = build_chunks(blocks, [sec], FILE_ID)
+class TestBufferedAssembly:
+    def test_small_text_blocks_are_merged(self) -> None:
+        blocks = [
+            _para("A" * 70, 1, 1),
+            _list("- bullet\n- bullet", 2, 3),
+            _blockquote("> quoted text", 4, 4),
+        ]
+        sections = [_sec(start=1, end=4)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 120,
+                "target_chunk_chars": 500,
+                "hard_limit_chars": 1000,
+                "overlap_chars": 0,
+            },
+        )
         assert len(chunks) == 1
         assert chunks[0].content_type == ContentType.TEXT
 
-    def test_large_text_gets_split(self) -> None:
-        # Create text exceeding target
-        paragraph = "This is a sentence. " * 100  # ~2100 chars
-        blocks = [_para(paragraph)]
-        sec = _sec()
-        chunks = build_chunks(blocks, [sec], FILE_ID, {"target_chunk_chars": 800})
-        assert len(chunks) > 1
-        for chunk in chunks:
-            assert chunk.content_type == ContentType.TEXT
-
-    def test_hard_limit_respected(self) -> None:
-        hard = "Word " * 600  # ~3000 chars
-        blocks = [_para(hard)]
-        sec = _sec()
-        cfg = {"min_chunk_chars": 100, "target_chunk_chars": 200, "hard_limit_chars": 400}
-        chunks = build_chunks(blocks, [sec], FILE_ID, cfg)
-        # Some chunks should exist; the text should be fully present
-        combined = " ".join(c.content for c in chunks)
-        assert "Word" in combined
-
-    def test_multiple_paragraphs_merged(self) -> None:
-        p1 = _para("Short paragraph one.")
-        p2 = _para("Short paragraph two.")
-        p3 = _para("Short paragraph three.")
-        sec = _sec()
-        chunks = build_chunks([p1, p2, p3], [sec], FILE_ID, {"target_chunk_chars": 2000})
+    def test_small_table_stays_with_neighboring_text(self) -> None:
+        blocks = [
+            _para("Intro text before table.", 1, 1),
+            _table("| X | Y |\n|---|---|\n| 1 | 2 |", 2, 4),
+            _para("Conclusion text after table.", 5, 5),
+        ]
+        sections = [_sec(start=1, end=5)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 10,
+                "target_chunk_chars": 500,
+                "hard_limit_chars": 1000,
+                "overlap_chars": 0,
+            },
+        )
         assert len(chunks) == 1
-        assert "Short paragraph one." in chunks[0].content
+        assert "| X | Y |" in chunks[0].content
+        assert "Conclusion text after table." in chunks[0].content
+
+    def test_small_mermaid_stays_with_neighboring_text(self) -> None:
+        blocks = [
+            _para("Explain the flow.", 1, 1),
+            _mermaid("graph TD\n  A-->B", 2, 4),
+            _para("Flow complete.", 5, 5),
+        ]
+        sections = [_sec(start=1, end=5)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 10,
+                "target_chunk_chars": 500,
+                "hard_limit_chars": 1000,
+                "overlap_chars": 0,
+            },
+        )
+        assert len(chunks) == 1
+        assert "graph TD" in chunks[0].content
+        assert "Flow complete." in chunks[0].content
+
+    def test_large_code_block_is_not_split_inside(self) -> None:
+        content = "print('hello')\n" * 700
+        blocks = [_code(content, start=1, end=700)]
+        sections = [_sec(start=1, end=700)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 10,
+                "target_chunk_chars": 200,
+                "hard_limit_chars": 400,
+                "overlap_chars": 0,
+            },
+        )
+        assert len(chunks) == 1
+        assert chunks[0].content == content
+        assert chunks[0].content_type == ContentType.CODE
+
+    def test_large_table_block_is_not_split_inside(self) -> None:
+        row = "| long | row | value |\n"
+        content = "| a | b | c |\n|---|---|---|\n" + row * 300
+        blocks = [_table(content, start=1, end=302)]
+        sections = [_sec(start=1, end=302)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 10,
+                "target_chunk_chars": 200,
+                "hard_limit_chars": 400,
+                "overlap_chars": 0,
+            },
+        )
+        assert len(chunks) == 1
+        assert chunks[0].content == content
+        assert chunks[0].content_type == ContentType.TABLE
+
+    def test_large_mermaid_block_is_not_split_inside(self) -> None:
+        content = "graph TD\n" + "\n".join(f"  A{i}-->B{i}" for i in range(500))
+        blocks = [_mermaid(content, start=1, end=501)]
+        sections = [_sec(start=1, end=501)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 10,
+                "target_chunk_chars": 200,
+                "hard_limit_chars": 400,
+                "overlap_chars": 0,
+            },
+        )
+        assert len(chunks) == 1
+        assert chunks[0].content == content
+        assert chunks[0].content_type == ContentType.MERMAID
 
 
-# ── overlap between text chunks ──────────────────────────────────────
+class TestChunkMergingAndLinks:
+    def test_first_small_chunk_merges_forward(self) -> None:
+        blocks = [
+            _para("short intro", 1, 1),
+            _para("B" * 180, 2, 2),
+        ]
+        sections = [_sec(start=1, end=2)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 100,
+                "target_chunk_chars": 10,
+                "hard_limit_chars": 400,
+                "overlap_chars": 0,
+            },
+        )
+        assert len(chunks) == 1
+        assert "short intro" in chunks[0].content
+        assert "B" * 180 in chunks[0].content
+
+    def test_links_are_correct_after_small_chunk_merge(self) -> None:
+        blocks = [
+            _para("A" * 130, 1, 1),
+            _table("|x|y|\n|---|---|\n|1|2|", 2, 4),
+            _para("B" * 130, 5, 5),
+            _para("C" * 130, 6, 6),
+        ]
+        sections = [_sec(start=1, end=6)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 100,
+                "target_chunk_chars": 100,
+                "hard_limit_chars": 160,
+                "overlap_chars": 0,
+            },
+        )
+        assert len(chunks) == 3
+        assert chunks[0].previous_chunk_id is None
+        assert chunks[-1].next_chunk_id is None
+        assert chunks[1].previous_chunk_id == chunks[0].id
+        assert chunks[1].next_chunk_id == chunks[2].id
+
+    def test_min_chunk_chars_reduces_tiny_chunk_count(self) -> None:
+        blocks = [
+            _para("A" * 130, 1, 1),
+            _table("|x|y|\n|---|---|\n|1|2|", 2, 4),
+            _para("B" * 140, 5, 5),
+        ]
+        sections = [_sec(start=1, end=5)]
+        low_min = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 10,
+                "target_chunk_chars": 100,
+                "hard_limit_chars": 160,
+                "overlap_chars": 0,
+            },
+        )
+        high_min = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 100,
+                "target_chunk_chars": 100,
+                "hard_limit_chars": 160,
+                "overlap_chars": 0,
+            },
+        )
+        assert len(high_min) < len(low_min)
 
 
 class TestOverlap:
-    def test_overlap_present(self) -> None:
-        """Second chunk should contain overlap text from first chunk."""
-        text1 = "Alpha beta gamma delta epsilon. " * 30  # ~1000 chars
-        text2 = "Zeta eta theta iota kappa lambda. " * 30  # ~1050 chars
-        blocks = [_para(text1), _para(text2)]
-        sec = _sec()
-        chunks = build_chunks(
-            blocks, [sec], FILE_ID,
-            {"min_chunk_chars": 100, "target_chunk_chars": 500, "overlap_chars": 50},
-        )
-        if len(chunks) >= 2:
-            # The second chunk should start with some tail from the first
-            first_tail = chunks[0].content[-80:]
-            assert any(
-                word in chunks[1].content
-                for word in first_tail.split()
-            ), "Overlap tail should appear at start of next chunk"
-
-    def test_no_overlap_for_code(self) -> None:
-        """Code blocks should not carry overlap."""
-        sec = _sec()
-        para = _para("Some text before code. " * 30, start=1, end=5)
-        code = _code("def x(): pass", start=6, end=6)
-        chunks = build_chunks([para, code], [sec], FILE_ID, {"overlap_chars": 50})
-        code_chunks = [c for c in chunks if c.content_type == ContentType.CODE]
-        assert len(code_chunks) == 1
-        assert code_chunks[0].content == "def x(): pass"
-
-
-# ── chunk linking ────────────────────────────────────────────────────
-
-
-class TestChunkLinking:
-    def test_linked_list_structure(self) -> None:
-        sec = _sec()
-        b1 = _para("Hello. " * 30, start=1, end=5)   # ~210 chars
-        b2 = _para("World. " * 30, start=6, end=10)   # ~210 chars
-        b3 = _para("Foo. " * 30, start=11, end=15)    # ~150 chars
-        chunks = build_chunks(
-            [b1, b2, b3], [sec], FILE_ID,
-            {"min_chunk_chars": 50, "target_chunk_chars": 200, "hard_limit_chars": 500},
-        )
-        assert len(chunks) >= 3
-        # first chunk has no predecessor
-        assert chunks[0].previous_chunk_id is None
-        # last chunk has no successor
-        assert chunks[-1].next_chunk_id is None
-        # middle chunks are doubly linked
-        for i in range(1, len(chunks)):
-            assert chunks[i].previous_chunk_id == chunks[i - 1].id
-        for i in range(len(chunks) - 1):
-            assert chunks[i].next_chunk_id == chunks[i + 1].id
-
-    def test_single_chunk_no_links(self) -> None:
-        sec = _sec()
-        chunks = build_chunks([_para("Hello.")], [sec], FILE_ID)
-        assert len(chunks) == 1
-        assert chunks[0].previous_chunk_id is None
-        assert chunks[0].next_chunk_id is None
-
-    def test_chunk_indices_sequential(self) -> None:
-        sec = _sec()
-        b1 = _para("A " * 400, start=1, end=10)
-        b2 = _para("B " * 400, start=11, end=20)
-        chunks = build_chunks(
-            [b1, b2], [sec], FILE_ID,
-            {"min_chunk_chars": 50, "target_chunk_chars": 200},
-        )
-        for i, chunk in enumerate(chunks):
-            assert chunk.chunk_index == i
-
-
-# ── empty / edge inputs ──────────────────────────────────────────────
-
-
-class TestEmptyInput:
-    def test_empty_blocks(self) -> None:
-        sec = _sec()
-        chunks = build_chunks([], [sec], FILE_ID)
-        assert chunks == []
-
-    def test_empty_sections(self) -> None:
-        blocks = [_para("Some text.")]
-        chunks = build_chunks(blocks, [], FILE_ID)
-        assert chunks == []
-
-    def test_both_empty(self) -> None:
-        chunks = build_chunks([], [], FILE_ID)
-        assert chunks == []
-
-
-class TestSingleBlock:
-    def test_single_paragraph(self) -> None:
-        text = "The quick brown fox jumps over the lazy dog."
-        blocks = [_para(text)]
-        sec = _sec()
-        chunks = build_chunks(blocks, [sec], FILE_ID)
-        assert len(chunks) == 1
-        assert chunks[0].content == text
-        assert chunks[0].content_type == ContentType.TEXT
-        assert chunks[0].heading_path == ["Intro"]
-
-
-# ── mixed content ────────────────────────────────────────────────────
-
-
-class TestMixedContent:
-    def test_paragraph_code_paragraph(self) -> None:
-        sec = _sec()
-        p1 = _para("Before code.")
-        c1 = _code("x = 1", lang="python")
-        p2 = _para("After code.")
-        chunks = build_chunks([p1, c1, p2], [sec], FILE_ID)
-        types = [c.content_type for c in chunks]
-        assert ContentType.TEXT in types
-        assert ContentType.CODE in types
-
-    def test_mixed_all_types(self) -> None:
-        sec = _sec()
+    def test_overlap_present_between_text_chunks(self) -> None:
         blocks = [
-            _para("Text paragraph."),
-            _code("print('hello')", lang="python"),
-            _mermaid("graph TD\n  A-->B"),
-            _table("| A | B |\n|---|---|\n| 1 | 2 |"),
-            _para("Final text."),
+            _para("Alpha beta gamma delta epsilon. " * 40, 1, 5),
+            _para("Zeta eta theta iota kappa lambda. " * 40, 6, 10),
         ]
-        chunks = build_chunks(blocks, [sec], FILE_ID)
-        content_types = {c.content_type for c in chunks}
-        assert ContentType.TEXT in content_types
-        assert ContentType.CODE in content_types
-        assert ContentType.MERMAID in content_types
-        assert ContentType.TABLE in content_types
+        sections = [_sec(start=1, end=10)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 100,
+                "target_chunk_chars": 500,
+                "hard_limit_chars": 700,
+                "overlap_chars": 50,
+            },
+        )
+        assert len(chunks) >= 2
+        overlap_words = set(_get_overlap_text(chunks[0].content, 50).split())
+        assert overlap_words.intersection(set(chunks[1].content.split()))
 
-    def test_heading_path_propagated(self) -> None:
-        sec = _sec()
-        sec.heading_path = ["Doc", "Section", "Sub"]
-        blocks = [_para("Some content here.")]
-        chunks = build_chunks(blocks, [sec], FILE_ID)
-        assert chunks[0].heading_path == ["Doc", "Section", "Sub"]
+    def test_overlap_does_not_cross_section_boundaries(self) -> None:
+        sections = [
+            _sec(title="A", start=1, end=1),
+            _sec(title="B", start=2, end=2),
+        ]
+        blocks = [
+            _para("Alpha beta gamma delta epsilon. " * 6, 1, 1),
+            _para("Section two starts cleanly.", 2, 2),
+        ]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 1,
+                "target_chunk_chars": 200,
+                "hard_limit_chars": 400,
+                "overlap_chars": 50,
+            },
+        )
+        assert len(chunks) == 2
+        assert chunks[1].content == "Section two starts cleanly."
 
-    def test_document_id_propagated(self) -> None:
-        sec = _sec()
-        blocks = [_para("Text.")]
-        chunks = build_chunks(blocks, [sec], "/docs/myfile.md")
-        assert chunks[0].document_id == "/docs/myfile.md"
-
-
-# ── helper functions ──────────────────────────────────────────────────
+    def test_overlap_keeps_final_chunk_under_hard_limit(self) -> None:
+        blocks = [
+            _para("Alpha beta gamma delta epsilon. " * 9, 1, 1),
+            _para("B" * 390, 2, 2),
+        ]
+        sections = [_sec(start=1, end=2)]
+        chunks = build_chunks(
+            blocks,
+            sections,
+            FILE_ID,
+            {
+                "min_chunk_chars": 1,
+                "target_chunk_chars": 300,
+                "hard_limit_chars": 400,
+                "overlap_chars": 50,
+            },
+        )
+        assert len(chunks) == 2
+        assert len(chunks[1].content) <= 400
 
 
 class TestHelpers:
@@ -352,8 +389,7 @@ class TestHelpers:
         text = "First sentence. Second sentence. Third sentence."
         pieces = _split_text_by_sentences(text, 25)
         assert len(pieces) >= 2
-        combined = " ".join(pieces)
-        assert "First sentence" in combined
+        assert "First sentence" in " ".join(pieces)
 
     def test_split_words(self) -> None:
         text = "one two three four five six seven eight"

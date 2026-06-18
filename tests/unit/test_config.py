@@ -31,10 +31,10 @@ class TestDefaultConfig:
 
     def test_default_chunking(self) -> None:
         config = get_defaults()
-        assert config.chunking.min_chunk_chars == 600
-        assert config.chunking.target_chunk_chars == 1200
-        assert config.chunking.hard_limit_chars == 2200
-        assert config.chunking.overlap_chars == 180
+        assert config.chunking.min_chunk_chars == 1200
+        assert config.chunking.target_chunk_chars == 3200
+        assert config.chunking.hard_limit_chars == 8000
+        assert config.chunking.overlap_chars == 300
 
     def test_default_embedding(self) -> None:
         config = get_defaults()
@@ -82,7 +82,7 @@ dimensions = 1024
         assert config.embedding.dimensions == 1024
 
         # Non-overridden defaults preserved
-        assert config.chunking.hard_limit_chars == 2200
+        assert config.chunking.hard_limit_chars == 8000
         assert config.search.default_mode == "hybrid"
         assert config.paths.root == "."
 
@@ -127,7 +127,7 @@ top_k = 10
 
         # Should fall back to defaults
         assert config.paths.root == "."
-        assert config.chunking.min_chunk_chars == 600
+        assert config.chunking.min_chunk_chars == 1200
 
 
 class TestEnvOverride:
@@ -252,5 +252,5 @@ top_k = 15
         # From CLI
         assert config.search.top_k == 3
         # From defaults
-        assert config.chunking.hard_limit_chars == 2200
+        assert config.chunking.hard_limit_chars == 8000
         assert config.embedding.dimensions == 1024
