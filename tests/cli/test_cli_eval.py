@@ -99,6 +99,23 @@ queries:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["ok"] is True
+    assert set(payload) == {"ok", "data", "meta"}
+    assert set(payload["data"]) == {"queries_path", "k", "results", "summary"}
+    assert set(payload["data"]["results"][0]) == {
+        "query_id",
+        "query",
+        "mode",
+        "k",
+        "recall_at_k",
+        "mrr",
+        "precision_at_k",
+        "ndcg_at_k",
+        "retrieved_count",
+        "expected_count",
+        "conditions_met",
+        "error",
+    }
     assert payload["data"]["results"][0]["error"] == "provider offline"
     assert payload["data"]["results"][0]["conditions_met"] is False
+    assert payload["data"]["results"][0]["ndcg_at_k"] == 0.0
     assert payload["data"]["summary"]["queries_failed"] == 1

@@ -106,6 +106,7 @@ def retrieval(
                 "recall_at_k": r.recall_at_k,
                 "mrr": r.mrr,
                 "precision_at_k": r.precision_at_k,
+                "ndcg_at_k": r.ndcg_at_k,
                 "retrieved_count": len(r.retrieved_ids),
                 "expected_count": len(r.expected_ids),
                 "conditions_met": r.conditions_met,

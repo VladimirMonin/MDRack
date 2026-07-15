@@ -25,9 +25,11 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Logs
+# Logs and local agent/evaluation artifacts
 *.log
 logs/
+.local-reports/
+.serena/
 
 # Debug
 md_writer_debug.log

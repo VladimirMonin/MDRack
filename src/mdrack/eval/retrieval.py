@@ -10,7 +10,7 @@ from typing import Any
 
 from mdrack.config.models import MDRackConfig
 from mdrack.embeddings.protocol import EmbeddingProvider
-from mdrack.eval.metrics import mrr, precision_at_k, recall_at_k
+from mdrack.eval.metrics import mrr, ndcg_at_k, precision_at_k, recall_at_k
 from mdrack.eval.queries import EvalQuery, EvalQuerySet
 from mdrack.search.hybrid import hybrid_search
 from mdrack.search.semantic import semantic_search
@@ -32,6 +32,7 @@ class EvalQueryResult:
     recall_at_k: float
     mrr: float
     precision_at_k: float
+    ndcg_at_k: float = 0.0
     conditions_met: bool = True
     error: str | None = None
 
@@ -170,6 +171,9 @@ async def _run_single_query(
     rec_k = recall_at_k(expected_set, retrieved_ids, query_k)
     mr = mrr(expected_set, retrieved_ids)
     prec_k = precision_at_k(expected_set, retrieved_ids, query_k)
+    ndcg_k = ndcg_at_k(
+        {item_id: 1.0 for item_id in expected_set}, retrieved_ids, query_k
+    )
 
     return EvalQueryResult(
         query_id=query.id,
@@ -181,6 +185,7 @@ async def _run_single_query(
         recall_at_k=rec_k,
         mrr=mr,
         precision_at_k=prec_k,
+        ndcg_at_k=ndcg_k,
         conditions_met=conditions_met,
         error=error,
     )
@@ -230,6 +235,7 @@ def run_retrieval_eval(
         recall_values = [r.recall_at_k for r in async_results]
         mrr_values = [r.mrr for r in async_results]
         precision_values = [r.precision_at_k for r in async_results]
+        ndcg_values = [r.ndcg_at_k for r in async_results]
         n = len(async_results)
         n_success = sum(1 for r in async_results if r.conditions_met)
         n_failed = n - n_success
@@ -243,6 +249,7 @@ def run_retrieval_eval(
             "avg_recall_at_k": sum(recall_values) / n if n else 0.0,
             "avg_mrr": sum(mrr_values) / n if n else 0.0,
             "avg_precision_at_k": sum(precision_values) / n if n else 0.0,
+            "avg_ndcg_at_k": sum(ndcg_values) / n if n else 0.0,
         }
     else:
         report.summary = {
@@ -253,6 +260,7 @@ def run_retrieval_eval(
             "avg_recall_at_k": 0.0,
             "avg_mrr": 0.0,
             "avg_precision_at_k": 0.0,
+            "avg_ndcg_at_k": 0.0,
         }
 
     return report
