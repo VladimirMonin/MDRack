@@ -6,6 +6,9 @@
 >
 > **Release target:** stable indexing, provenance, assets, embedded Python API,
 > and hybrid FTS + semantic retrieval fused with deterministic RRF.
+>
+> **Execution plan:**
+> [`plans/2026-07-16-v0.2-stabilization.md`](plans/2026-07-16-v0.2-stabilization.md).
 
 ## 1. Цель 🧭
 
