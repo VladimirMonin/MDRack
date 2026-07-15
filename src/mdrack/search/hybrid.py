@@ -39,6 +39,10 @@ class HybridSearchResultItem:
     file_relative_path: str
     section_title: str | None
     heading_path: str | None
+    rrf_rank: int = 0
+    rrf_score: float = 0.0
+    rerank_rank: int | None = None
+    rerank_score: float | None = None
 
 
 @dataclass
@@ -110,6 +114,8 @@ async def hybrid_search(
                     combined_score=item.score,
                     text_rank=index,
                     semantic_rank=None,
+                    rrf_rank=index,
+                    rrf_score=item.score,
                     text_score=item.score,
                     semantic_score=None,
                     content_preview=item.snippet,
@@ -191,6 +197,8 @@ async def hybrid_search(
                 combined_score=weighted_score,
                 text_rank=ranked_item.text_rank,
                 semantic_rank=ranked_item.semantic_rank,
+                rrf_rank=ranked_item.rrf_rank,
+                rrf_score=base_score,
                 text_score=text_score,
                 semantic_score=semantic_score,
                 content_preview=content_preview,

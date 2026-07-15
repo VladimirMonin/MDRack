@@ -157,6 +157,29 @@ def test_text_search_envelope_shape(tmp_path: Path) -> None:
     assert payload["ok"] is True
 
 
+def test_search_internal_error_does_not_expose_query_or_endpoint(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _setup_db(tmp_path)
+    private_query = "customer payroll secret"
+    private_endpoint = "https://private.example.invalid/token"
+
+    def fail_search(*args, **kwargs) -> None:
+        raise RuntimeError(f"query={private_query} endpoint={private_endpoint}")
+
+    monkeypatch.setattr("mdrack.cli.commands.search._run_text_search", fail_search)
+    result = CliRunner().invoke(
+        main,
+        ["--root", str(tmp_path), "search", private_query, "--mode", "text"],
+    )
+
+    assert private_query not in result.output
+    assert private_endpoint not in result.output
+    payload = json.loads(result.output)
+    assert payload["error"]["message"] == "Search failed"
+
+
 def test_text_search_no_db(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(

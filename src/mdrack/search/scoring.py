@@ -16,6 +16,7 @@ class RankedResult:
     combined_score: float
     text_rank: int | None
     semantic_rank: int | None
+    rrf_rank: int = 0
 
 
 def reciprocal_rank_fusion(
@@ -39,12 +40,18 @@ def reciprocal_rank_fusion(
     Returns:
         List of RankedResult sorted by combined_score descending.
     """
-    # Build rank maps: chunk_id -> 1-based rank
-    text_ranks = {item.chunk_id: idx + 1 for idx, item in enumerate(text_results)}
-    semantic_ranks = {item.chunk_id: idx + 1 for idx, item in enumerate(semantic_results)}
+    # Preserve the first occurrence of duplicates and a deterministic tie order.
+    text_ranks: dict[str, int] = {}
+    semantic_ranks: dict[str, int] = {}
+    first_seen: dict[str, int] = {}
+    for idx, item in enumerate(text_results, start=1):
+        text_ranks.setdefault(item.chunk_id, idx)
+        first_seen.setdefault(item.chunk_id, idx - 1)
+    for idx, item in enumerate(semantic_results, start=1):
+        semantic_ranks.setdefault(item.chunk_id, idx)
+        first_seen.setdefault(item.chunk_id, len(text_results) + idx - 1)
 
-    # Collect all unique chunk_ids from both lists
-    all_chunk_ids = set(text_ranks.keys()) | set(semantic_ranks.keys())
+    all_chunk_ids = list(dict.fromkeys([*text_ranks, *semantic_ranks]))
 
     # Compute combined score for each chunk
     results: list[RankedResult] = []
@@ -67,7 +74,8 @@ def reciprocal_rank_fusion(
             )
         )
 
-    # Sort by combined_score descending
-    results.sort(key=lambda r: r.combined_score, reverse=True)
+    results.sort(key=lambda r: (-r.combined_score, first_seen[r.chunk_id], r.chunk_id))
+    for rank, result in enumerate(results, start=1):
+        result.rrf_rank = rank
 
     return results

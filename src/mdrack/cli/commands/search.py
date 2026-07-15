@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 def _open_connection(db_path: Path) -> sqlite3.Connection:
     if not db_path.is_file():
         raise StorageError(
-            f"Database not found at {db_path}. Run 'mdrack scan' first.",
+            "Database not found. Run 'mdrack scan' first.",
         )
     return get_connection(db_path)
 
@@ -104,17 +104,17 @@ def cli_search(
             provider_name = embedding_provider or config.embedding.provider
             provider = create_embedding_provider(provider_name, config)
             asyncio.run(_run_hybrid_search(conn, query, provider, config, limit_val, ctx, cmd))
-    except FTSQueryError as exc:
-        _output(ctx, envelope_error(str(exc), "FTS_ERROR", cmd))
-    except Exception as exc:
-        logger.exception("Search command failed")
-        _output(ctx, envelope_error(str(exc), "INTERNAL_ERROR", cmd))
+    except FTSQueryError:
+        _output(ctx, envelope_error("Invalid text search query", "FTS_ERROR", cmd))
+    except Exception:
+        logger.error("cli.search.failed", extra={"status": "failed", "reason": "internal_error"})
+        _output(ctx, envelope_error("Search failed", "INTERNAL_ERROR", cmd))
     finally:
         if provider is not None:
             try:
                 asyncio.run(close_async_resource(provider))
             except Exception:
-                logger.debug("Failed to close embedding provider", exc_info=True)
+                logger.debug("embedding.provider.close_failed reason=cleanup_error")
         conn.close()
 
 
@@ -134,6 +134,7 @@ def _run_text_search(
             "file": r.file_relative_path,
             "section_title": r.section_title,
             "heading_path": r.heading_path,
+            "source_locator": r.source_locator.to_dict() if r.source_locator else None,
         }
         for r in result.results
     ]
@@ -199,6 +200,10 @@ async def _run_hybrid_search(
             "semantic_score": r.semantic_score,
             "text_rank": r.text_rank,
             "semantic_rank": r.semantic_rank,
+            "rrf_rank": r.rrf_rank,
+            "rrf_score": r.rrf_score,
+            "rerank_rank": r.rerank_rank,
+            "rerank_score": r.rerank_score,
             "content_preview": r.content_preview,
             "file": r.file_relative_path,
             "section_title": r.section_title,
