@@ -82,21 +82,21 @@ def detect_changes(
         abs_path = root / rel
         try:
             disk_hash = compute_file_hash(abs_path)
-        except (FileNotFoundError, OSError):
-            logger.warning("cannot read file for hashing: %s", abs_path)
+        except (OSError, UnicodeError):
+            logger.warning("file.hash.failed reason=file_io_error")
             disk_hash = ""
 
         db_hash = db_hashes.get(rel_posix)
 
         if db_hash is None:
             new_files.append(rel)
-            logger.debug("new file: %s", rel_posix)
+            logger.debug("file.change.detected status=new")
         elif db_hash != disk_hash:
             changed_files.append(rel)
-            logger.debug("changed file: %s", rel_posix)
+            logger.debug("file.change.detected status=changed")
         else:
             unchanged_files.append(rel)
-            logger.debug("unchanged file: %s", rel_posix)
+            logger.debug("file.change.detected status=unchanged")
 
     deleted_files = sorted(db_paths - seen)
 

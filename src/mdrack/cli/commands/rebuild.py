@@ -10,6 +10,7 @@ from typing import Any
 
 import click
 
+from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.output.envelope import success as envelope_success
@@ -29,58 +30,121 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     emit_json(payload, pretty=not json_flag)
 
 
-def _ensure_embedding_profile(conn: Any, profile_name: str, provider: object) -> None:
-    existing = conn.execute(
-        "SELECT name, model, dimensions, endpoint FROM embedding_profiles WHERE name = ?",
-        (profile_name,),
-    ).fetchone()
-
+def _profile_from_provider(profile_name: str, provider: object) -> EmbeddingProfile:
     dimensions = getattr(provider, "dimensions", 768)
-    model_name = getattr(
-        provider, "model_name", getattr(provider, "_model_name", "default")
+    model_name = getattr(provider, "model_name", getattr(provider, "_model_name", "default"))
+    provider_name = getattr(provider, "provider_name", getattr(provider, "_provider_name", "unknown"))
+    return EmbeddingProfile(
+        name=profile_name,
+        provider=str(provider_name),
+        runtime="lmstudio-gui" if provider_name == "lmstudio" else "offline-test",
+        model_key=str(model_name),
+        model_family="qwen3-embedding" if "qwen3" in str(model_name).lower() else "unknown",
+        quantization="unknown",
+        output_dimensions=dimensions,
+        query_instruction="Represent the query for retrieval",
+        normalization_mode="l2",
+        endpoint_family="openai_embeddings",
     )
+
+
+def _ensure_embedding_profile(conn: Any, profile: EmbeddingProfile, provider: object) -> None:
+    existing = conn.execute(
+        "SELECT name FROM embedding_profiles WHERE name = ?",
+        (profile.name,),
+    ).fetchone()
     endpoint = getattr(provider, "endpoint", getattr(provider, "_endpoint", None))
 
     if existing is None:
         conn.execute(
-            "INSERT INTO embedding_profiles (name, model, dimensions, endpoint) VALUES (?, ?, ?, ?)",
-            (profile_name, str(model_name), dimensions, endpoint),
+            """
+            INSERT INTO embedding_profiles (
+                name, model, dimensions, endpoint, fingerprint, provider, runtime,
+                model_key, model_family, quantization, query_instruction_hash,
+                normalization_mode, endpoint_family
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                profile.name,
+                profile.model_key,
+                profile.output_dimensions,
+                endpoint,
+                profile.fingerprint,
+                profile.provider,
+                profile.runtime,
+                profile.model_key,
+                profile.model_family,
+                profile.quantization,
+                profile.query_instruction_hash,
+                profile.normalization_mode,
+                profile.endpoint_family,
+            ),
         )
-        logger.info("Created embedding profile: %s (dims=%d)", profile_name, dimensions)
-        return
-
-    if (
-        existing["model"] == str(model_name)
-        and existing["dimensions"] == dimensions
-        and existing["endpoint"] == endpoint
-    ):
+        logger.info(
+            "embedding.profile.created profile=%s dimensions=%d",
+            profile.name,
+            profile.output_dimensions,
+        )
         return
 
     conn.execute(
-        "UPDATE embedding_profiles SET model = ?, dimensions = ?, endpoint = ? WHERE name = ?",
-        (str(model_name), dimensions, endpoint, profile_name),
+        """
+        UPDATE embedding_profiles
+        SET model = ?, dimensions = ?, endpoint = ?, fingerprint = ?, provider = ?,
+            runtime = ?, model_key = ?, model_family = ?, quantization = ?,
+            query_instruction_hash = ?, normalization_mode = ?, endpoint_family = ?
+        WHERE name = ?
+        """,
+        (
+            profile.model_key,
+            profile.output_dimensions,
+            endpoint,
+            profile.fingerprint,
+            profile.provider,
+            profile.runtime,
+            profile.model_key,
+            profile.model_family,
+            profile.quantization,
+            profile.query_instruction_hash,
+            profile.normalization_mode,
+            profile.endpoint_family,
+            profile.name,
+        ),
     )
-    logger.info("Updated embedding profile metadata: %s (dims=%d)", profile_name, dimensions)
+    logger.info(
+        "embedding.profile.updated profile=%s dimensions=%d",
+        profile.name,
+        profile.output_dimensions,
+    )
 
 
-def _upsert_vectors(conn: Any, profile_name: str, chunk_ids: list[str], vectors: list[list[float]]) -> None:
+def _upsert_vectors(
+    conn: Any,
+    profile: EmbeddingProfile,
+    chunk_ids: list[str],
+    vectors: list[list[float]],
+) -> None:
     now = None
-    rows: list[tuple[str, str, bytes, str]] = []
+    rows: list[tuple[str, str, bytes, str, str]] = []
     for chunk_id, vector in zip(chunk_ids, vectors):
+        if len(vector) != profile.output_dimensions:
+            raise ValueError("embedding vector dimension does not match active profile")
         payload = json.dumps(vector).encode("utf-8")
         if now is None:
             from datetime import datetime, timezone
 
             now = datetime.now(timezone.utc).isoformat()
-        rows.append((chunk_id, profile_name, payload, now))
+        rows.append((chunk_id, profile.name, payload, now, profile.fingerprint))
 
     conn.executemany(
         """
-        INSERT INTO chunk_embeddings (chunk_id, profile_name, embedding, embedded_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO chunk_embeddings (
+            chunk_id, profile_name, embedding, embedded_at, profile_fingerprint
+        ) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT (chunk_id, profile_name)
         DO UPDATE SET embedding = excluded.embedding,
-                     embedded_at = excluded.embedded_at
+                     embedded_at = excluded.embedded_at,
+                     profile_fingerprint = excluded.profile_fingerprint
         """,
         rows,
     )
@@ -112,11 +176,12 @@ def rebuild_embeddings_in_db(
 
         conn.execute("BEGIN")
         try:
-            _ensure_embedding_profile(conn, profile_name, provider)
+            profile = _profile_from_provider(profile_name, provider)
             conn.execute(
                 "DELETE FROM chunk_embeddings WHERE profile_name = ?",
                 (profile_name,),
             )
+            _ensure_embedding_profile(conn, profile, provider)
 
             embedded_count = 0
             for start in range(0, len(rows), DEFAULT_BATCH_SIZE):
@@ -124,7 +189,7 @@ def rebuild_embeddings_in_db(
                 chunk_ids = [row["id"] for row in batch_rows]
                 texts = [row["embedding_text"] for row in batch_rows]
                 vectors = asyncio.run(provider.embed(texts, profile=profile_name))
-                _upsert_vectors(conn, profile_name, chunk_ids, vectors)
+                _upsert_vectors(conn, profile, chunk_ids, vectors)
                 embedded_count += len(chunk_ids)
 
             conn.commit()

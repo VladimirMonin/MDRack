@@ -30,6 +30,12 @@ _DEFAULT_INCLUDE: list[str] = ["**/*.md"]
 _CACHE: dict[str, re.Pattern[str]] = {}
 
 
+class CorpusScanError(RuntimeError):
+    """Safe corpus-level failure raised when traversal cannot be trusted."""
+
+    code = "CORPUS_SCAN_FAILED"
+
+
 def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     """Convert a glob pattern to a compiled regex.
 
@@ -99,34 +105,44 @@ def scan_markdown_files(
         Sorted list of ``Path`` objects (relative to *root*).
     """
     if not root.is_dir():
-        logger.warning("scan root does not exist or is not a directory: %s", root)
-        return []
+        logger.error("file.scan.failed reason=invalid_root")
+        raise CorpusScanError("corpus root is unavailable")
 
     inc = include if include is not None else _DEFAULT_INCLUDE
     exc = exclude if exclude is not None else _DEFAULT_EXCLUDE
 
     results: list[Path] = []
 
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in _ALWAYS_IGNORED
-        ]
+    def fail_traversal(_error: OSError) -> None:
+        logger.error("file.scan.failed reason=traversal_error")
+        raise CorpusScanError("corpus traversal failed") from None
 
-        for fname in filenames:
-            full = Path(dirpath) / fname
-            rel = full.relative_to(root).as_posix()
+    try:
+        for dirpath, dirnames, filenames in os.walk(root, onerror=fail_traversal):
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in _ALWAYS_IGNORED
+            ]
 
-            if _matches_any(rel, exc):
-                logger.debug("excluded: %s", rel)
-                continue
+            for fname in filenames:
+                full = Path(dirpath) / fname
+                rel = full.relative_to(root).as_posix()
 
-            if not _matches_any(rel, inc):
-                logger.debug("not matched by include: %s", rel)
-                continue
+                if _matches_any(rel, exc):
+                    logger.debug("file.scan.skipped reason=excluded_pattern")
+                    continue
 
-            results.append(Path(rel))
+                if not _matches_any(rel, inc):
+                    logger.debug("file.scan.skipped reason=include_mismatch")
+                    continue
+
+                results.append(Path(rel))
+    except CorpusScanError:
+        raise
+    except OSError:
+        logger.error("file.scan.failed reason=traversal_error")
+        raise CorpusScanError("corpus traversal failed") from None
 
     results.sort()
-    logger.info("scanned %s: found %d markdown file(s)", root, len(results))
+    logger.info("file.scan.finished file_count=%d", len(results))
     return results

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -32,11 +33,15 @@ def test_version_outputs_version() -> None:
 _COMMAND_GROUPS = ["init", "scan", "status", "doctor"]
 
 
-def test_top_level_commands_exist() -> None:
-    """Each top-level command should be callable and return JSON."""
+def test_top_level_commands_exist(tmp_path: Path) -> None:
+    """Each top-level command should be callable offline and return JSON."""
+    (tmp_path / "offline.md").write_text("# Offline\n\nContract test.\n", encoding="utf-8")
     runner = CliRunner()
     for cmd in _COMMAND_GROUPS:
-        result = runner.invoke(main, [cmd])
+        args = ["--root", str(tmp_path), cmd]
+        if cmd == "scan":
+            args.extend(["--provider", "fake"])
+        result = runner.invoke(main, args)
         assert result.exit_code == 0, f"Command '{cmd}' failed: {result.output}"
         payload = json.loads(result.output)
         assert payload["ok"] is True, f"Command '{cmd}' returned ok=false"

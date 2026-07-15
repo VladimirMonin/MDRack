@@ -20,7 +20,7 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     Returns:
         Configured sqlite3.Connection instance.
     """
-    logger.debug("Opening SQLite connection to %s", db_path)
+    logger.debug("storage.sqlite.connection.opened")
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

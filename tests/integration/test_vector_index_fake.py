@@ -97,11 +97,10 @@ def test_search_respects_limit(
     conn.commit()
 
     for i in range(5):
-        vec = [0.0] * 5
-        vec[i] = 1.0
+        vec = [float(i + 1), 1.0, 0.0]
         index.upsert(f"ch{i}", "test-profile", vec)
 
-    results = index.search([1.0, 0.0, 0.0, 0.0, 0.0], "test-profile", limit=2)
+    results = index.search([1.0, 0.0, 0.0], "test-profile", limit=2)
     assert len(results) == 2
 
 

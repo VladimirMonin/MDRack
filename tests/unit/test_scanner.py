@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mdrack.indexing.scanner import scan_markdown_files
+import pytest
+
+from mdrack.indexing.scanner import CorpusScanError, scan_markdown_files
 
 
 def _touch(path: Path) -> Path:
@@ -154,8 +156,8 @@ class TestEmptyAndNoMatch:
 
     def test_nonexistent_root(self, tmp_path: Path) -> None:
         missing = tmp_path / "nonexistent"
-        result = scan_markdown_files(missing)
-        assert result == []
+        with pytest.raises(CorpusScanError):
+            scan_markdown_files(missing)
 
 
 class TestSortedOutput:

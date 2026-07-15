@@ -12,6 +12,29 @@ logger = logging.getLogger(__name__)
 _MIGRATION_PATTERN = re.compile(r"^(\d{4})_(.+)\.sql$")
 
 
+class MigrationPlanError(RuntimeError):
+    """Migration files or database versions do not form one safe linear history."""
+
+
+def _migration_plan(migrations_dir: Path) -> list[tuple[str, Path]]:
+    sql_files = sorted(migrations_dir.glob("*.sql"))
+    plan: list[tuple[str, Path]] = []
+    seen: set[str] = set()
+    for path in sql_files:
+        match = _MIGRATION_PATTERN.fullmatch(path.name)
+        if match is None:
+            raise MigrationPlanError("migration filename does not match NNNN_name.sql")
+        version = match.group(1)
+        if version in seen:
+            raise MigrationPlanError("duplicate migration version")
+        seen.add(version)
+        plan.append((version, path))
+    expected = [f"{index:04d}" for index in range(len(plan))]
+    if [version for version, _ in plan] != expected:
+        raise MigrationPlanError("migration versions must be contiguous from 0000")
+    return plan
+
+
 def get_migrations_dir() -> Path:
     """Return the package-local directory containing SQL migrations."""
     return Path(__file__).resolve().with_name("migrations")
@@ -57,15 +80,11 @@ def apply_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
     """
     _ensure_schema_migrations(conn)
     applied = get_applied_migrations(conn)
-
-    sql_files = sorted(migrations_dir.glob("*.sql"))
-    pending: list[tuple[str, Path]] = []
-    for path in sql_files:
-        match = _MIGRATION_PATTERN.match(path.name)
-        if match:
-            version = match.group(1)
-            if version not in applied:
-                pending.append((version, path))
+    plan = _migration_plan(migrations_dir)
+    available = {version for version, _ in plan}
+    if applied - available:
+        raise MigrationPlanError("database contains migration versions unavailable to this build")
+    pending = [(version, path) for version, path in plan if version not in applied]
 
     if not pending:
         logger.info("No pending migrations to apply")
@@ -75,12 +94,12 @@ def apply_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
         logger.info("Applying migration %s from %s", version, path.name)
         sql = path.read_text(encoding="utf-8")
         try:
-            conn.executescript(sql)
-            conn.execute(
-                "INSERT INTO schema_migrations (version) VALUES (?)",
-                (version,),
+            conn.executescript(
+                "BEGIN IMMEDIATE;\n"
+                f"{sql}\n"
+                f"INSERT INTO schema_migrations (version) VALUES ('{version}');\n"
+                "COMMIT;"
             )
-            conn.commit()
             logger.info("Migration %s applied successfully", version)
         except Exception:
             conn.rollback()

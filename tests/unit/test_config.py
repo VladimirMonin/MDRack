@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -254,3 +255,39 @@ top_k = 15
         # From defaults
         assert config.chunking.hard_limit_chars == 8000
         assert config.embedding.dimensions == 1024
+
+
+def test_config_debug_logs_redact_paths_endpoints_and_override_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    private_dir = tmp_path / "private-customer-vault"
+    private_dir.mkdir()
+    private_config = private_dir / "customer-config.toml"
+    private_store = private_dir / "customer-store"
+    private_endpoint = "https://private.example.test/v1?tenant=customer-secret"
+    cli_secret = "customer-private-model"
+    private_config.write_text(
+        f'[paths]\nstore = "{private_store}"\n[embedding]\nendpoint = "{private_endpoint}"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MDRACK_PATHS_ROOT", str(private_dir))
+    caplog.set_level(logging.DEBUG, logger="mdrack.config.loader")
+
+    config = load_config(toml_path=private_config, cli_overrides={"embedding.model": cli_secret})
+
+    assert config.embedding.model == cli_secret
+    captured = caplog.text
+    for private_value in (
+        str(private_dir),
+        str(private_config),
+        str(private_store),
+        private_endpoint,
+        cli_secret,
+        "private-customer-vault",
+        "customer-config.toml",
+    ):
+        assert private_value not in captured
+    assert "config.load.finished" in captured
+    assert "config.override.applied" in captured

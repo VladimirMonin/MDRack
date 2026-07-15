@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ from mdrack.config.models import (
     ChunkingConfig,
     EmbeddingConfig,
     MDRackConfig,
+    ParsingConfig,
     PathsConfig,
     ProfilingConfig,
     ScanConfig,
@@ -27,6 +29,7 @@ _ENV_PREFIX = "MDRACK_"
 _SECTION_MAP: dict[str, type[BaseModel]] = {
     "paths": PathsConfig,
     "scan": ScanConfig,
+    "parsing": ParsingConfig,
     "chunking": ChunkingConfig,
     "embedding": EmbeddingConfig,
     "search": SearchConfig,
@@ -34,14 +37,53 @@ _SECTION_MAP: dict[str, type[BaseModel]] = {
 }
 
 
+def _safe_config_ref(path: Path) -> str:
+    """Return a stable opaque reference without exposing path components."""
+    digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()
+    return f"config:{digest[:16]}"
+
+
+def _value_kind(value: object) -> str:
+    if value is None:
+        return "none"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, (list, tuple)):
+        return "sequence"
+    if isinstance(value, str):
+        return "string"
+    return "other"
+
+
 def _read_toml(path: Path) -> dict[str, Any]:
     """Read and parse a TOML file, return raw dict."""
+    config_ref = _safe_config_ref(path)
     if not path.is_file():
-        logger.debug("TOML config file not found: %s", path)
+        logger.debug(
+            "config.load.finished",
+            extra={"config_ref": config_ref, "status": "missing", "config_present": False},
+        )
         return {}
-    logger.debug("Reading TOML config from %s", path)
-    with open(path, encoding="utf-8") as f:
-        return toml.load(f)  # type: ignore[no-any-return]
+    logger.debug(
+        "config.load.started",
+        extra={"config_ref": config_ref, "config_present": True},
+    )
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = toml.load(f)
+    except Exception:
+        logger.error(
+            "config.load.failed",
+            extra={"config_ref": config_ref, "status": "failed", "reason": "parse_or_io_error"},
+        )
+        raise
+    logger.debug(
+        "config.load.finished",
+        extra={"config_ref": config_ref, "status": "success", "section_count": len(raw)},
+    )
+    return raw  # type: ignore[no-any-return]
 
 
 def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
@@ -73,12 +115,17 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
         if isinstance(existing, list) and isinstance(coerced, str) and "," not in coerced:
             coerced = [coerced]
         section_raw[field_name] = coerced
+        field_known = field_name in _SECTION_MAP[section_name].model_fields
         logger.debug(
-            "Env override applied: %s -> %s.%s = %r",
-            key,
-            section_name,
-            field_name,
-            coerced,
+            "config.override.applied",
+            extra={
+                "override_source": "environment",
+                "section": section_name,
+                "field": field_name if field_known else "unknown",
+                "field_known": field_known,
+                "value_present": True,
+                "value_kind": _value_kind(coerced),
+            },
         )
     return raw
 
@@ -130,6 +177,7 @@ def _build_config(raw: dict[str, Any]) -> MDRackConfig:
     return MDRackConfig(
         paths=PathsConfig(**raw.get("paths", {})),  # type: ignore[arg-type]
         scan=ScanConfig(**raw.get("scan", {})),  # type: ignore[arg-type]
+        parsing=ParsingConfig(**raw.get("parsing", {})),  # type: ignore[arg-type]
         chunking=ChunkingConfig(**raw.get("chunking", {})),  # type: ignore[arg-type]
         embedding=EmbeddingConfig(**raw.get("embedding", {})),  # type: ignore[arg-type]
         search=SearchConfig(**raw.get("search", {})),  # type: ignore[arg-type]
@@ -192,6 +240,18 @@ def load_config(
                 section_raw = merged.setdefault(section, {})
                 if isinstance(section_raw, dict):
                     section_raw[field] = value
-                    logger.debug("CLI override: %s.%s = %r", section, field, value)
+                    model_cls = _SECTION_MAP.get(section)
+                    field_known = model_cls is not None and field in model_cls.model_fields
+                    logger.debug(
+                        "config.override.applied",
+                        extra={
+                            "override_source": "cli",
+                            "section": section if model_cls is not None else "unknown",
+                            "field": field if field_known else "unknown",
+                            "field_known": field_known,
+                            "value_present": value is not None,
+                            "value_kind": _value_kind(value),
+                        },
+                    )
 
     return _build_config(merged)

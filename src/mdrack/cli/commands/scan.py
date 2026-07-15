@@ -72,15 +72,26 @@ def cli_scan(
 
         data: dict[str, Any] = {
             "run_id": result.run_id,
+            "status": result.status,
             "files_seen": result.files_seen,
             "files_changed": result.files_changed,
+            "files_indexed": result.files_indexed,
+            "files_failed": result.files_failed,
             "files_deleted": result.files_deleted,
             "chunks_created": result.chunks_created,
+            "errors_count": result.errors_count,
         }
+        if "CORPUS_SCAN_FAILED" in result.error_codes:
+            _output(ctx, envelope_error("Corpus scan failed", "CORPUS_SCAN_FAILED", cmd))
+            raise click.exceptions.Exit(1)
         _output(ctx, envelope_success(data, command=cmd))
-    except Exception as exc:
-        logger.exception("Scan command failed")
-        _output(ctx, envelope_error(str(exc), "INTERNAL_ERROR", cmd))
+        if result.status == "failed":
+            raise click.exceptions.Exit(1)
+    except click.exceptions.Exit:
+        raise
+    except Exception:
+        logger.error("cli.scan.failed", extra={"status": "failed", "reason": "internal_error"})
+        _output(ctx, envelope_error("Scan failed", "INTERNAL_ERROR", cmd))
         ctx.exit(1)
     finally:
         if provider is not None:
@@ -89,4 +100,4 @@ def cli_scan(
 
                 asyncio.run(close_async_resource(provider))
             except Exception:
-                logger.debug("Failed to close embedding provider", exc_info=True)
+                logger.debug("embedding.provider.close_failed reason=cleanup_error")
