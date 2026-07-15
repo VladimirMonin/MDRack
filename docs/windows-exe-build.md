@@ -21,6 +21,8 @@ From the repository root:
 ```
 
 The script runs PyInstaller through `uv` and uses the checked-in `mdrack.spec` file.
+The package spec includes every checked-in `*.sql` migration, including the
+asset registry schema.
 
 If you prefer the raw command:
 
@@ -49,3 +51,7 @@ dist\mdrack\mdrack.exe --root . doctor
 - The selected `--root` must be writable because MDRack creates `.mdrack\` there.
 - `scan --provider fake` is the fastest smoke test because it does not require LM Studio.
 - If you want to test real embeddings, switch the command to `--provider lmstudio` and make sure LM Studio is running first.
+- On non-Windows hosts only the PowerShell/spec contract and Python wheel can be
+  validated; that is not evidence that `mdrack.exe` executed successfully.
+- Run `scripts/verify.ps1` before packaging. It intentionally excludes the LIVE
+  LM Studio evaluation entrypoint.

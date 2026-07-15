@@ -73,7 +73,7 @@ Initialise a local knowledge store.
     "status": "initialized",
     "store_path": "C:/vault/.mdrack",
     "db_path": "C:/vault/.mdrack/knowledge.db",
-    "schema_version": "0002"
+    "schema_version": "0005"
   },
   "meta": { "command": "init" }
 }
@@ -84,6 +84,8 @@ Initialise a local knowledge store.
 - Creates the knowledge store directory and applies migrations to
   `<store>/knowledge.db`.
 - `init` is idempotent and safe to run before `scan`.
+- Migration history is linear and fail-closed. A database containing an unknown
+  future version is not modified by an older MDRack build.
 
 ---
 

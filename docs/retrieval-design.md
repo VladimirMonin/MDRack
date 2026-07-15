@@ -10,6 +10,11 @@ MDRack supports three retrieval modes:
 
 All modes return enriched results with provenance: `chunk_id`, `score`, `file_relative_path`, `section_title`, `heading_path`.
 
+Image references participate in retrieval only through explicit alt text and
+adjacent document text. Raw Markdown/Obsidian/HTML references and resolved asset
+paths are provenance fields, not searchable content. No vision, OCR, visual
+embedding, URL fetch, or model call is part of the offline asset pipeline.
+
 ## Text Search (FTS5)
 
 ### Mechanism
@@ -84,6 +89,17 @@ Implementations:
 - `LMStudioProvider` — calls LM Studio HTTP API
 - `FakeProvider` — deterministic hash vectors for tests
 
+Embedding, reranking, model catalog discovery, and model lifecycle are four
+separate ports. An `EmbeddingProfile` is not just a display name: its stable
+fingerprint covers provider, runtime, model key and family, quantization,
+output dimensions, query instruction, normalization mode, and endpoint family.
+SQLite binds an active profile name to one fingerprint and stores that
+fingerprint with every vector. A mismatched fingerprint or dimension is rejected.
+
+Reduced MRL dimensions use an explicit capability result. An unprobed runtime
+remains `runtime_capability_unknown`; offline configuration is not evidence of
+live runtime support.
+
 ### Error Handling
 
 - Provider failure (network, LM Studio down) → `result.error` set, `results=[]`
@@ -155,6 +171,23 @@ Defaults:
 6. Sort by final score descending
 7. Enrich with provenance (may need extra joins for union members)
 
+Duplicate IDs contribute only their first rank in each branch. Ties are resolved
+by first appearance and then stable candidate ID. Results preserve `text_rank`,
+`semantic_rank`, `rrf_rank`, and `rrf_score`.
+
+### Optional reranking and fail-open
+
+`HybridRetrievalService` may receive a separate `RerankerProvider`. Successful
+reranking adds `rerank_rank` and `rerank_score`. If the runtime does not support
+reranking, the RRF order is returned unchanged:
+
+```json
+{"requested": true, "applied": false, "degraded": true, "reason": "unsupported_by_runtime"}
+```
+
+Provider failures use the same fail-open path with a safe reason category. The
+contract never emulates reranking through chat completion.
+
 ### Use Cases
 
 - General search with mixed keywords + natural language
@@ -207,7 +240,7 @@ result = await semantic_search(conn, query="config", provider=provider, profile=
 # result.query, result.results (list[SearchResultItem]), result.total_count, result.error
 ```
 
-### Hybrid Search (Future)
+### Hybrid Search
 
 ```python
 from mdrack.search import hybrid_search
@@ -217,6 +250,18 @@ result = await hybrid_search(conn, query="config", provider=provider, profile="d
 
 Configuration:
 ```toml
+[parsing]
+backend = "markdown_it"  # use "legacy" only for A/B baseline runs
+
+[chunking]
+target_chunk_chars = 3200
+hard_limit_chars = 8000
+max_chunk_tokens = 2000
+overlap_chars = 300
+code_window_lines = 80
+table_rows_per_chunk = 40
+mermaid_window_lines = 80
+
 [search]
 default_mode = "hybrid"  # or "text", "semantic"
 text_weight = 0.4
@@ -224,6 +269,21 @@ semantic_weight = 0.6
 rrf_k = 60
 rrf_fusion_weight = 0.0  # set >0 to enable RRF blending
 ```
+
+The default indexing path parses Markdown into lossless `SourceBlock` records and
+then derives separate `RetrievalChunk` records. Prose may split at sentence or
+word boundaries. Code, tables, and Mermaid retain one source block while their
+retrieval representations split only on complete lines or rows. Every chunk
+stores a parent block ID, source span, heading path, display content, and a
+separate embedding text.
+
+`target_chunk_chars` controls normal prose boundaries; `hard_limit_chars` and
+`max_chunk_tokens` are absolute limits on every emitted retrieval chunk. A
+single table row or Mermaid line that cannot fit is represented by a compact,
+hash-addressed omission marker with its original parent block and exact source
+span. Mermaid source lines are never fragmented. Adjacent standalone Markdown
+image references and Obsidian embeds become individual `IMAGE_REFERENCE`
+source blocks, even when CommonMark groups their lines into one paragraph.
 
 ## Diagnostics
 

@@ -47,7 +47,8 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 
 ### `config/`
 - Settings loading from TOML + environment variables
-- Pydantic models: `MDRackConfig`, `PathsConfig`, `ScanConfig`, `ChunkingConfig`, `EmbeddingConfig`, `SearchConfig`, `ProfilingConfig`
+- Pydantic models include `ParsingConfig` and token-/structure-aware `ChunkingConfig`
+- `[parsing].backend` selects `markdown_it` (default) or `legacy` for A/B runs
 - Default values and type validation
 - Config file location: `.mdrack/config.toml`
 
@@ -57,26 +58,33 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 - Centralized error handling via JSON envelope
 - Commands delegate to service layer
 
-### `markdown/`
-- **`parser.py`**: Line-by-line state machine → `ParsedDocument` with `MarkdownBlock`s (headings, paragraphs, code, tables, lists, blockquotes, thematic breaks)
-- **`ir.py`**: Data models - `BlockType`, `ContentType`, `MarkdownBlock`, `SectionNode`, `FinalChunk`, `ParsedDocument`
-- **`section_builder.py`**: Converts H2–H4 headings into hierarchical `SectionNode` tree (H1 treated as title); synthetic section if no headings
-- **`chunk_builder.py`**: Splits sections into `FinalChunk`s with configurable sizes (default: min 600, target 1200, hard limit 2200, overlap 180). Preserves code/mermaid/tables as atomic chunks. Forms doubly-linked list via `previous_chunk_id/next_chunk_id`.
-- **`embedding_text.py`**: Constructs embedding input text from chunks (combines content + context)
-- **`frontmatter.py`**: Parses YAML frontmatter
+### Markdown parsing and chunking
+- **`ports/parser.py`**: replaceable `MarkdownParser` boundary
+- **`adapters/markdown_it/`**: CommonMark/GFM parser with H1–H6, source maps, tables, both fence styles, callouts, images, Obsidian embeds, and YAML frontmatter
+- **`domain/blocks.py` / `domain/documents.py`**: stable parser-independent, lossless `Document` / `SourceBlock` IR with deterministic block IDs and source spans
+- **`application/chunking.py`**: creates distinct `RetrievalChunk`s; only prose uses sentence/word splitting, while code, tables, and Mermaid use structure-specific line/row policies
+- `display_content` remains separate from heading-aware `embedding_text`; every retrieval chunk carries parent block IDs and source spans
+- **`domain/assets.py` / `application/assets.py`**: root-relative asset identities and lossless references for Markdown images, Obsidian embeds, and HTML `img`; raw references stay separate from stable asset IDs and exact source spans
+- Asset resolution is offline and fail-closed: traversal/absolute/external targets are never opened, while searchable image chunks contain only alt and adjacent text
+- **`markdown/`** remains the selectable legacy parser/chunker baseline for A/B evaluation
 
 ### `storage/sqlite/`
 - **`connection.py`**: Factory `get_connection()` — enables WAL, foreign keys, `row_factory = sqlite3.Row`
 - **`migrations.py`**: Custom migration runner — applies `NNNN_name.sql` files in order, tracks in `schema_migrations`
+- Migration histories must be unique and contiguous from `0000`; unknown future database versions fail closed
 - **`repositories.py`**: CRUD queries for `files`, `sections`, `chunks`; also `get_neighbors()`, `count_*()` helpers
 - **`fts.py`**: FTS5 operations — `upsert_fts()`, `delete_fts()`, `search_fts()` (with snippet), `rebuild_fts()`
 - **`vector.py`**: `VectorIndex` class — stores embeddings as JSON blobs in `chunk_embeddings`, computes cosine similarity in pure Python, supports `upsert()`, `search()`, `delete()`, `count()`
 
 ### `embeddings/`
-- **`protocol.py`**: `EmbeddingProvider` protocol (async `embed()`, `embed_query()`, `health()`), `EmbeddingError`, `EmbeddingHealth`
+- **`ports/embeddings.py`**: canonical typed `EmbeddingProvider`; `embeddings/protocol.py` remains a compatibility export
+- **`ports/reranker.py`**, **`ports/model_catalog.py`**, and **`ports/model_lifecycle.py`**: independent reranking, discovery, and lifecycle roles
+- **`domain/profiles.py`**: complete embedding identity and stable fingerprint over provider, runtime, model key/family, quantization, output dimensions, query instruction, normalization, and endpoint family
+- Reduced output dimensions remain an explicit capability result; offline configuration never claims live MRL support
 - **`lmstudio.py`**: LM Studio provider and control client — `/v1/embeddings` for vectors, `/api/v1/models*` for model list/load/unload/download, async, configurable endpoint/timeout/dimensions
 - **`runtime.py`**: shared provider/control-client construction and safe async cleanup helpers
 - **`fake.py`**: Deterministic fake provider for testing (hash-based vectors)
+- **`adapters/lmstudio/fakes.py`**: transport-free deterministic catalog, lifecycle, and reranker adapters for offline tests
 - **`hashing.py`**: Text hashing utilities for embedding cache keys
 
 ### `indexing/`
@@ -89,7 +97,8 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 - **`text.py`**: Full-text search via FTS5 — `text_search(conn, query, limit, offset)` returns `TextSearchResult` with `TextSearchItem` (chunk_id, rank, snippet, file_relative_path, section_title, heading_path). Enriches FTS results with provenance via joins.
 - **`semantic.py`**: Semantic search — `semantic_search(conn, query, provider, profile, limit)` embeds query → `VectorIndex.search()` → joins to get file/section context → returns `SemanticSearchResult` with `SearchResultItem` (content_preview, scores). Handles embedding failures gracefully.
 - **`hybrid.py`**: Hybrid search using Reciprocal Rank Fusion (RRF) with
-  explicit degraded-mode reporting when semantic embedding fails
+  deterministic duplicate handling and preserved rank history
+- **`application/retrieval.py`**: provider-neutral RRF plus optional fail-open reranking; chat completion is never a reranker substitute
 
 ### `diagnostics/`
 - **`integrity.py`**: `get_store_status(conn)` — returns files_count, chunks_count, embeddings_count, active_profile, schema_version, and active profile metadata
@@ -110,27 +119,19 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
 │  2. PARSE                                                 │
-│  parse_markdown(file_path, content) → ParsedDocument      │
-│    • Blocks (MarkdownBlock)                               │
-│    • Metadata (title, frontmatter)                        │
-│    • source_hash (SHA-256)                                │
+│  MarkdownParser.parse(...) → Document IR                  │
+│    • Lossless SourceBlock + SourceSpan                    │
+│    • H1–H6 heading paths and stable block IDs             │
+│    • Metadata and source_hash (SHA-256)                   │
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
-│  3. SECTIONS                                              │
-│  build_sections(blocks, file_id) → list[SectionNode]     │
-│    • H2–H4 headings → hierarchy with parent_id           │
-│    • heading_path computed via parent chain              │
-│    • Synthetic section if no headings                    │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────┐
-│  4. CHUNKS                                                │
-│  build_chunks(blocks, sections, file_id) → list[FinalChunk]│
-│    • Text chunks: 600–2200 chars, target 1200, overlap 180│
-│    • Atomic chunks: CODE/MERMAID/TABLE (never split)     │
-│    • Doubly-linked list (prev/next IDs)                  │
-│    • heading_path inherited from section                │
+│  3. STRUCTURAL CHUNKS                                    │
+│  StructuralChunker.build(Document) → RetrievalChunk      │
+│    • Character and estimated-token limits                │
+│    • Prose-only semantic boundaries and local overlap    │
+│    • Code line, table row, and Mermaid line policies     │
+│    • Parent block IDs, source spans, heading paths       │
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
@@ -146,6 +147,7 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 │    • upsert_file()                                       │
 │    • upsert_section()                                   │
 │    • upsert_chunk()                                     │
+│    • persist assets + exact source references           │
 │    • upsert_fts() for FTS5                              │
 │    • VectorIndex.upsert() for embeddings                │
 └───────────────────────────┬─────────────────────────────────┘
@@ -154,7 +156,7 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
 │  7. SEARCH                                               │
 │  • text_search()  → FTS5 + snippet + provenance          │
 │  • semantic_search() → vector cosine + provenance        │
-│  • hybrid_search() → RRF fusion (future)                │
+│  • hybrid_search() → deterministic RRF + optional rerank│
 └─────────────────────────────────────────────────────────────┘
 ```
 
