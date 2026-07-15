@@ -1,5 +1,11 @@
 ## MDRack Model Management Plan 3
 
+> **Status: Superseded.** Historical model-management plan. Current embedding
+> profile and runtime scope is defined by
+> [`mdrack-v0.2-retrieval-modernization-plan.md`](mdrack-v0.2-retrieval-modernization-plan.md);
+> production reranking is deferred by
+> [`ADR-0001`](decisions/0001-reranking-deferred.md).
+
 Date: 2026-06-17
 
 ### Objective

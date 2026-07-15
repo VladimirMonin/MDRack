@@ -175,18 +175,19 @@ Duplicate IDs contribute only their first rank in each branch. Ties are resolved
 by first appearance and then stable candidate ID. Results preserve `text_rank`,
 `semantic_rank`, `rrf_rank`, and `rrf_score`.
 
-### Optional reranking and fail-open
+### Reranking contract (test-only in v0.2)
 
-`HybridRetrievalService` may receive a separate `RerankerProvider`. Successful
-reranking adds `rerank_rank` and `rerank_score`. If the runtime does not support
-reranking, the RRF order is returned unchanged:
+`HybridRetrievalService` retains an injectable `RerankerProvider` seam and
+nullable `rerank_rank` / `rerank_score` fields. `DeterministicReranker` exercises
+that contract in offline tests, including malformed-response and fail-open
+behavior. It is not a production adapter.
 
-```json
-{"requested": true, "applied": false, "degraded": true, "reason": "unsupported_by_runtime"}
-```
-
-Provider failures use the same fail-open path with a safe reason category. The
-contract never emulates reranking through chat completion.
+The production v0.2 retrieval contract passes no reranker. The current CLI
+returns the RRF order; the planned unified embedded hybrid path must return the
+same order. Both reranker fields remain `null`. LM Studio has no documented
+reranking endpoint, no model is invoked, and chat completion is never used as a
+substitute. This is a complete supported result rather than a degraded result.
+See [ADR-0001](decisions/0001-reranking-deferred.md).
 
 ### Use Cases
 

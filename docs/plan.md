@@ -1,5 +1,10 @@
 # Technical Specification: MDRack — Local Markdown Knowledge Rack for AI Agents
 
+> **Status: Superseded for v0.2.** Retained as the historical MVP specification.
+> Current release scope is defined by
+> [`mdrack-v0.2-retrieval-modernization-plan.md`](mdrack-v0.2-retrieval-modernization-plan.md)
+> and the decisions under [`docs/decisions/`](decisions/).
+
 ## Understanding 🧭
 
 MDRack is a local command-line tool for AI coding agents. It indexes Markdown documents, splits them into meaningful structural chunks, stores document metadata and search indexes in SQLite, creates embeddings through LM Studio only, and allows agents to search, inspect, and retrieve document context through stable JSON commands.

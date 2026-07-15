@@ -1,5 +1,12 @@
 # MDRack v0.2 — Retrieval Modernization Plan
 
+> **Status:** Active stabilization roadmap. Production reranking is deferred;
+> [ADR-0001](decisions/0001-reranking-deferred.md) is authoritative for that
+> integration boundary.
+>
+> **Release target:** stable indexing, provenance, assets, embedded Python API,
+> and hybrid FTS + semantic retrieval fused with deterministic RRF.
+
 ## 1. Цель 🧭
 
 Этот документ фиксирует поэтапный план модернизации MDRack как локального Markdown retrieval-движка для Obsidian-хранилищ и как переиспользуемого Python-модуля для встраивания в другие приложения.
@@ -7,9 +14,10 @@
 Главная цель версии 0.2:
 
 ```text
-повысить качество разбора Markdown, чанкинга, поиска и переранжирования,
+повысить качество разбора Markdown, чанкинга и гибридного поиска RRF,
 не потеряв локальность, переносимость SQLite-хранилища,
-стабильные JSON-контракты и возможность использовать ядро без CLI
+стабильные JSON-контракты и возможность использовать ядро без CLI;
+production reranking вынесен за границу v0.2
 ```
 
 ## 2. Зафиксированные решения ✅
@@ -723,9 +731,13 @@ markdown-it parser + new structural chunker
 4B embedding full dimensions
 8B embedding full dimensions
 8B embedding reduced MRL dimensions
-hybrid without reranker
-hybrid with Qwen3-Reranker-0.6B
+hybrid RRF without reranker
+production reranking: DEFERRED / BLOCKED BY RUNTIME CONTRACT
 ```
+
+Reranking is not part of the v0.2 benchmark acceptance matrix. The retained
+protocol and deterministic adapter validate only the future integration seam;
+they are not production evidence.
 
 Основные метрики:
 
@@ -837,16 +849,30 @@ uv run python scripts/live_lmstudio_eval.py
 
 **Выход:** управляемый компромисс качества и размера БД.
 
-### Phase 6 — Reranker
+### Phase 6 — Production reranker — DEFERRED / BLOCKED BY RUNTIME
 
-1. Capability spike Qwen3-Reranker-0.6B.
-2. Reranker port и LM Studio adapter при наличии endpoint.
-3. Fake deterministic reranker для тестов.
-4. Candidate pool и fail-open.
-5. nDCG/MRR сравнение.
-6. Privacy-safe telemetry.
+**Architectural contract completed:**
 
-**Выход:** доказанное улучшение порядка результатов либо обоснованный отказ от текущего runtime.
+1. `RerankerProvider`, `RerankDocument` and `RerankScore` define the future seam.
+2. `DeterministicReranker` supports offline contract tests only.
+3. Reordering, malformed-response and fail-open behavior have offline coverage.
+4. Result DTOs retain nullable `rerank_rank` and `rerank_score` fields.
+
+**Production integration absent from v0.2:**
+
+- no LM Studio reranking endpoint is documented;
+- no production reranker adapter exists;
+- CLI and embedded API do not invoke a reranker;
+- no `--rerank` flag or endpoint/model configuration is added;
+- no second `llama-server` runtime is started;
+- chat completion is never used as a reranking substitute.
+
+**Supported v0.2 path:** FTS + semantic retrieval -> deterministic RRF -> final
+results. Missing reranking is a normal operating mode, not an error or partial
+result. See [ADR-0001](decisions/0001-reranking-deferred.md).
+
+**Re-entry:** a separate deferred integration task must prove a documented
+transport, semantically meaningful scores and measurable nDCG/MRR improvement.
 
 ### Phase 7 — Images foundation
 
@@ -883,7 +909,7 @@ uv run python scripts/live_lmstudio_eval.py
 10. model discovery работает через запущенный GUI LM Studio;
 11. embedding profile fingerprint предотвращает смешивание несовместимых векторов;
 12. MRL-профили измерены, а не выбраны наугад;
-13. reranker либо успешно улучшает nDCG/MRR, либо корректно отключается как unsupported;
+13. production reranking is explicitly deferred; normal results use RRF with null reranker fields and no model invocation;
 14. большой Obsidian-корпус проходит chunk audit без orphan и duplicate blocks;
 15. все unit/integration/regression тесты проходят локально;
 16. Windows EXE проходит smoke test;

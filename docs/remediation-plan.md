@@ -1,5 +1,9 @@
 ## MDRack Remediation Plan
 
+> **Status: Superseded.** Historical remediation record; do not use as the
+> current v0.2 execution plan. See
+> [`mdrack-v0.2-retrieval-modernization-plan.md`](mdrack-v0.2-retrieval-modernization-plan.md).
+
 Date: 2026-06-17
 
 ### Objective

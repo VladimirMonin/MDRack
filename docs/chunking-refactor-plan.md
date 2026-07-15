@@ -1,5 +1,9 @@
 # Chunking Refactor Plan
 
+> **Status: Superseded.** Retained as the historical buffered-chunking plan.
+> Current structural chunking requirements are in
+> [`mdrack-v0.2-retrieval-modernization-plan.md`](mdrack-v0.2-retrieval-modernization-plan.md).
+
 ## Goal
 
 Fix Markdown chunking without changing the public MDRack architecture.
