@@ -1,0 +1,147 @@
+{
+  "artifact_revision": {
+    "algorithm": "sha256-framed-v1",
+    "digest": "sha256:dc37f479b604aa80d44c153c53eb38e16e212149bfc35ae7592fe992389f2473",
+    "entry_count": 61,
+    "head_sha": "07e708e59b5874bece122ced511be6752679f40e",
+    "payload_bytes": 537928,
+    "recipe": "git status --porcelain=v1 -z; exclude this packet plus .local-reports/ and dist/; keep existing files; sort paths; hash each as uint64be(path_bytes) + path + uint64be(content_bytes) + content",
+    "reproduced_twice": true,
+    "scope": "all modified and untracked product files, excluding this release packet and ignored local/build artifacts"
+  },
+  "build_artifacts": [
+    {
+      "bytes": 137540,
+      "kind": "wheel",
+      "name": "mdrack-0.2.0-py3-none-any.whl",
+      "reproduced_twice": true,
+      "sha256": "bcb9bc6b9ff56f4c962166e28604b36a00ee99fe621514e5af3ac7304092d826"
+    },
+    {
+      "bytes": 318017,
+      "kind": "sdist",
+      "name": "mdrack-0.2.0.tar.gz",
+      "release_packet_entries": 0,
+      "reproduced_twice": true,
+      "sha256": "37fdbf74be7d2e467fc77e8402ca16d0012883d1fce5df69a780de19841c18d6"
+    }
+  ],
+  "checks": [
+    {
+      "command": "UV_OFFLINE=1 bash scripts/verify.sh",
+      "downloads": 0,
+      "includes": [
+        "pytest",
+        "ruff",
+        "forbidden_dependencies",
+        "git_diff_check"
+      ],
+      "status": "passed",
+      "tests_passed": 622
+    },
+    {
+      "command": "uv run python scripts/check_no_forbidden_deps.py",
+      "status": "passed"
+    },
+    {
+      "command": "UV_OFFLINE=1 uv build --out-dir <clean-dir> (twice)",
+      "outputs_byte_identical": true,
+      "sdist_count_per_build": 1,
+      "status": "passed",
+      "wheel_count_per_build": 1
+    },
+    {
+      "command": "sdist and wheel archive metadata/content inspection (twice)",
+      "metadata_version": "0.2.0",
+      "release_packet_entries_in_sdist": 0,
+      "status": "passed"
+    },
+    {
+      "command": "uv run pytest tests/e2e/test_cli_embedded_retrieval_parity.py tests/unit/test_baseline_harness.py tests/integration/test_sqlite_migrations.py -q",
+      "status": "passed",
+      "tests_passed": 23
+    },
+    {
+      "command": "fixed-corpus baseline report schema and privacy assertions",
+      "comparable": true,
+      "current_tests_passed": 3,
+      "historical_tests_passed": 3,
+      "report_sha256": "afa8d1184f264f67c78a0b25138010ba19a76dcaeb1cbffeed3d061e14274e35",
+      "status": "passed"
+    },
+    {
+      "api_version": "0.2.0",
+      "cli_version": "mdrack, version 0.2.0",
+      "command": "installed-wheel metadata/API/CLI/migration smoke in isolated temporary venv",
+      "dependency_source": "project_lock_environment",
+      "installed_metadata_version": "0.2.0",
+      "migration_count": 7,
+      "status": "passed",
+      "wheel_import": true
+    },
+    {
+      "byte_exact_equal": true,
+      "command": "baseline corpus byte manifest before/after release gates",
+      "files": 3,
+      "manifest_sha256": "f290b352895ad4aac4fe4f96b9ae53dc7a7ba105674e384dd1c0155b7a13121e",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "external_checks": {
+    "live_lmstudio_runtime": "not_executed_no_authorization",
+    "real_vault_audit": "not_executed_source_unavailable_and_out_of_scope",
+    "windows_powershell_or_exe_smoke": "not_executed_platform_unavailable"
+  },
+  "non_claims": [
+    "No Windows execution or executable smoke was performed.",
+    "No real-vault audit or real-vault source non-mutation proof was performed.",
+    "No LM Studio model load, inference, download, cloud call, commit, stage, push, or Git history operation was performed.",
+    "Offline fake-backed checks do not prove live runtime MRL support."
+  ],
+  "privacy": {
+    "files_scanned": 3,
+    "findings": 0,
+    "log_files_found": 0,
+    "scope": [
+      "v0.2 baseline JSON",
+      "published evidence Markdown",
+      "this release packet"
+    ],
+    "status": "passed"
+  },
+  "report_type": "v0.2_offline_release_gate",
+  "residual_risks": [
+    {
+      "category": "windows",
+      "detail": "Windows PowerShell/EXE smoke remains unverified.",
+      "severity": "external_unverified"
+    },
+    {
+      "category": "vault",
+      "detail": "Real-vault audit remains unverified; synthetic corpus evidence is not a substitute.",
+      "severity": "external_unverified"
+    },
+    {
+      "category": "live_runtime_mrl",
+      "detail": "Offline fake-backed checks do not prove live reduced-dimension runtime behavior.",
+      "severity": "external_unverified"
+    }
+  ],
+  "schema_version": 1,
+  "task_ref": "phase6-release-gate-generation-2-repair-1",
+  "verdict": {
+    "offline_commands": "passed",
+    "reason": "Canonical package metadata, API and CLI all report 0.2.0, and byte-identical wheel/sdist outputs were reproduced twice without including this release packet.",
+    "release_ready_as_v0.2": true,
+    "stage_blockers_local": 0
+  },
+  "workspace_accounting": {
+    "modified": 50,
+    "other": 0,
+    "untracked": 11
+  }
+}

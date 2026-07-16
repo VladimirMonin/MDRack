@@ -94,11 +94,18 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
   parse, section build, chunk build, embed, persist, and record diagnostics
 
 ### `search/`
-- **`text.py`**: Full-text search via FTS5 — `text_search(conn, query, limit, offset)` returns `TextSearchResult` with `TextSearchItem` (chunk_id, rank, snippet, file_relative_path, section_title, heading_path). Enriches FTS results with provenance via joins.
-- **`semantic.py`**: Semantic search — `semantic_search(conn, query, provider, profile, limit)` embeds query → `VectorIndex.search()` → joins to get file/section context → returns `SemanticSearchResult` with `SearchResultItem` (content_preview, scores). Handles embedding failures gracefully.
-- **`hybrid.py`**: Hybrid search using Reciprocal Rank Fusion (RRF) with
-  deterministic duplicate handling and preserved rank history
-- **`application/retrieval.py`**: provider-neutral RRF plus optional fail-open reranking; chat completion is never a reranker substitute
+- **`text.py`**: legacy FTS5 compatibility wrapper with provenance enrichment.
+- **`semantic.py`** and **`hybrid.py`**: thin compatibility wrappers over the
+  canonical application service.
+- **`adapters/sqlite/index_storage.py`**: DB-backed normalized text and semantic
+  candidates with public logical IDs and complete source locators.
+- Public locators include root-relative path, heading path, line/offset spans,
+  block/chunk kinds, and logical block/chunk IDs; SQLite UUIDs remain internal.
+  Exact-content moves preserve document and fragment identities, while
+  replacement/deletion removes stale FTS, vector, and asset rows.
+- **`application/retrieval.py`**: the only text/semantic/hybrid orchestration
+  path and the only RRF implementation used at runtime. Production v0.2 has no
+  reranker call; `rerank_rank` and `rerank_score` remain null.
 
 ### `diagnostics/`
 - **`integrity.py`**: `get_store_status(conn)` — returns files_count, chunks_count, embeddings_count, active_profile, schema_version, and active profile metadata
@@ -154,9 +161,9 @@ MDRack is a local command-line Markdown knowledge rack for AI agents. It indexes
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
 │  7. SEARCH                                               │
-│  • text_search()  → FTS5 + snippet + provenance          │
-│  • semantic_search() → vector cosine + provenance        │
-│  • hybrid_search() → deterministic RRF + optional rerank│
+│  • SQLite adapter → normalized FTS/vector candidates     │
+│  • RetrievalService → text, semantic, or RRF hybrid      │
+│  • CLI and MDRackEngine → identical public result DTOs   │
 └─────────────────────────────────────────────────────────────┘
 ```
 

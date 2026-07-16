@@ -148,45 +148,26 @@ docD: 1/(60+5) + 1/(60+3) = 0.03257
 RRF rank: docB > docD > docA ≈ docC
 ```
 
-### Weighted Blend (Optional)
-
-Final score may apply configurable weights:
-
-```
-final_score(d) = w_text * text_norm(d) + w_sem * sem_norm(d) + w_rrf * rrf_score(d)
-```
-
-Defaults:
-- `text_weight = 0.4`
-- `semantic_weight = 0.6`
-- `rrf_fusion_weight = 0.0` (enable later)
-
 ### Workflow
 
-1. Obtain `text_hits = text_search(query, limit=K)` (BM25 rank 1..K)
-2. Obtain `sem_hits = semantic_search(query, provider, limit=K)` → normalized to rank 1..K
-3. Build union of all chunk_ids
-4. Compute RRF score for each chunk_id
-5. Apply weighted sum if RRF weight enabled
-6. Sort by final score descending
-7. Enrich with provenance (may need extra joins for union members)
+1. The SQLite adapter returns normalized FTS candidates with logical IDs.
+2. The embedding provider creates the query vector; the SQLite adapter returns
+   normalized semantic candidates with the same DTO.
+3. `RetrievalService` builds the union of logical IDs and computes RRF.
+4. Results sort by RRF score, then first appearance, then logical ID.
+5. CLI and `MDRackEngine` serialize the same `RetrievalResult`.
 
 Duplicate IDs contribute only their first rank in each branch. Ties are resolved
 by first appearance and then stable candidate ID. Results preserve `text_rank`,
 `semantic_rank`, `rrf_rank`, and `rrf_score`.
 
-### Reranking contract (test-only in v0.2)
+### Reranking contract in v0.2
 
-`HybridRetrievalService` retains an injectable `RerankerProvider` seam and
-nullable `rerank_rank` / `rerank_score` fields. `DeterministicReranker` exercises
-that contract in offline tests, including malformed-response and fail-open
-behavior. It is not a production adapter.
-
-The production v0.2 retrieval contract passes no reranker. The current CLI
-returns the RRF order; the planned unified embedded hybrid path must return the
-same order. Both reranker fields remain `null`. LM Studio has no documented
-reranking endpoint, no model is invoked, and chat completion is never used as a
-substitute. This is a complete supported result rather than a degraded result.
+The production retrieval service accepts only `reranker=None`. CLI and embedded
+results return the same RRF order, and both reranker fields remain `null`.
+LM Studio has no documented reranking endpoint, no reranker model is invoked,
+and chat completion is never used as a substitute. This is a complete supported
+result rather than a degraded result.
 See [ADR-0001](decisions/0001-reranking-deferred.md).
 
 ### Use Cases
@@ -200,11 +181,14 @@ See [ADR-0001](decisions/0001-reranking-deferred.md).
 
 | Field | Mode(s) | Description |
 |-------|---------|-------------|
-| `chunk_id` | all | Stable ID for `read chunk` command |
+| `logical_id` | all | Stable public chunk identity |
+| `chunk_id` | all | Compatibility alias equal to `logical_id`; never a database UUID |
 | `score` | all | Text: BM25 rank (lower better); Semantic: cosine (higher better); Hybrid: fused score (higher better) |
-| `snippet` | text only | Highlighted snippet with `<b>` tags |
-| `content_preview` | sem/hybrid | First 200 chars of `chunks.content` |
-| `file_relative_path` | all | Document path in project |
+| `text_rank` / `semantic_rank` | all | One-based source-list ranks when present |
+| `rrf_rank` / `rrf_score` | hybrid | Deterministic application-level fusion rank and score |
+| `rerank_rank` / `rerank_score` | all | Always `null` in production v0.2 |
+| `content_preview` / `snippet` | all | Mode-appropriate display preview; `snippet` is a compatibility alias |
+| `source_locator` | all | Root-relative path, heading path, line range, block ID and logical chunk ID |
 | `section_title` | all | Immediate section heading |
 | `heading_path` | all | JSON array of full section ancestry (e.g., `["API", "Authentication", "JWT"]`)
 
@@ -220,34 +204,19 @@ This separates fast ranked retrieval from on-demand expansion.
 
 ## Search API Reference
 
-### Text Search
+### Embedded API
 
 ```python
-from mdrack.search.text import text_search
+from mdrack.public_api import MDRackEngine
 
-result = text_search(conn, query="config", limit=20, offset=0)
-# result.query, result.results (list[TextSearchItem]), result.total_count
+engine = MDRackEngine(root=root, config=config, embedding_provider=provider)
+text = engine.search_text("config", limit=20, offset=0)
+semantic = await engine.search_semantic("config", limit=20)
+hybrid = await engine.search_hybrid("config", limit=20, reranker=None)
 ```
 
-Raises `FTSQueryError` for invalid queries.
-
-### Semantic Search
-
-```python
-from mdrack.search.semantic import semantic_search
-
-# async
-result = await semantic_search(conn, query="config", provider=provider, profile="default", limit=20)
-# result.query, result.results (list[SearchResultItem]), result.total_count, result.error
-```
-
-### Hybrid Search
-
-```python
-from mdrack.search import hybrid_search
-
-result = await hybrid_search(conn, query="config", provider=provider, profile="default", limit=20)
-```
+Each method returns `RetrievalResult`; `to_dict()` is the exact CLI `data`
+payload for the same query, database, mode, provider, profile and limit.
 
 Configuration:
 ```toml
@@ -265,10 +234,7 @@ mermaid_window_lines = 80
 
 [search]
 default_mode = "hybrid"  # or "text", "semantic"
-text_weight = 0.4
-semantic_weight = 0.6
 rrf_k = 60
-rrf_fusion_weight = 0.0  # set >0 to enable RRF blending
 ```
 
 The default indexing path parses Markdown into lossless `SourceBlock` records and
