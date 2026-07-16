@@ -2,16 +2,14 @@
 
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.profiles import EmbeddingCapabilities, EmbeddingProfile
-from mdrack.domain.retrieval import HybridRetrievalResult, RetrievalCandidate
-from mdrack.search.text import TextSearchItem, TextSearchResult
+from mdrack.domain.retrieval import RetrievalCandidate, RetrievalItem, RetrievalResult
 
 __all__ = [
     "EmbeddingCapabilities",
     "EmbeddingProfile",
-    "HybridRetrievalResult",
     "IndexingResult",
     "RetrievalCandidate",
+    "RetrievalItem",
+    "RetrievalResult",
     "SourceLocator",
-    "TextSearchItem",
-    "TextSearchResult",
 ]

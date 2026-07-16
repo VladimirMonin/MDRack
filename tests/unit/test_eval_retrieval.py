@@ -125,7 +125,7 @@ def test_semantic_provider_failure_is_exposed_in_report(tmp_path: Path) -> None:
     result = report.results[0]
     assert result.retrieved_ids == []
     assert result.conditions_met is False
-    assert result.error == "provider offline"
+    assert result.error == "embedding_provider_error"
     assert report.summary["queries_failed"] == 1
     assert report.summary["queries_successful"] == 0
 

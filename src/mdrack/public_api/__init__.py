@@ -5,23 +5,21 @@ from mdrack.public_api.engine import MDRackEngine
 from mdrack.public_api.models import (
     EmbeddingCapabilities,
     EmbeddingProfile,
-    HybridRetrievalResult,
     IndexingResult,
     RetrievalCandidate,
+    RetrievalItem,
+    RetrievalResult,
     SourceLocator,
-    TextSearchItem,
-    TextSearchResult,
 )
 
 __all__ = [
     "EmbeddingCapabilities",
     "EmbeddingProfile",
-    "HybridRetrievalResult",
     "HybridRetrievalService",
     "IndexingResult",
     "MDRackEngine",
     "RetrievalCandidate",
+    "RetrievalItem",
+    "RetrievalResult",
     "SourceLocator",
-    "TextSearchItem",
-    "TextSearchResult",
 ]

@@ -1,35 +1,32 @@
-"""Semantic search over indexed Markdown content using embeddings."""
+"""Legacy semantic search wrapper over the canonical retrieval service."""
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
-from typing import List, Optional
 
-from mdrack.embeddings.protocol import EmbeddingError, EmbeddingProvider
-from mdrack.storage.sqlite.vector import VectorIndex
-
-logger = logging.getLogger(__name__)
+from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
+from mdrack.application.retrieval import RetrievalService
+from mdrack.domain.indexing import SourceLocator
+from mdrack.embeddings.protocol import EmbeddingProvider
 
 
 @dataclass
 class SemanticSearchResultItem:
-    """A single semantic search result with provenance."""
     chunk_id: str
     score: float
     content_preview: str
     file_relative_path: str
-    section_title: Optional[str] = None
-    heading_path: Optional[str] = None
+    section_title: str | None = None
+    heading_path: str | None = None
+    source_locator: SourceLocator | None = None
 
 
 @dataclass
 class SemanticSearchResult:
-    """Result of a semantic search operation."""
     query: str
-    results: List[SemanticSearchResultItem]
+    results: list[SemanticSearchResultItem]
     total_count: int
-    error: Optional[str] = None
+    error: str | None = None
 
 
 async def semantic_search(
@@ -39,90 +36,29 @@ async def semantic_search(
     profile: str = "default",
     limit: int = 20,
 ) -> SemanticSearchResult:
-    """Perform semantic search using embedding similarity.
-
-    Args:
-        conn: SQLite connection.
-        query: Search query text.
-        provider: Embedding provider to use for query embedding.
-        profile: Embedding profile name to search against.
-        limit: Maximum number of results to return.
-
-    Returns:
-        SemanticSearchResult with matching chunks and metadata.
-    """
-    query = query.strip()
-    if not query:
-        return SemanticSearchResult(query=query, results=[], total_count=0)
-
-    try:
-        # Embed the query
-        query_vector = await provider.embed_query(query, profile=profile)
-    except EmbeddingError as e:
-        logger.error("semantic.search.failed stage=embed reason=provider_error")
-        return SemanticSearchResult(
-            query=query, results=[], total_count=0, error=str(e)
+    """Compatibility wrapper; new callers should use ``RetrievalService``."""
+    if not query.strip():
+        return SemanticSearchResult(query=query.strip(), results=[], total_count=0)
+    result = await RetrievalService(
+        SQLiteIndexStorage(conn),
+        embedding_provider=provider,
+        profile=profile,
+    ).search_semantic(query, limit=limit)
+    items = [
+        SemanticSearchResultItem(
+            chunk_id=item.logical_id,
+            score=item.score,
+            content_preview=item.content_preview,
+            file_relative_path=item.source_locator.relative_path,
+            section_title=item.metadata.get("section_title"),
+            heading_path=item.metadata.get("heading_path"),
+            source_locator=item.source_locator,
         )
-    except Exception as e:
-        logger.exception("Unexpected error during query embedding")
-        return SemanticSearchResult(
-            query=query, results=[], total_count=0, error=f"Embedding failed: {e}"
-        )
-
-    # Search vector index
-    vi = VectorIndex(conn)
-    try:
-        scored_chunks = vi.search(query_vector, profile_name=profile, limit=limit)
-    except Exception as e:
-        logger.exception("Vector search failed")
-        return SemanticSearchResult(
-            query=query, results=[], total_count=0, error=f"Search failed: {e}"
-        )
-
-    if not scored_chunks:
-        return SemanticSearchResult(query=query, results=[], total_count=0)
-
-    # Enrich results with file and section metadata
-    results: List[SemanticSearchResultItem] = []
-    for item in scored_chunks:
-        chunk_id = item["chunk_id"]
-        score = item["score"]
-
-        # Fetch chunk with file and section info
-        chunk = conn.execute(
-            """
-            SELECT
-                c.content,
-                f.relative_path,
-                s.title as section_title,
-                s.heading_path as heading_path
-            FROM chunks c
-            JOIN files f ON c.file_id = f.id
-            LEFT JOIN sections s ON c.section_id = s.id
-            WHERE c.id = ?
-            """,
-            (chunk_id,),
-        ).fetchone()
-
-        if chunk is None:
-            logger.warning("Chunk %s not found or deleted", chunk_id)
-            continue
-
-        # Create preview (first 200 chars)
-        content = chunk["content"] or ""
-        preview = content[:200] + ("..." if len(content) > 200 else "")
-
-        results.append(
-            SemanticSearchResultItem(
-                chunk_id=chunk_id,
-                score=score,
-                content_preview=preview,
-                file_relative_path=chunk["relative_path"],
-                section_title=chunk["section_title"],
-                heading_path=chunk["heading_path"],
-            )
-        )
-
+        for item in result.results
+    ]
     return SemanticSearchResult(
-        query=query, results=results, total_count=len(results)
+        query=result.query,
+        results=items,
+        total_count=result.total_count,
+        error=result.degraded_reason,
     )

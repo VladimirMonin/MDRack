@@ -274,6 +274,5 @@ async def test_hybrid_search_surfaces_semantic_degradation(
 
     assert isinstance(result, HybridSearchResult)
     assert result.degraded is True
-    assert result.error is not None
-    assert "LM Studio" in result.error
+    assert result.error == "embedding_provider_error"
     assert len(result.results) > 0

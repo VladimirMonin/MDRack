@@ -192,7 +192,7 @@ async def test_embedding_error_returns_structured_error() -> None:
 
     assert result.total_count == 0
     assert result.error is not None
-    assert "LM Studio" in result.error
+    assert result.error == "embedding_provider_error"
 
 
 @pytest.mark.asyncio()

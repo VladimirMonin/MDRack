@@ -10,8 +10,11 @@ from unittest.mock import AsyncMock
 from click.testing import CliRunner
 
 from mdrack.cli import main
+from mdrack.config.models import MDRackConfig
+from mdrack.domain.indexing import SourceLocator
+from mdrack.domain.retrieval import RetrievalItem, RetrievalResult
 from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.search.hybrid import HybridSearchResult, HybridSearchResultItem
+from mdrack.embeddings.runtime import embedding_profile_from_config
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations
 
@@ -31,6 +34,11 @@ def _embed_text(text: str, dims: int) -> list[float]:
 
 
 def _seed_semantic_data(conn: sqlite3.Connection) -> None:
+    profile = embedding_profile_from_config(
+        MDRackConfig(),
+        FakeEmbeddingProvider(dimensions=1024),
+        "default",
+    )
     conn.execute(
         "INSERT INTO files (id, relative_path, source_hash, indexed_at) "
         "VALUES (?, ?, ?, ?)",
@@ -70,32 +78,36 @@ def _seed_semantic_data(conn: sqlite3.Connection) -> None:
         ),
     )
     conn.execute(
-        "INSERT INTO embedding_profiles (name, model, dimensions, endpoint) "
-        "VALUES (?, ?, ?, ?)",
-        ("default", "fake-hash-v1", 1024, ""),
+        "INSERT INTO embedding_profiles (name, model, dimensions, endpoint, fingerprint) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("default", "fake-hash-v1", 1024, "", profile.fingerprint),
     )
     # Seed embeddings with vectors derived from the same query text
     # so the fake provider finds matching results.
     vector_python = _embed_text("Python programming language", 1024)
     conn.execute(
-        "INSERT INTO chunk_embeddings (chunk_id, profile_name, embedding, embedded_at) "
-        "VALUES (?, ?, ?, ?)",
+        "INSERT INTO chunk_embeddings "
+        "(chunk_id, profile_name, embedding, embedded_at, profile_fingerprint) "
+        "VALUES (?, ?, ?, ?, ?)",
         (
             "chunk-001",
             "default",
             json.dumps(vector_python).encode("utf-8"),
             "2024-01-01T00:00:00Z",
+            profile.fingerprint,
         ),
     )
     vector_js = _embed_text("JavaScript web scripting", 1024)
     conn.execute(
-        "INSERT INTO chunk_embeddings (chunk_id, profile_name, embedding, embedded_at) "
-        "VALUES (?, ?, ?, ?)",
+        "INSERT INTO chunk_embeddings "
+        "(chunk_id, profile_name, embedding, embedded_at, profile_fingerprint) "
+        "VALUES (?, ?, ?, ?, ?)",
         (
             "chunk-002",
             "default",
             json.dumps(vector_js).encode("utf-8"),
             "2024-01-01T00:00:00Z",
+            profile.fingerprint,
         ),
     )
     conn.commit()
@@ -227,28 +239,28 @@ def test_hybrid_search_reports_degraded_mode(
     monkeypatch,
 ) -> None:
     _setup_db(tmp_path)
+    locator = SourceLocator("root", "docs/python.md", 1, 2, (), "block", "chunk-001")
     monkeypatch.setattr(
-        "mdrack.cli.commands.search.hybrid_search",
+        "mdrack.cli.commands.search.RetrievalService.search_hybrid",
         AsyncMock(
-            return_value=HybridSearchResult(
+            return_value=RetrievalResult(
                 query="Python",
-                results=[
-                    HybridSearchResultItem(
-                        chunk_id="chunk-001",
-                        combined_score=0.9,
+                mode="hybrid",
+                results=(
+                    RetrievalItem(
+                        logical_id="chunk-001",
+                        score=0.9,
+                        source_locator=locator,
                         text_rank=1,
                         semantic_rank=None,
                         text_score=0.9,
                         semantic_score=None,
                         content_preview="Python is a high-level programming language.",
-                        file_relative_path="docs/python.md",
-                        section_title="Python Intro",
-                        heading_path=None,
-                    )
-                ],
+                    ),
+                ),
                 total_count=1,
-                error="Failed to reach LM Studio embeddings endpoint",
                 degraded=True,
+                degraded_reason="embedding_provider_error",
             )
         ),
     )
@@ -268,4 +280,4 @@ def test_hybrid_search_reports_degraded_mode(
     payload = json.loads(result.output)
     assert payload["ok"] is True
     assert payload["data"]["degraded"] is True
-    assert "LM Studio" in payload["data"]["degraded_reason"]
+    assert payload["data"]["degraded_reason"] == "embedding_provider_error"

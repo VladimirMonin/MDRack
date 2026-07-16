@@ -73,7 +73,7 @@ Initialise a local knowledge store.
     "status": "initialized",
     "store_path": "C:/vault/.mdrack",
     "db_path": "C:/vault/.mdrack/knowledge.db",
-    "schema_version": "0005"
+    "schema_version": "0006"
   },
   "meta": { "command": "init" }
 }
@@ -183,28 +183,48 @@ Search indexed chunks by text, semantic similarity, or a hybrid blend.
     "mode": "text",
     "results": [
       {
-        "chunk_id": "a1b2c3d4-...",
-        "score": 1.0,
+        "logical_id": "chunk_logical_01",
+        "chunk_id": "chunk_logical_01",
+        "score": -1.375,
+        "text_score": -1.375,
+        "semantic_score": null,
+        "text_rank": 1,
+        "semantic_rank": null,
+        "rrf_rank": null,
+        "rrf_score": null,
+        "rerank_rank": null,
+        "rerank_score": null,
+        "content_preview": "...Python <b>async</b> functions...",
         "snippet": "...Python <b>async</b> functions...",
         "file": "docs/guide.md",
         "section_title": "Async IO",
-        "heading_path": "Guide > Async IO"
+        "heading_path": ["Guide", "Async IO"],
+        "source_locator": {
+          "root_id": "default",
+          "relative_path": "docs/guide.md",
+          "start_line": 20,
+          "end_line": 31,
+          "start_offset": 340,
+          "end_offset": 612,
+          "heading_path": ["Guide", "Async IO"],
+          "block_kind": "paragraph",
+          "chunk_kind": "text",
+          "block_logical_id": "block_logical_01",
+          "chunk_logical_id": "chunk_logical_01"
+        }
       }
     ],
-    "total_count": 12
+    "total_count": 1,
+    "degraded": false,
+    "degraded_reason": null
   },
   "meta": { "command": "search" }
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `chunk_id` | string | UUID of the matching chunk. |
-| `score` | float | FTS5 bm25-like rank (lower is better). |
-| `snippet` | string | Highlighted snippet from FTS5 (`<b>` tags for matches). |
-| `file` | string | Relative path of the source file. |
-| `section_title` | string or null | Title of the parent section (if any). |
-| `heading_path` | string or null | Full heading ancestry (e.g. `"H1 > H2"`). |
+For text results, `score` and `text_score` are the same FTS5 bm25-like
+candidate score (lower is better), and `text_rank` is its 1-based position.
+Semantic, RRF, and rerank fields are `null`.
 
 ### 3b. Semantic search (`--mode semantic`)
 
@@ -218,25 +238,48 @@ Search indexed chunks by text, semantic similarity, or a hybrid blend.
     "mode": "semantic",
     "results": [
       {
-        "chunk_id": "a1b2c3d4-...",
+        "logical_id": "chunk_logical_01",
+        "chunk_id": "chunk_logical_01",
         "score": 0.87,
+        "text_score": null,
+        "semantic_score": 0.87,
+        "text_rank": null,
+        "semantic_rank": 1,
+        "rrf_rank": null,
+        "rrf_score": null,
+        "rerank_rank": null,
+        "rerank_score": null,
         "content_preview": "Python provides async/await...",
+        "snippet": "Python provides async/await...",
         "file": "docs/guide.md",
         "section_title": "Async IO",
-        "heading_path": "Guide > Async IO"
+        "heading_path": ["Guide", "Async IO"],
+        "source_locator": {
+          "root_id": "default",
+          "relative_path": "docs/guide.md",
+          "start_line": 20,
+          "end_line": 31,
+          "start_offset": 340,
+          "end_offset": 612,
+          "heading_path": ["Guide", "Async IO"],
+          "block_kind": "paragraph",
+          "chunk_kind": "text",
+          "block_logical_id": "block_logical_01",
+          "chunk_logical_id": "chunk_logical_01"
+        }
       }
     ],
-    "total_count": 20
+    "total_count": 1,
+    "degraded": false,
+    "degraded_reason": null
   },
   "meta": { "command": "search" }
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `chunk_id` | string | UUID of the matching chunk. |
-| `score` | float | Cosine similarity (0–1, higher is more similar). |
-| `content_preview` | string | First 200 characters of chunk content. |
+For semantic results, `score` and `semantic_score` are the same cosine
+similarity (higher is more similar), and `semantic_rank` is its 1-based
+position. Text, RRF, and rerank fields are `null`.
 
 ### 3c. Hybrid search (`--mode hybrid`)
 
@@ -250,32 +293,73 @@ Search indexed chunks by text, semantic similarity, or a hybrid blend.
     "mode": "hybrid",
     "results": [
       {
-        "chunk_id": "a1b2c3d4-...",
-        "combined_score": 0.032,
-        "text_score": 1.0,
+        "logical_id": "chunk_logical_01",
+        "chunk_id": "chunk_logical_01",
+        "score": 0.032266458495966696,
+        "text_score": -1.375,
         "semantic_score": 0.87,
         "text_rank": 1,
         "semantic_rank": 3,
+        "rrf_rank": 1,
+        "rrf_score": 0.032266458495966696,
+        "rerank_rank": null,
+        "rerank_score": null,
         "content_preview": "...Python async functions...",
+        "snippet": "...Python async functions...",
         "file": "docs/guide.md",
         "section_title": "Async IO",
-        "heading_path": "Guide > Async IO"
+        "heading_path": ["Guide", "Async IO"],
+        "source_locator": {
+          "root_id": "default",
+          "relative_path": "docs/guide.md",
+          "start_line": 20,
+          "end_line": 31,
+          "start_offset": 340,
+          "end_offset": 612,
+          "heading_path": ["Guide", "Async IO"],
+          "block_kind": "paragraph",
+          "chunk_kind": "text",
+          "block_logical_id": "block_logical_01",
+          "chunk_logical_id": "chunk_logical_01"
+        }
       }
     ],
-    "total_count": 15
+    "total_count": 1,
+    "degraded": false,
+    "degraded_reason": null
   },
   "meta": { "command": "search" }
 }
 ```
 
+For hybrid results, `score` and `rrf_score` are the same RRF score (higher is
+better), and `rrf_rank` is the 1-based fused position. `text_score`,
+`semantic_score`, `text_rank`, and `semantic_rank` preserve the component
+candidate scores and positions; each may be `null` when the item is absent from
+that branch. Production v0.2 performs no reranking, so `rerank_rank` and
+`rerank_score` are always `null`.
+
+### 3d. Result field contract (all modes)
+
 | Field | Type | Description |
 |---|---|---|
-| `combined_score` | float | RRF combined score (higher is better). |
-| `text_score` | float | Original FTS5 rank (may be `null` if chunk only appears in semantic results). |
-| `semantic_score` | float | Original cosine similarity (may be `null`). |
-| `text_rank` | integer or null | 1-based rank in the text results list. |
-| `semantic_rank` | integer or null | 1-based rank in the semantic results list. |
-| `content_preview` | string | First 200 chars of chunk content (from semantic) or FTS5 snippet (from text). |
+| `logical_id` | string | Stable public chunk identity. It is not the SQLite record UUID. |
+| `chunk_id` | string | Compatibility alias equal to `logical_id`. |
+| `score` | float | Canonical mode score: text candidate score, semantic similarity, or hybrid RRF score. |
+| `text_score` | float or null | Text candidate score when present. |
+| `semantic_score` | float or null | Semantic candidate score when present. |
+| `text_rank` | integer or null | 1-based position in text candidates. |
+| `semantic_rank` | integer or null | 1-based position in semantic candidates. |
+| `rrf_rank` | integer or null | 1-based fused rank; populated only for hybrid results. |
+| `rrf_score` | float or null | Reciprocal Rank Fusion score; populated only for hybrid results and equal to `score`. |
+| `rerank_rank` | null | Reserved for a future reranker; always `null` in production v0.2. |
+| `rerank_score` | null | Reserved for a future reranker; always `null` in production v0.2. |
+| `content_preview` | string | Candidate preview; highlighted FTS5 snippet for text-origin candidates, otherwise up to 200 content characters. |
+| `snippet` | string | Compatibility alias equal to `content_preview`. |
+| `file` | string | Compatibility projection of `source_locator.relative_path`. |
+| `section_title` | string or null | Parent section title when available. |
+| `heading_path` | array of strings | Full heading ancestry; equal to `source_locator.heading_path`. |
+| `source_locator` | object | Complete portable locator: root-relative path, heading path, line/offset span, block/chunk kinds, and public block/chunk logical IDs. |
 
 ### Common errors
 
@@ -283,22 +367,20 @@ Search indexed chunks by text, semantic similarity, or a hybrid blend.
 {
   "ok": false,
   "error": {
-    "message": "Database not found at /path/to/.mdrack/knowledge.db. Run 'mdrack scan' first.",
+    "message": "Database not found. Run 'mdrack scan' first.",
     "code": "STORAGE_ERROR"
   },
   "meta": { "command": "search" }
 }
 ```
 
-Additional error codes: `FTS_ERROR`, `SEARCH_ERROR`, `INTERNAL_ERROR`.
+Additional error codes: `FTS_ERROR`, `EMBEDDING_ERROR`, `INTERNAL_ERROR`.
 
 ### Notes
 
 - The database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
-- Hybrid uses Reciprocal Rank Fusion (RRF) with `k=60` and applies weighting
-  from config: default `text_weight=0.4`, `semantic_weight=0.6`.
-- Hybrid runs text and semantic searches in parallel, fetching `limit*2`
-  candidates from each to improve fusion quality.
+- Hybrid uses unweighted Reciprocal Rank Fusion (RRF) with `k=60`.
+- Hybrid fetches `limit*2` candidates from each branch before fusion.
 - Semantic search loads all vectors into memory and performs linear-scan
   cosine similarity.
 
@@ -310,11 +392,11 @@ Additional error codes: `FTS_ERROR`, `SEARCH_ERROR`, `INTERNAL_ERROR`.
 mdrack read chunk <chunk_id> [--context none|neighbors]
 ```
 
-Retrieve a chunk by its UUID.
+Retrieve a chunk by its stable public logical ID. SQLite record UUIDs are internal.
 
 | Argument/Flag | Type | Description |
 |---|---|---|
-| `CHUNK_ID` | string (required) | UUID of the chunk. |
+| `CHUNK_ID` | string (required) | Public chunk logical ID. |
 | `--context` | `none` / `neighbors` | When `neighbors`, includes 1 previous and 1 next chunk via the doubly-linked list. Default: `none`. |
 
 ### Success (without context)
@@ -324,17 +406,26 @@ Retrieve a chunk by its UUID.
   "ok": true,
   "data": {
     "chunk": {
-      "id": "a1b2c3d4-...",
-      "file_id": "f1e2d3c4-...",
-      "section_id": "s1e2c3t4-...",
+      "id": "chunk_logical_01",
+      "logical_id": "chunk_logical_01",
       "content": "# Introduction\n\n...",
       "content_type": "text",
       "chunk_index": 0,
-      "heading_path": "[\"Introduction\"]",
-      "previous_chunk_id": null,
-      "next_chunk_id": "b2c3d4e5-...",
-      "embedding_text": "...",
-      "embedding_text_hash": "abc123..."
+      "heading_path": ["Introduction"],
+      "embedding_text_hash": "abc123...",
+      "source_locator": {
+        "root_id": "default",
+        "relative_path": "docs/guide.md",
+        "start_line": 1,
+        "end_line": 12,
+        "start_offset": 0,
+        "end_offset": 240,
+        "heading_path": ["Introduction"],
+        "block_kind": "paragraph",
+        "chunk_kind": "text",
+        "block_logical_id": "block_logical_01",
+        "chunk_logical_id": "chunk_logical_01"
+      }
     }
   },
   "meta": { "command": "read chunk" }
@@ -343,19 +434,9 @@ Retrieve a chunk by its UUID.
 
 ### Success (with `--context neighbors`)
 
-```json
-{
-  "ok": true,
-  "data": {
-    "chunk": { /* same as above */ },
-    "neighbors": [
-      { /* previous chunk dict */ },
-      { /* next chunk dict */ }
-    ]
-  },
-  "meta": { "command": "read chunk" }
-}
-```
+The success envelope has the same `chunk` object and additionally contains a
+`neighbors` array. Every neighbor uses the exact same public chunk schema shown
+above. Internal file, section, chunk, and linked-list record UUIDs are omitted.
 
 If no previous or next chunk exists, only the available neighbors are
 returned (the neighbours list may have 0, 1, or 2 entries).
@@ -366,7 +447,7 @@ returned (the neighbours list may have 0, 1, or 2 entries).
 {
   "ok": false,
   "error": {
-    "message": "Chunk 'invalid-id' not found",
+    "message": "Chunk not found",
     "code": "NOT_FOUND"
   },
   "meta": { "command": "read chunk" }
@@ -378,8 +459,10 @@ Additional error codes: `STORAGE_ERROR`.
 ### Notes
 
 - Database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
-- Chunks are linked via `previous_chunk_id` and `next_chunk_id` columns.
-- `heading_path` is stored as a JSON-encoded array of heading titles.
+- `id` is a compatibility alias equal to the stable public `logical_id`.
+- `heading_path` and `source_locator.heading_path` are arrays of strings.
+- `source_locator.start_offset` and `end_offset` may both be `null` for rows
+  migrated from schema 0005; all newly indexed chunks include integer offsets.
 
 ---
 
@@ -389,7 +472,7 @@ Additional error codes: `STORAGE_ERROR`.
 mdrack read section <section_id>
 ```
 
-Read a section and all its chunks by section UUID.
+Read a section and all its chunks by stable public section logical ID.
 
 ### Success
 
@@ -398,18 +481,37 @@ Read a section and all its chunks by section UUID.
   "ok": true,
   "data": {
     "section": {
-      "id": "s1e2c3t4-...",
-      "file_id": "f1e2d3c4-...",
+      "id": "section_logical_01",
+      "logical_id": "section_logical_01",
       "title": "Async IO",
       "heading_path": "[\"Guide\", \"Async IO\"]",
       "level": 2,
       "start_line": 45,
-      "end_line": 120,
-      "parent_id": "p1a2r3e4-..."
+      "end_line": 120
     },
     "chunks": [
-      { /* chunk dict */ },
-      { /* chunk dict */ }
+      {
+        "id": "chunk_logical_01",
+        "logical_id": "chunk_logical_01",
+        "content": "Python async content",
+        "content_type": "text",
+        "chunk_index": 0,
+        "heading_path": ["Guide", "Async IO"],
+        "embedding_text_hash": "abc123...",
+        "source_locator": {
+          "root_id": "default",
+          "relative_path": "docs/guide.md",
+          "start_line": 45,
+          "end_line": 60,
+          "start_offset": 900,
+          "end_offset": 1250,
+          "heading_path": ["Guide", "Async IO"],
+          "block_kind": "paragraph",
+          "chunk_kind": "text",
+          "block_logical_id": "block_logical_01",
+          "chunk_logical_id": "chunk_logical_01"
+        }
+      }
     ]
   },
   "meta": { "command": "read section" }
@@ -422,7 +524,7 @@ Read a section and all its chunks by section UUID.
 {
   "ok": false,
   "error": {
-    "message": "Section 'invalid-id' not found",
+    "message": "Section not found",
     "code": "NOT_FOUND"
   },
   "meta": { "command": "read section" }
@@ -433,8 +535,10 @@ Read a section and all its chunks by section UUID.
 
 - Database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Chunks are ordered by `chunk_index` ascending.
-- Sections form a tree via `parent_id`. `heading_path` denormalizes the
-  ancestry for fast retrieval.
+- The public section `id` is a compatibility alias equal to `logical_id`.
+- Internal `file_id` and `parent_id` record UUIDs are omitted.
+- Section `heading_path` is the stored JSON string or `null`; chunk heading
+  paths are decoded arrays.
 
 ---
 
@@ -444,7 +548,7 @@ Read a section and all its chunks by section UUID.
 mdrack read file <file_id>
 ```
 
-Read file metadata and list all sections by file UUID.
+Read file metadata and list all sections by stable public file logical ID.
 
 ### Success
 
@@ -453,23 +557,28 @@ Read file metadata and list all sections by file UUID.
   "ok": true,
   "data": {
     "file": {
-      "id": "f1e2d3c4-...",
+      "id": "file_logical_01",
+      "logical_id": "file_logical_01",
+      "root_id": "default",
       "relative_path": "docs/guide.md",
       "title": "User Guide",
       "source_hash": "abc123...",
       "indexed_at": "2026-06-17T12:00:00+00:00",
-      "status": "active"
+      "status": "active",
+      "parser_name": "markdown-it-py",
+      "parser_version": "1",
+      "chunk_strategy_name": "structural",
+      "chunk_strategy_version": "1"
     },
     "sections": [
       {
-        "id": "s1e2c3t4-...",
-        "file_id": "f1e2d3c4-...",
+        "id": "section_logical_01",
+        "logical_id": "section_logical_01",
         "title": "Introduction",
         "heading_path": "[\"Introduction\"]",
         "level": 2,
         "start_line": 1,
-        "end_line": 44,
-        "parent_id": null
+        "end_line": 44
       }
     ]
   },
@@ -483,7 +592,7 @@ Read file metadata and list all sections by file UUID.
 {
   "ok": false,
   "error": {
-    "message": "File 'invalid-id' not found",
+    "message": "File not found",
     "code": "NOT_FOUND"
   },
   "meta": { "command": "read file" }
@@ -494,6 +603,8 @@ Read file metadata and list all sections by file UUID.
 
 - Database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - Sections are ordered by `start_line` ascending.
+- Public file and section `id` values are compatibility aliases equal to their
+  `logical_id`; internal SQLite record UUIDs and `index_run_id` are omitted.
 
 ---
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from mdrack.domain.indexing import PreparedFile, SourceLocator
+from mdrack.domain.retrieval import RetrievalCandidate
 
 
 class ChangePlan(Protocol):
@@ -65,6 +66,27 @@ class SearchIndex(Protocol):
     def search_text(self, query: str, *, limit: int, offset: int = 0) -> Any: ...
 
 
+class RetrievalStorage(Protocol):
+    """Normalized candidate access used by the application retrieval service."""
+
+    def retrieve_text_candidates(
+        self,
+        query: str,
+        *,
+        limit: int,
+        offset: int = 0,
+    ) -> list[RetrievalCandidate]: ...
+
+    def retrieve_semantic_candidates(
+        self,
+        query_vector: list[float],
+        *,
+        profile: str,
+        profile_fingerprint: str | None,
+        limit: int,
+    ) -> list[RetrievalCandidate]: ...
+
+
 class ReadStorage(Protocol):
     def get_file_by_path(self, relative_path: str) -> dict[str, Any] | None: ...
 
@@ -75,7 +97,7 @@ class ReadStorage(Protocol):
     def list_asset_references(self, relative_path: str) -> list[dict[str, Any]]: ...
 
 
-class KnowledgeStorage(IndexStorage, SearchIndex, ReadStorage, Protocol):
+class KnowledgeStorage(IndexStorage, SearchIndex, RetrievalStorage, ReadStorage, Protocol):
     """Complete replaceable storage surface used by the embedded facade."""
 
 

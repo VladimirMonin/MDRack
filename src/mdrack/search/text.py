@@ -82,6 +82,10 @@ def text_search(
                 c.block_logical_id,
                 c.start_line,
                 c.end_line,
+                c.start_offset,
+                c.end_offset,
+                c.block_kind,
+                c.chunk_kind,
                 f.root_id,
                 f.relative_path,
                 s.title AS section_title
@@ -105,7 +109,7 @@ def text_search(
             block_id = prov.get("block_logical_id") or logical_chunk_id
             items.append(
                 TextSearchItem(
-                    chunk_id=cid,
+                    chunk_id=logical_chunk_id,
                     score=rank_map.get(cid, 0.0),
                     snippet=snippet_map.get(cid, ""),
                     file_relative_path=prov.get("relative_path", ""),
@@ -119,6 +123,10 @@ def text_search(
                         heading_path=headings,
                         block_id=block_id,
                         chunk_id=logical_chunk_id,
+                        start_offset=prov.get("start_offset"),
+                        end_offset=prov.get("end_offset"),
+                        block_kind=prov.get("block_kind") or "unknown",
+                        chunk_kind=prov.get("chunk_kind") or "unknown",
                     ),
                 )
             )

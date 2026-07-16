@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 from mdrack.config.models import MDRackConfig, PathsConfig
 from mdrack.domain.indexing import SourceLocator
+from mdrack.domain.retrieval import RetrievalCandidate
 from mdrack.embeddings.fake import FakeEmbeddingProvider
 from mdrack.public_api import MDRackEngine
-from mdrack.search.text import TextSearchItem, TextSearchResult
 
 
 def test_embedded_engine_scans_and_searches_without_click(tmp_path: Path) -> None:
@@ -72,10 +72,28 @@ class _FakeStorage:
     def finish_run(self, run_id: str, *, status: str, stats, error_codes) -> None:
         assert status == "success"
 
-    def search_text(self, query: str, *, limit: int, offset: int = 0) -> TextSearchResult:
+    def retrieve_text_candidates(self, query: str, *, limit: int, offset: int = 0) -> list[RetrievalCandidate]:
         locator = SourceLocator("default", "injected.md", 1, 1, (), "block_fake", "chunk_fake")
-        item = TextSearchItem("chunk-record", 1.0, "safe", "injected.md", None, None, locator)
-        return TextSearchResult(query=query, results=[item], total_count=1)
+        return [RetrievalCandidate("chunk_fake", 1.0, "safe", locator)]
+
+    def retrieve_semantic_candidates(
+        self,
+        query_vector,
+        *,
+        profile: str,
+        profile_fingerprint: str | None,
+        limit: int,
+    ):
+        return []
+
+    def search_text(self, query: str, *, limit: int, offset: int = 0):
+        raise AssertionError("legacy search path must not be used")
+
+    def list_assets_for_file(self, relative_path: str):
+        return []
+
+    def list_asset_references(self, relative_path: str):
+        return []
 
     def get_chunk_source_locator(self, chunk_id: str) -> SourceLocator:
         return SourceLocator("default", "injected.md", 1, 1, (), "block_fake", "chunk_fake")

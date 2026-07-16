@@ -4,18 +4,41 @@ from __future__ import annotations
 
 from typing import Any
 
+from mdrack.application.retrieval import RetrievalService
 from mdrack.domain.indexing import SourceLocator
-from mdrack.ports.storage import ReadStorage, SearchIndex
+from mdrack.domain.retrieval import RetrievalResult
+from mdrack.embeddings.protocol import EmbeddingProvider
+from mdrack.ports.storage import ReadStorage, RetrievalStorage
 
 
 class SearchService:
-    """Execute retrieval through an injected search port."""
+    """Compatibility facade over the canonical retrieval service."""
 
-    def __init__(self, search_index: SearchIndex) -> None:
-        self.search_index = search_index
+    def __init__(
+        self,
+        storage: RetrievalStorage,
+        *,
+        embedding_provider: EmbeddingProvider | None = None,
+        profile: str = "default",
+        profile_fingerprint: str | None = None,
+        rrf_k: int = 60,
+    ) -> None:
+        self.retrieval = RetrievalService(
+            storage,
+            embedding_provider=embedding_provider,
+            profile=profile,
+            profile_fingerprint=profile_fingerprint,
+            rrf_k=rrf_k,
+        )
 
-    def search_text(self, query: str, *, limit: int = 20, offset: int = 0) -> Any:
-        return self.search_index.search_text(query, limit=limit, offset=offset)
+    def search_text(self, query: str, *, limit: int = 20, offset: int = 0) -> RetrievalResult:
+        return self.retrieval.search_text(query, limit=limit, offset=offset)
+
+    async def search_semantic(self, query: str, *, limit: int = 20) -> RetrievalResult:
+        return await self.retrieval.search_semantic(query, limit=limit)
+
+    async def search_hybrid(self, query: str, *, limit: int = 20, reranker: None = None) -> RetrievalResult:
+        return await self.retrieval.search_hybrid(query, limit=limit, reranker=reranker)
 
 
 class ReadService:

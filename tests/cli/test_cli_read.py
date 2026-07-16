@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import sqlite3
 from pathlib import Path
 
@@ -268,6 +270,97 @@ def test_read_non_existent_file_returns_error(seeded_db: sqlite3.Connection, tmp
     assert payload["ok"] is False
     assert "error" in payload
     assert payload["error"]["code"] == "NOT_FOUND"
+
+
+@pytest.mark.parametrize(
+    ("entity", "expected_message"),
+    [
+        ("chunk", "Chunk not found"),
+        ("section", "Section not found"),
+        ("file", "File not found"),
+    ],
+)
+def test_read_not_found_does_not_reflect_private_identifier(
+    seeded_db: sqlite3.Connection,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    entity: str,
+    expected_message: str,
+) -> None:
+    sentinel = "PRIVATE_READ_ID_SENTINEL_/home/v/secret-note.md"
+    caplog.set_level(logging.DEBUG)
+    result = CliRunner().invoke(main, ["--root", str(tmp_path), "read", entity, sentinel])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["error"] == {"message": expected_message, "code": "NOT_FOUND"}
+    observed = "\n".join((result.stdout, result.stderr, caplog.text))
+    assert sentinel not in observed
+
+
+def _documented_read_example(command: str, example: str) -> dict[str, object]:
+    contracts_path = Path(__file__).resolve().parents[2] / "docs" / "cli-contracts.md"
+    contracts = contracts_path.read_text(encoding="utf-8")
+    command_section = contracts.split(f"`mdrack read {command}`", 1)[1].split("\n## ", 1)[0]
+    example_section = command_section.split(f"### {example}", 1)[1]
+    match = re.search(r"```json\n(.*?)\n```", example_section, flags=re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))
+
+
+def test_documented_read_examples_match_public_logical_id_contracts() -> None:
+    locator_keys = {
+        "root_id", "relative_path", "start_line", "end_line", "start_offset",
+        "end_offset", "heading_path", "block_kind", "chunk_kind",
+        "block_logical_id", "chunk_logical_id",
+    }
+    chunk_keys = {
+        "id", "logical_id", "content", "content_type", "chunk_index",
+        "heading_path", "embedding_text_hash", "source_locator",
+    }
+    section_keys = {
+        "id", "logical_id", "title", "heading_path", "level", "start_line", "end_line",
+    }
+    file_keys = {
+        "id", "logical_id", "root_id", "relative_path", "title", "source_hash",
+        "indexed_at", "status", "parser_name", "parser_version",
+        "chunk_strategy_name", "chunk_strategy_version",
+    }
+
+    chunk_payload = _documented_read_example("chunk", "Success (without context)")
+    section_payload = _documented_read_example("section", "Success")
+    file_payload = _documented_read_example("file", "Success")
+    chunk = chunk_payload["data"]["chunk"]  # type: ignore[index]
+    section = section_payload["data"]["section"]  # type: ignore[index]
+    file_record = file_payload["data"]["file"]  # type: ignore[index]
+    assert set(chunk) == chunk_keys
+    assert set(chunk["source_locator"]) == locator_keys
+    assert set(section) == section_keys
+    assert set(file_record) == file_keys
+    assert all(item["id"] == item["logical_id"] for item in (chunk, section, file_record))
+    assert isinstance(chunk["heading_path"], list)
+    assert isinstance(section["heading_path"], str | type(None))
+    assert isinstance(chunk["source_locator"]["heading_path"], list)
+    assert isinstance(chunk["source_locator"]["start_line"], int)
+    assert isinstance(chunk["source_locator"]["start_offset"], int | type(None))
+    forbidden_internal_keys = {
+        "file_id", "section_id", "parent_id", "previous_chunk_id", "next_chunk_id",
+    }
+    assert forbidden_internal_keys.isdisjoint(chunk)
+    assert forbidden_internal_keys.isdisjoint(section)
+    assert forbidden_internal_keys.isdisjoint(file_record)
+
+    for command, message in (
+        ("chunk", "Chunk not found"),
+        ("section", "Section not found"),
+        ("file", "File not found"),
+    ):
+        error_payload = _documented_read_example(command, "Error")
+        assert error_payload == {
+            "ok": False,
+            "error": {"message": message, "code": "NOT_FOUND"},
+            "meta": {"command": f"read {command}"},
+        }
 
 
 def test_read_commands_use_root_relative_store_from_ctx(
