@@ -26,6 +26,10 @@ class SourceLocator:
     heading_path: tuple[str, ...]
     block_id: str
     chunk_id: str
+    start_offset: int | None = None
+    end_offset: int | None = None
+    block_kind: str = "unknown"
+    chunk_kind: str = "unknown"
 
     def __post_init__(self) -> None:
         if not _ROOT_ID_PATTERN.fullmatch(self.root_id):
@@ -48,6 +52,16 @@ class SourceLocator:
             raise ValueError("source span must use positive ordered line numbers")
         if not self.block_id or not self.chunk_id:
             raise ValueError("block_id and chunk_id are required")
+        if (self.start_offset is None) != (self.end_offset is None):
+            raise ValueError("source offsets must either both be present or both be absent")
+        if self.start_offset is not None and (
+            self.start_offset < 0
+            or self.end_offset is None
+            or self.end_offset < self.start_offset
+        ):
+            raise ValueError("source offsets must be non-negative and ordered")
+        if not self.block_kind or not self.chunk_kind:
+            raise ValueError("block_kind and chunk_kind are required")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -55,9 +69,13 @@ class SourceLocator:
             "relative_path": self.relative_path,
             "start_line": self.start_line,
             "end_line": self.end_line,
+            "start_offset": self.start_offset,
+            "end_offset": self.end_offset,
             "heading_path": list(self.heading_path),
-            "block_id": self.block_id,
-            "chunk_id": self.chunk_id,
+            "block_kind": self.block_kind,
+            "chunk_kind": self.chunk_kind,
+            "block_logical_id": self.block_id,
+            "chunk_logical_id": self.chunk_id,
         }
 
 
@@ -89,6 +107,10 @@ class StoredChunk:
     start_line: int
     end_line: int
     block_logical_id: str
+    start_offset: int | None = None
+    end_offset: int | None = None
+    block_kind: str = "unknown"
+    chunk_kind: str = "unknown"
 
 
 @dataclass(frozen=True)

@@ -12,7 +12,11 @@ import click
 
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.embeddings.protocol import EmbeddingProvider
-from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
+from mdrack.embeddings.runtime import (
+    close_async_resource,
+    create_embedding_provider,
+    embedding_profile_from_config,
+)
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
@@ -30,7 +34,13 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     emit_json(payload, pretty=not json_flag)
 
 
-def _profile_from_provider(profile_name: str, provider: object) -> EmbeddingProfile:
+def _profile_from_provider(
+    profile_name: str,
+    provider: object,
+    config: Any | None = None,
+) -> EmbeddingProfile:
+    if config is not None:
+        return embedding_profile_from_config(config, provider, profile_name)
     dimensions = getattr(provider, "dimensions", 768)
     model_name = getattr(provider, "model_name", getattr(provider, "_model_name", "default"))
     provider_name = getattr(provider, "provider_name", getattr(provider, "_provider_name", "unknown"))
@@ -154,6 +164,8 @@ def rebuild_embeddings_in_db(
     db_path: Path,
     provider: EmbeddingProvider,
     profile_name: str = "default",
+    *,
+    config: Any | None = None,
 ) -> dict[str, Any]:
     """Rebuild every embedding vector for the selected profile in batches."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -176,7 +188,7 @@ def rebuild_embeddings_in_db(
 
         conn.execute("BEGIN")
         try:
-            profile = _profile_from_provider(profile_name, provider)
+            profile = _profile_from_provider(profile_name, provider, config)
             conn.execute(
                 "DELETE FROM chunk_embeddings WHERE profile_name = ?",
                 (profile_name,),
@@ -268,7 +280,7 @@ def rebuild_embeddings_cmd(
     provider_name: str = embedding_provider or config.embedding.provider
     provider = create_embedding_provider(provider_name, config)
     try:
-        data = rebuild_embeddings_in_db(db_path, provider, profile_name)
+        data = rebuild_embeddings_in_db(db_path, provider, profile_name, config=config)
         data["provider"] = provider_name
 
         _output(

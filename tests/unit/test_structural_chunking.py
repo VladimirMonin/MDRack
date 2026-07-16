@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
 from mdrack.domain.blocks import BlockType
@@ -118,10 +120,11 @@ def test_final_bounds_cover_oversized_table_rows_and_multibyte_prose() -> None:
     assert any("table row" in chunk.display_content for chunk in table_chunks)
 
 
-def test_oversized_mermaid_line_uses_one_bounded_provenance_marker() -> None:
+def test_oversized_mermaid_line_uses_lossless_bounded_source_pieces() -> None:
     source_line = "A" + "-->B" * 100
+    content = f"```mermaid\n{source_line}\n```"
     document, chunks = _chunk(
-        f"```mermaid\n{source_line}\n```",
+        content,
         target_chars=60,
         hard_chars=80,
         max_tokens=20,
@@ -129,14 +132,132 @@ def test_oversized_mermaid_line_uses_one_bounded_provenance_marker() -> None:
 
     block = next(block for block in document.blocks if block.block_type == BlockType.MERMAID)
     diagram_chunks = [chunk for chunk in chunks if chunk.content_type == RetrievalContentType.MERMAID]
-    assert len(diagram_chunks) == 1
-    assert diagram_chunks[0].parent_block_ids == (block.block_id,)
-    assert diagram_chunks[0].source_span.start_line == 2
-    assert diagram_chunks[0].source_span.end_line == 2
-    assert "mermaid line" in diagram_chunks[0].display_content
-    assert source_line not in diagram_chunks[0].display_content
-    assert len(diagram_chunks[0].display_content) <= 80
-    assert diagram_chunks[0].estimated_tokens <= 20
+    assert len(diagram_chunks) > 1
+    assert all(chunk.parent_block_ids == (block.block_id,) for chunk in diagram_chunks)
+    assert all(chunk.source_span.start_line == 2 for chunk in diagram_chunks)
+    assert all(chunk.source_span.end_line == 2 for chunk in diagram_chunks)
+    assert "".join(chunk.display_content for chunk in diagram_chunks) == source_line
+    assert all("omitted" not in chunk.display_content for chunk in diagram_chunks)
+    assert all(len(chunk.display_content) <= 80 for chunk in diagram_chunks)
+    assert all(chunk.estimated_tokens <= 20 for chunk in diagram_chunks)
+    for chunk in diagram_chunks:
+        start = chunk.source_span.start_offset
+        end = chunk.source_span.end_offset
+        assert start is not None and end is not None
+        assert content[start:end] == chunk.display_content
+
+
+@pytest.mark.parametrize(
+    ("language", "newline"),
+    [
+        ("text", "\n"),
+        ("text", "\r\n"),
+        ("python", "\n"),
+        ("python", "\r\n"),
+    ],
+)
+def test_oversized_code_lines_own_every_inner_separator_contiguously(
+    language: str,
+    newline: str,
+) -> None:
+    oversized = "x" * 180
+    if language == "python":
+        inner = newline.join(
+            (
+                "def payload():",
+                f'    value = "{oversized}"',
+                "    return value",
+            )
+        )
+    else:
+        inner = newline.join((oversized, "next line"))
+    source = f"```{language}{newline}{inner}{newline}```"
+
+    document, chunks = _chunk(source, target_chars=60, hard_chars=80, max_tokens=40)
+    block = next(block for block in document.blocks if block.block_type == BlockType.CODE)
+    owned = [chunk for chunk in chunks if chunk.parent_block_ids == (block.block_id,)]
+    intervals = [
+        (chunk.source_span.start_offset, chunk.source_span.end_offset) for chunk in owned
+    ]
+
+    assert len(owned) > 2
+    exact_intervals: list[tuple[int, int]] = []
+    for start, end in intervals:
+        assert start is not None and end is not None
+        exact_intervals.append((start, end))
+    expected_start = source.index(inner)
+    expected_end = expected_start + len(inner)
+    assert exact_intervals[0][0] == expected_start
+    assert exact_intervals[-1][1] == expected_end
+    assert all(
+        left_end == right_start
+        for (_, left_end), (right_start, _) in zip(
+            exact_intervals,
+            exact_intervals[1:],
+            strict=False,
+        )
+    )
+    assert "".join(source[start:end] for start, end in exact_intervals) == inner
+    assert all(len(chunk.display_content) <= 80 for chunk in owned)
+    assert all(chunk.estimated_tokens <= 40 for chunk in owned)
+
+
+@pytest.mark.parametrize(
+    ("block_type", "source_template"),
+    [
+        (
+            BlockType.PARAGRAPH,
+            "Альфа beta gamma delta.{nl}Эпсилон zeta eta theta.{nl}Йота kappa lambda mu.",
+        ),
+        (
+            BlockType.LIST,
+            "- Альфа beta gamma delta.{nl}- Эпсилон zeta eta theta.{nl}- Йота kappa lambda mu.",
+        ),
+        (
+            BlockType.BLOCKQUOTE,
+            "> Альфа beta gamma delta.{nl}> Эпсилон zeta eta theta.{nl}> Йота kappa lambda mu.",
+        ),
+        (
+            BlockType.CALLOUT,
+            "> [!NOTE] Альфа beta gamma.{nl}> Эпсилон zeta eta theta.{nl}> Йота kappa lambda mu.",
+        ),
+        (
+            BlockType.UNKNOWN,
+            "<section>{nl}Альфа beta gamma delta.{nl}Эпсилон zeta eta theta.{nl}</section>",
+        ),
+    ],
+)
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_split_prose_family_owns_exact_contiguous_block_interval(
+    block_type: BlockType,
+    source_template: str,
+    newline: str,
+) -> None:
+    source = source_template.format(nl=newline)
+    document, chunks = _chunk(source, target_chars=24, hard_chars=32, max_tokens=40)
+    block = next(block for block in document.blocks if block.block_type == block_type)
+    owned = [chunk for chunk in chunks if chunk.parent_block_ids == (block.block_id,)]
+
+    assert len(owned) > 1
+    intervals: list[tuple[int, int]] = []
+    for chunk in owned:
+        start = chunk.source_span.start_offset
+        end = chunk.source_span.end_offset
+        assert start is not None and end is not None
+        intervals.append((start, end))
+        assert len(chunk.display_content) <= 32
+        assert chunk.estimated_tokens <= 40
+
+    expected_start = block.source_span.start_offset
+    expected_end = block.source_span.end_offset
+    assert expected_start is not None and expected_end is not None
+    assert intervals[0][0] == expected_start
+    assert intervals[-1][1] == expected_end
+    assert all(
+        left_end == right_start
+        for (_, left_end), (right_start, _) in zip(intervals, intervals[1:], strict=False)
+    )
+    assert "".join(source[start:end] for start, end in intervals) == block.raw_markdown
 
 
 def test_target_chars_changes_normal_prose_boundaries_deterministically() -> None:

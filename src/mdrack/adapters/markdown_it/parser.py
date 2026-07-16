@@ -65,6 +65,16 @@ def _line_offsets(content: str) -> list[int]:
     return offsets
 
 
+def _normalized_offset_map(content: str) -> list[int]:
+    """Map markdown-it normalized character offsets back to source offsets."""
+    offsets = [0]
+    source_offset = 0
+    while source_offset < len(content):
+        source_offset += 2 if content.startswith("\r\n", source_offset) else 1
+        offsets.append(source_offset)
+    return offsets
+
+
 def _source_slice(content: str, offsets: list[int], start: int, end: int) -> tuple[str, SourceSpan]:
     start_offset = offsets[min(start, len(offsets) - 1)]
     end_offset = offsets[min(end, len(offsets) - 1)] if end < len(offsets) else len(content)
@@ -325,6 +335,7 @@ class MarkdownItParser:
         paragraph_start = offsets[min(start, len(offsets) - 1)]
         paragraph_end = offsets[min(end, len(offsets) - 1)] if end < len(offsets) else len(content)
         raw_paragraph = content[paragraph_start:paragraph_end].rstrip("\r\n")
+        normalized_offsets = _normalized_offset_map(raw_paragraph)
         references: list[tuple[int, int, dict[str, JSONValue]]] = []
         for inline_token in self._parser.parseInline(raw_paragraph):
             for child in inline_token.children or []:
@@ -334,7 +345,13 @@ class MarkdownItParser:
                 source_end = child.meta.get("source_end")
                 attributes = _markdown_image_attributes(child)
                 if isinstance(source_start, int) and isinstance(source_end, int) and attributes is not None:
-                    references.append((source_start, source_end, attributes))
+                    references.append(
+                        (
+                            normalized_offsets[source_start],
+                            normalized_offsets[source_end],
+                            attributes,
+                        )
+                    )
         for finder in _REFERENCE_FINDERS:
             for match in finder.finditer(raw_paragraph):
                 attributes = _image_reference_attributes(match.group(0))
@@ -405,13 +422,22 @@ class MarkdownItParser:
         heading_path: tuple[str, ...],
     ) -> SourceBlock | None:
         raw = content[start_offset:end_offset]
-        leading = len(raw) - len(raw.lstrip())
-        trailing = len(raw) - len(raw.rstrip())
-        start_offset += leading
-        end_offset -= trailing
-        raw = content[start_offset:end_offset]
-        if not raw:
-            return None
+        if raw.strip():
+            leading = len(raw) - len(raw.lstrip())
+            trailing = len(raw) - len(raw.rstrip())
+            content_span = self._span_for_offsets(
+                content,
+                start_offset + leading,
+                end_offset - trailing,
+            )
+            span = SourceSpan(
+                content_span.start_line,
+                content_span.end_line,
+                start_offset,
+                end_offset,
+            )
+        else:
+            span = self._span_for_offsets(content, start_offset, end_offset)
         return self._make_block(
             document_id=document_id,
             block_type=BlockType.PARAGRAPH,
@@ -420,7 +446,7 @@ class MarkdownItParser:
             language=None,
             heading_level=None,
             heading_path=heading_path,
-            span=self._span_for_offsets(content, start_offset, end_offset),
+            span=span,
             attributes={},
         )
 
@@ -458,12 +484,18 @@ class MarkdownItParser:
         span: SourceSpan,
         attributes: Mapping[str, JSONValue],
     ) -> SourceBlock:
+        occurrence = (
+            (span.start_offset, span.end_offset)
+            if block_type == BlockType.IMAGE_REFERENCE
+            else ()
+        )
         block_id = logical_id(
             "block",
             document_id,
             block_type.value,
             span.start_line,
             span.end_line,
+            *occurrence,
             content_fingerprint(raw),
         )
         return SourceBlock(

@@ -104,12 +104,14 @@ def build_asset_graph(
 ) -> AssetGraph:
     """Resolve image references without network, vision, OCR, or source mutation."""
     resolved_root = root.resolve()
-    chunk_by_block = {
-        block_id: chunk.chunk_id
-        for chunk in chunks
-        for block_id in chunk.parent_block_ids
-        if chunk.content_type.value == "image_reference"
-    }
+    chunk_by_block: dict[str, str] = {}
+    for chunk in chunks:
+        if chunk.content_type.value != "image_reference":
+            continue
+        for block_id in chunk.parent_block_ids:
+            if block_id in chunk_by_block:
+                raise ValueError("image reference block must map to exactly one retrieval chunk")
+            chunk_by_block[block_id] = chunk.chunk_id
     assets: dict[str, Asset] = {}
     references: list[AssetReference] = []
     for block in document.blocks:

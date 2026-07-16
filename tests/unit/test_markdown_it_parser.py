@@ -125,22 +125,30 @@ def test_empty_and_no_heading_documents() -> None:
 
 
 def test_adjacent_mixed_image_references_have_individual_exact_spans() -> None:
-    document = _parse("![One](images/one.png)\n![[two.png]]\nFollowing text.")
+    content = "![One](images/one.png)\n![[two.png]]\nFollowing text."
+    document = _parse(content)
 
     assert [block.block_type for block in document.blocks] == [
         BlockType.IMAGE_REFERENCE,
+        BlockType.PARAGRAPH,
         BlockType.IMAGE_REFERENCE,
         BlockType.PARAGRAPH,
     ]
     assert [
         (block.source_span.start_line, block.source_span.end_line)
         for block in document.blocks
-    ] == [(1, 1), (2, 2), (3, 3)]
-    assert [block.attributes.get("syntax") for block in document.blocks[:2]] == [
+    ] == [(1, 1), (1, 1), (2, 2), (3, 3)]
+    assert document.blocks[1].raw_markdown == "\n"
+    assert document.blocks[1].plain_text is None
+    assert document.blocks[1].source_span.start_offset == len("![One](images/one.png)")
+    assert document.blocks[1].source_span.end_offset == len("![One](images/one.png)\n")
+    assert [block.attributes.get("syntax") for block in document.blocks[::2][:2]] == [
         "markdown",
         "obsidian",
     ]
-    assert document.blocks[2].plain_text == "Following text."
+    assert document.blocks[3].raw_markdown == "\nFollowing text."
+    assert document.blocks[3].plain_text == "Following text."
+    assert "".join(block.raw_markdown for block in document.blocks) == content
 
 
 def test_commonmark_image_destinations_and_titles_keep_exact_provenance() -> None:

@@ -13,10 +13,12 @@ from typing import Any
 
 from mdrack.domain.indexing import PreparedFile, SourceLocator, StoredChunk
 from mdrack.domain.profiles import EmbeddingProfile, IncompatibleEmbeddingProfileError
+from mdrack.domain.retrieval import RetrievalCandidate
 from mdrack.indexing.change_detector import detect_changes
 from mdrack.search.text import TextSearchResult, text_search
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
+from mdrack.storage.sqlite.vector import VectorIndex
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,61 @@ class SQLiteIndexStorage:
             (relative_path,),
         ).fetchone()
         return dict(row) if row is not None else None
+
+    def find_rename_source(
+        self,
+        deleted_paths: Sequence[str],
+        source_hash: str,
+    ) -> dict[str, Any] | None:
+        """Return one unambiguous deleted-path identity with matching bytes."""
+        if not deleted_paths:
+            return None
+        placeholders = ",".join("?" for _ in deleted_paths)
+        rows = self.connection.execute(
+            f"SELECT * FROM files WHERE relative_path IN ({placeholders}) "
+            "AND source_hash = ? AND status = 'active'",
+            (*deleted_paths, source_hash),
+        ).fetchall()
+        return dict(rows[0]) if len(rows) == 1 else None
+
+    def get_public_file_by_path(self, relative_path: str) -> dict[str, Any] | None:
+        row = self.get_file_by_path(relative_path)
+        if row is None:
+            return None
+        logical_id = row["logical_id"] or row["id"]
+        return {
+            "id": logical_id,
+            "logical_id": logical_id,
+            "root_id": row["root_id"],
+            "relative_path": row["relative_path"],
+            "title": row["title"],
+            "source_hash": row["source_hash"],
+            "indexed_at": row["indexed_at"],
+            "status": row["status"],
+            "parser_name": row["parser_name"],
+            "parser_version": row["parser_version"],
+            "chunk_strategy_name": row["chunk_strategy_name"],
+            "chunk_strategy_version": row["chunk_strategy_version"],
+        }
+
+    def get_chunk_by_logical_id(self, logical_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT * FROM chunks WHERE logical_id = ? OR (logical_id IS NULL AND id = ?)",
+            (logical_id, logical_id),
+        ).fetchone()
+        if row is None:
+            return None
+        locator = self.get_chunk_source_locator(logical_id)
+        return {
+            "id": locator.chunk_id,
+            "logical_id": locator.chunk_id,
+            "content": row["content"],
+            "content_type": row["content_type"],
+            "chunk_index": row["chunk_index"],
+            "heading_path": list(locator.heading_path),
+            "embedding_text_hash": row["embedding_text_hash"],
+            "source_locator": locator.to_dict(),
+        }
 
     def replace_file(self, prepared: PreparedFile) -> None:
         """Replace one file and all derived rows atomically."""
@@ -192,7 +249,10 @@ class SQLiteIndexStorage:
                    COALESCE(c.end_line, s.end_line, c.start_line, s.start_line, 1) AS end_line,
                    c.heading_path,
                    COALESCE(c.block_logical_id, c.logical_id, c.id) AS block_logical_id,
-                   COALESCE(c.logical_id, c.id) AS logical_id
+                   COALESCE(c.logical_id, c.id) AS logical_id,
+                   c.start_offset, c.end_offset,
+                   COALESCE(c.block_kind, 'unknown') AS block_kind,
+                   COALESCE(c.chunk_kind, c.content_type, 'unknown') AS chunk_kind
             FROM chunks c
             JOIN files f ON f.id = c.file_id
             LEFT JOIN sections s ON s.id = c.section_id
@@ -207,9 +267,13 @@ class SQLiteIndexStorage:
             relative_path=row["relative_path"],
             start_line=row["start_line"],
             end_line=row["end_line"],
-            heading_path=tuple(json.loads(row["heading_path"] or "[]")),
+            heading_path=self._decode_heading_path(row["heading_path"]),
             block_id=row["block_logical_id"],
             chunk_id=row["logical_id"],
+            start_offset=row["start_offset"],
+            end_offset=row["end_offset"],
+            block_kind=row["block_kind"],
+            chunk_kind=row["chunk_kind"],
         )
 
     def list_assets_for_file(self, relative_path: str) -> list[dict[str, Any]]:
@@ -243,9 +307,120 @@ class SQLiteIndexStorage:
     def search_text(self, query: str, *, limit: int, offset: int = 0) -> TextSearchResult:
         return text_search(self.connection, query, limit=limit, offset=offset)
 
+    def retrieve_text_candidates(
+        self,
+        query: str,
+        *,
+        limit: int,
+        offset: int = 0,
+    ) -> list[RetrievalCandidate]:
+        result = text_search(self.connection, query, limit=limit, offset=offset)
+        candidates: list[RetrievalCandidate] = []
+        for item in result.results:
+            if item.source_locator is None:
+                continue
+            candidates.append(
+                RetrievalCandidate(
+                    logical_id=item.source_locator.chunk_id,
+                    score=item.score,
+                    content_preview=item.snippet,
+                    source_locator=item.source_locator,
+                    metadata={
+                        "section_title": item.section_title,
+                        "heading_path": item.heading_path,
+                    },
+                )
+            )
+        return candidates
+
+    def retrieve_semantic_candidates(
+        self,
+        query_vector: list[float],
+        *,
+        profile: str,
+        profile_fingerprint: str | None,
+        limit: int,
+    ) -> list[RetrievalCandidate]:
+        scored = VectorIndex(self.connection).search(
+            query_vector,
+            profile_name=profile,
+            profile_fingerprint=profile_fingerprint,
+            limit=limit,
+        )
+        if not scored:
+            return []
+        record_ids = [str(item["chunk_id"]) for item in scored]
+        placeholders = ",".join("?" for _ in record_ids)
+        rows = self.connection.execute(
+            f"""
+            SELECT c.id, c.logical_id, c.block_logical_id, c.content,
+                   c.start_line, c.end_line, c.start_offset, c.end_offset,
+                   c.block_kind, c.chunk_kind,
+                   COALESCE(c.heading_path, s.heading_path) AS heading_path,
+                   f.root_id, f.relative_path, s.title AS section_title
+            FROM chunks c
+            JOIN files f ON f.id = c.file_id
+            LEFT JOIN sections s ON s.id = c.section_id
+            WHERE c.id IN ({placeholders})
+            """,
+            record_ids,
+        ).fetchall()
+        by_record_id = {row["id"]: row for row in rows}
+        candidates: list[RetrievalCandidate] = []
+        for scored_item in scored:
+            record_id = str(scored_item["chunk_id"])
+            row = by_record_id.get(record_id)
+            if row is None:
+                logger.warning("retrieval.semantic.candidate_skipped reason=missing_chunk")
+                continue
+            logical_id = row["logical_id"] or record_id
+            heading_path = self._decode_heading_path(row["heading_path"])
+            locator = SourceLocator(
+                root_id=row["root_id"] or "default",
+                relative_path=row["relative_path"],
+                start_line=row["start_line"] or 1,
+                end_line=row["end_line"] or row["start_line"] or 1,
+                heading_path=heading_path,
+                block_id=row["block_logical_id"] or logical_id,
+                chunk_id=logical_id,
+                start_offset=row["start_offset"],
+                end_offset=row["end_offset"],
+                block_kind=row["block_kind"] or "unknown",
+                chunk_kind=row["chunk_kind"] or "unknown",
+            )
+            content = row["content"] or ""
+            raw_score = scored_item["score"]
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+                raise TypeError("semantic candidate score must be numeric")
+            candidates.append(
+                RetrievalCandidate(
+                    logical_id=logical_id,
+                    score=float(raw_score),
+                    content_preview=content[:200] + ("..." if len(content) > 200 else ""),
+                    source_locator=locator,
+                    metadata={
+                        "section_title": row["section_title"],
+                        "heading_path": row["heading_path"],
+                    },
+                )
+            )
+        return candidates
+
     def close(self) -> None:
         if self._owns_connection:
             self.connection.close()
+
+    @staticmethod
+    def _decode_heading_path(value: str | None) -> tuple[str, ...]:
+        if not value:
+            return ()
+        try:
+            decoded = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return tuple(part.strip() for part in value.split(">") if part.strip())
+        if isinstance(decoded, list):
+            return tuple(str(part) for part in decoded)
+        return (str(decoded),)
 
     def _delete_derived_rows(self, file_id: str) -> None:
         self.connection.execute("DELETE FROM asset_references WHERE file_id = ?", (file_id,))
@@ -366,8 +541,8 @@ class SQLiteIndexStorage:
                 id, logical_id, file_id, section_id, content, content_type,
                 chunk_index, heading_path, previous_chunk_id, next_chunk_id,
                 embedding_text, embedding_text_hash, start_line, end_line,
-                block_logical_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                block_logical_id, start_offset, end_offset, block_kind, chunk_kind
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 chunk.record_id,
@@ -385,6 +560,10 @@ class SQLiteIndexStorage:
                 chunk.start_line,
                 chunk.end_line,
                 chunk.block_logical_id,
+                chunk.start_offset,
+                chunk.end_offset,
+                chunk.block_kind,
+                chunk.chunk_kind,
             ),
         )
         self.connection.execute(

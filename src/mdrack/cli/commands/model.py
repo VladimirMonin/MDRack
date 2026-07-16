@@ -169,6 +169,8 @@ def _build_switched_config(config: Any, model_name: str, dimensions: int) -> Any
             "provider": "lmstudio",
             "model": model_name,
             "dimensions": dimensions,
+            "requested_dimensions": None,
+            "dimensions_capability": "not_tested",
         }
     )
     return config.model_copy(update={"embedding": embedding_config})
@@ -438,10 +440,12 @@ def _run_switch_rebuild(
         }
 
     provider = LMStudioProvider(
-        endpoint=config.embedding.endpoint,
+        endpoint=switched_config.embedding.endpoint,
         model=model_name,
         dimensions=dimensions,
-        timeout=config.embedding.timeout_secs,
+        timeout=switched_config.embedding.timeout_secs,
+        requested_dimensions=switched_config.embedding.requested_dimensions,
+        dimensions_capability=switched_config.embedding.dimensions_capability,
     )
     try:
         if rebuild_mode == "full":
@@ -463,7 +467,12 @@ def _run_switch_rebuild(
                 "run_id": result.run_id,
             }
 
-        data = rebuild_embeddings_in_db(db_path, provider, _DEFAULT_PROFILE)
+        data = rebuild_embeddings_in_db(
+            db_path,
+            provider,
+            _DEFAULT_PROFILE,
+            config=switched_config,
+        )
         data.update({"performed": True, "mode": rebuild_mode})
         return data
     finally:

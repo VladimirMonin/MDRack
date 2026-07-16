@@ -35,12 +35,17 @@ class DeterministicLMStudioProvider:
         model: str,
         dimensions: int,
         timeout: int = 120,
+        *,
+        requested_dimensions: int | None = None,
+        dimensions_capability: str = "not_tested",
     ) -> None:
         self.endpoint = endpoint
         self.model_name = model
         self._model_name = model
         self._dimensions = dimensions
         self.timeout = timeout
+        self.requested_dimensions = requested_dimensions
+        self.dimensions_capability = dimensions_capability
 
     @property
     def dimensions(self) -> int:

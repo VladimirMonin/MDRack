@@ -1,0 +1,26 @@
+{
+  "code_fallbacks.md": {
+    "chunk_count": 2,
+    "snapshot_sha256": "8a106b9938375f76d45cb1aff6bf25c7fd7761e6636085736808f1d9f1ff853f"
+  },
+  "crlf.md": {
+    "chunk_count": 1,
+    "snapshot_sha256": "344ea805eaa2455ca349a0301bbff99e6ee3b84da13e6dd23d15f5fa802e4abb"
+  },
+  "long_prose.md": {
+    "chunk_count": 4,
+    "snapshot_sha256": "3500d737d45c1dba8093099725765ce9e4ce50c9438bd7f5c6972cfed413bc91"
+  },
+  "multilingual.md": {
+    "chunk_count": 4,
+    "snapshot_sha256": "268b442f899061cc601395f7bfc5419931838f3e6a5f1a18fbba29dc594aaf25"
+  },
+  "python_valid.md": {
+    "chunk_count": 5,
+    "snapshot_sha256": "6a7f28423b46425a42d45ea6468faa4bdd237d14dae662e8803d1ef002daedd2"
+  },
+  "structures.md": {
+    "chunk_count": 7,
+    "snapshot_sha256": "4baf48122577cffccffba9b41b415a9af919bdec8af6d7c1d00459a2db449f46"
+  }
+}

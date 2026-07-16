@@ -93,6 +93,7 @@ def _audit_structural_files(
     parser = MarkdownItParser()
     chunker = StructuralChunker(
         StructuralChunkingConfig(
+            min_chars=config["min_chunk_chars"],
             target_chars=config["target_chunk_chars"],
             hard_limit_chars=config["hard_limit_chars"],
             max_tokens=config.get("max_chunk_tokens", 2000),

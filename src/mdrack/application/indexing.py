@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import uuid
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,6 +15,9 @@ from typing import Any
 from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.assets import build_asset_graph
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
+from mdrack.domain.blocks import BlockType
+from mdrack.domain.chunks import RetrievalChunk
+from mdrack.domain.documents import Document
 from mdrack.domain.identifiers import (
     content_fingerprint,
     logical_id,
@@ -21,6 +26,7 @@ from mdrack.domain.identifiers import (
 )
 from mdrack.domain.indexing import IndexingResult, PreparedFile, StoredChunk, StoredSection
 from mdrack.domain.profiles import EmbeddingProfile
+from mdrack.embeddings.runtime import embedding_profile_from_config
 from mdrack.indexing.scanner import CorpusScanError, scan_markdown_files
 from mdrack.markdown.chunk_builder import build_chunks
 from mdrack.markdown.embedding_text import build_embedding_text
@@ -65,6 +71,7 @@ class IndexingService:
         self.parser = parser or (MarkdownItParser() if self.parser_backend == "markdown_it" else None)
         self.chunker = chunker or StructuralChunker(
             StructuralChunkingConfig(
+                min_chars=self.config.chunking.min_chunk_chars,
                 target_chars=self.config.chunking.target_chunk_chars,
                 hard_limit_chars=self.config.chunking.hard_limit_chars,
                 max_tokens=self.config.chunking.max_chunk_tokens,
@@ -119,13 +126,32 @@ class IndexingService:
         stats["files_seen"] = len(scanned)
         change_plan = self.storage.plan_changes(scanned, self.root)
         files_to_process = scanned if force_reindex else change_plan.new_files + change_plan.changed_files
+        deleted_files = list(change_plan.deleted_files)
+        rename_sources: dict[str, dict[str, Any]] = {}
+        find_rename_source = getattr(self.storage, "find_rename_source", None)
+        if not force_reindex and callable(find_rename_source):
+            for relative_path in change_plan.new_files:
+                try:
+                    source_hash = hashlib.sha256(
+                        (self.root / relative_path).read_text(encoding="utf-8").encode("utf-8")
+                    ).hexdigest()
+                except (OSError, UnicodeError):
+                    continue
+                source = find_rename_source(deleted_files, source_hash)
+                if isinstance(source, dict):
+                    rename_sources[relative_path.as_posix()] = source
+                    deleted_files.remove(str(source["relative_path"]))
         stats["files_changed"] = len(files_to_process)
 
         for relative_path in files_to_process:
             file_ref = safe_file_ref(self.root_id, relative_path.as_posix())
             logger.info("index.file.started", extra={"run_id": run_id, "file_ref": file_ref})
             try:
-                prepared = self._prepare_file(relative_path, run_id)
+                prepared = self._prepare_file(
+                    relative_path,
+                    run_id,
+                    identity_source=rename_sources.get(relative_path.as_posix()),
+                )
                 self.storage.replace_file(prepared)
                 stats["files_indexed"] += 1
                 stats["chunks_created"] += len(prepared.chunks)
@@ -154,7 +180,7 @@ class IndexingService:
                 )
                 self.storage.record_error(run_id, code, file_ref=file_ref)
 
-        for relative_path in change_plan.deleted_files:
+        for relative_path in deleted_files:
             file_ref = safe_file_ref(self.root_id, relative_path)
             try:
                 self.storage.delete_file(relative_path)
@@ -192,14 +218,34 @@ class IndexingService:
     def close(self) -> None:
         self.storage.close()
 
-    def _prepare_file(self, relative_path: Path, run_id: str) -> PreparedFile:
+    def _prepare_file(
+        self,
+        relative_path: Path,
+        run_id: str,
+        *,
+        identity_source: dict[str, Any] | None = None,
+    ) -> PreparedFile:
         if self.parser_backend == "legacy":
-            return self._prepare_legacy_file(relative_path, run_id)
-        return self._prepare_structural_file(relative_path, run_id)
+            return self._prepare_legacy_file(
+                relative_path,
+                run_id,
+                identity_source=identity_source,
+            )
+        return self._prepare_structural_file(
+            relative_path,
+            run_id,
+            identity_source=identity_source,
+        )
 
-    def _prepare_legacy_file(self, relative_path: Path, run_id: str) -> PreparedFile:
+    def _prepare_legacy_file(
+        self,
+        relative_path: Path,
+        run_id: str,
+        *,
+        identity_source: dict[str, Any] | None = None,
+    ) -> PreparedFile:
         relative = relative_path.as_posix()
-        existing = self.storage.get_file_by_path(relative)
+        existing = self.storage.get_file_by_path(relative) or identity_source
         file_record_id = str(existing["id"]) if existing is not None else str(uuid.uuid4())
         parsed = parse_markdown(self.root / relative_path)
         sections = build_sections(parsed.blocks, file_id=file_record_id)
@@ -215,28 +261,39 @@ class IndexingService:
             },
         )
 
-        document_logical_id = logical_id("doc", self.root_id, relative)
-        stored_sections = tuple(
-            StoredSection(
-                record_id=section.id,
-                logical_id=logical_id(
-                    "section",
-                    self.root_id,
-                    relative,
-                    normalize_heading_path(section.heading_path),
-                    section.start_line,
-                    content_fingerprint(section.title),
-                    LEGACY_PARSER_VERSION,
-                ),
-                title=section.title,
-                heading_path=tuple(section.heading_path),
-                level=section.level,
-                start_line=section.start_line,
-                end_line=section.end_line,
-                parent_record_id=section.parent_id,
-            )
-            for section in sections
+        document_logical_id = (
+            str(existing["logical_id"])
+            if existing is not None and existing.get("logical_id")
+            else logical_id("doc", self.root_id, relative)
         )
+        section_ordinals: dict[tuple[object, ...], int] = {}
+        stored_section_rows: list[StoredSection] = []
+        for section in sections:
+            section_key = (
+                normalize_heading_path(section.heading_path),
+                content_fingerprint(section.title),
+            )
+            section_ordinal = section_ordinals.get(section_key, 0)
+            section_ordinals[section_key] = section_ordinal + 1
+            stored_section_rows.append(
+                StoredSection(
+                    record_id=section.id,
+                    logical_id=logical_id(
+                        "section",
+                        document_logical_id,
+                        *section_key,
+                        section_ordinal,
+                        LEGACY_PARSER_VERSION,
+                    ),
+                    title=section.title,
+                    heading_path=tuple(section.heading_path),
+                    level=section.level,
+                    start_line=section.start_line,
+                    end_line=section.end_line,
+                    parent_record_id=section.parent_id,
+                )
+            )
+        stored_sections = tuple(stored_section_rows)
         sections_by_id = {section.record_id: section for section in stored_sections}
 
         embedding_texts: list[str] = []
@@ -257,22 +314,16 @@ class IndexingService:
             )
             block_id = logical_id(
                 "block",
-                self.root_id,
-                relative,
+                document_logical_id,
                 normalize_heading_path(chunk.heading_path),
-                start_line,
-                end_line,
                 fingerprint,
                 LEGACY_PARSER_VERSION,
                 duplicate_ordinal,
             )
             chunk_logical_id = logical_id(
                 "chunk",
-                self.root_id,
-                relative,
+                document_logical_id,
                 normalize_heading_path(chunk.heading_path),
-                start_line,
-                end_line,
                 fingerprint,
                 LEGACY_CHUNK_STRATEGY_VERSION,
                 duplicate_ordinal,
@@ -295,6 +346,8 @@ class IndexingService:
                     start_line=start_line,
                     end_line=end_line,
                     block_logical_id=block_id,
+                    block_kind=chunk.content_type.value,
+                    chunk_kind=chunk.content_type.value,
                 )
             )
             embedding_texts.append(embedding_text)
@@ -328,11 +381,21 @@ class IndexingService:
             embedding_endpoint=self._provider_attr("endpoint", "_endpoint", default=None) if vectors else None,
         )
 
-    def _prepare_structural_file(self, relative_path: Path, run_id: str) -> PreparedFile:
+    def _prepare_structural_file(
+        self,
+        relative_path: Path,
+        run_id: str,
+        *,
+        identity_source: dict[str, Any] | None = None,
+    ) -> PreparedFile:
         relative = relative_path.as_posix()
-        existing = self.storage.get_file_by_path(relative)
+        existing = self.storage.get_file_by_path(relative) or identity_source
         file_record_id = str(existing["id"]) if existing is not None else str(uuid.uuid4())
-        document_logical_id = logical_id("doc", self.root_id, relative)
+        document_logical_id = (
+            str(existing["logical_id"])
+            if existing is not None and existing.get("logical_id")
+            else logical_id("doc", self.root_id, relative)
+        )
         if self.parser is None:
             raise RuntimeError("markdown-it parser is not configured")
 
@@ -341,6 +404,7 @@ class IndexingService:
             document_id=document_logical_id,
             relative_path=relative,
         )
+        parsed = self._stable_document_identities(parsed)
         file_ref = safe_file_ref(self.root_id, relative)
         logger.info(
             "markdown.parse.finished",
@@ -352,7 +416,7 @@ class IndexingService:
                 "status": "success",
             },
         )
-        chunks = self.chunker.build(parsed)
+        chunks = self._stable_chunk_identities(parsed, self.chunker.build(parsed))
         asset_graph = build_asset_graph(parsed, chunks, root=self.root, root_id=self.root_id)
         logger.info(
             "chunk.build.finished",
@@ -366,39 +430,74 @@ class IndexingService:
             },
         )
 
-        section_paths = self._section_paths(chunk.heading_path for chunk in chunks)
-        if chunks and not section_paths:
-            section_paths = [()]
-        section_record_ids = {path: str(uuid.uuid4()) for path in section_paths}
-        stored_sections: list[StoredSection] = []
-        for path in section_paths:
-            related = [
-                chunk
-                for chunk in chunks
-                if not path or chunk.heading_path[: len(path)] == path
+        heading_blocks = [block for block in parsed.blocks if block.block_type == BlockType.HEADING]
+        section_keys: list[str] = [block.block_id for block in heading_blocks]
+        chunk_section_keys: list[str] = []
+        section_blocks: dict[str, Any] = {block.block_id: block for block in heading_blocks}
+        for chunk in chunks:
+            candidates = [
+                block
+                for block in heading_blocks
+                if block.heading_path == chunk.heading_path
+                and block.source_span.start_line <= chunk.source_span.start_line
             ]
-            start_line = min(chunk.source_span.start_line for chunk in related)
-            end_line = max(chunk.source_span.end_line for chunk in related)
-            title = path[-1] if path else (parsed.title or Path(relative).stem)
-            parent_path = path[:-1] if path else None
+            heading = max(candidates, key=lambda block: block.source_span.start_line) if candidates else None
+            key = heading.block_id if heading is not None else "root"
+            chunk_section_keys.append(key)
+            if key not in section_keys:
+                section_keys.append(key)
+                if heading is not None:
+                    section_blocks[key] = heading
+        section_record_ids = {key: str(uuid.uuid4()) for key in section_keys}
+        stored_sections: list[StoredSection] = []
+        for key in section_keys:
+            related = [chunk for index, chunk in enumerate(chunks) if chunk_section_keys[index] == key]
+            heading = section_blocks.get(key)
+            path = heading.heading_path if heading is not None else ()
+            if not related and heading is not None:
+                following_boundaries = [
+                    block.source_span.start_line
+                    for block in heading_blocks
+                    if block.source_span.start_line > heading.source_span.start_line
+                    and len(block.heading_path) <= len(path)
+                ]
+                boundary = min(following_boundaries, default=None)
+                related = [
+                    chunk
+                    for chunk in chunks
+                    if chunk.source_span.start_line >= heading.source_span.start_line
+                    and (boundary is None or chunk.source_span.start_line < boundary)
+                    and chunk.heading_path[: len(path)] == path
+                ]
+            start_line = min(
+                [chunk.source_span.start_line for chunk in related]
+                + ([heading.source_span.start_line] if heading is not None else [])
+            )
+            end_line = max(
+                [chunk.source_span.end_line for chunk in related]
+                + ([heading.source_span.end_line] if heading is not None else [])
+            )
+            title = (heading.plain_text or "") if heading is not None else (parsed.title or Path(relative).stem)
+            parent_key = None
+            if heading is not None and len(path) > 1:
+                parents = [
+                    block
+                    for block in heading_blocks
+                    if block.heading_path == path[:-1]
+                    and block.source_span.start_line < heading.source_span.start_line
+                ]
+                if parents:
+                    parent_key = max(parents, key=lambda block: block.source_span.start_line).block_id
             stored_sections.append(
                 StoredSection(
-                    record_id=section_record_ids[path],
-                    logical_id=logical_id(
-                        "section",
-                        self.root_id,
-                        relative,
-                        normalize_heading_path(path),
-                        start_line,
-                        content_fingerprint(title),
-                        parsed.parser_version,
-                    ),
+                    record_id=section_record_ids[key],
+                    logical_id=logical_id("section", document_logical_id, key),
                     title=title,
                     heading_path=path,
                     level=min(6, max(1, len(path))),
                     start_line=start_line,
                     end_line=end_line,
-                    parent_record_id=section_record_ids.get(parent_path) if parent_path is not None else None,
+                    parent_record_id=section_record_ids.get(parent_key) if parent_key is not None else None,
                 )
             )
 
@@ -407,7 +506,7 @@ class IndexingService:
             StoredChunk(
                 record_id=chunk_record_ids[index],
                 logical_id=chunk.chunk_id,
-                section_record_id=section_record_ids[chunk.heading_path],
+                section_record_id=section_record_ids[chunk_section_keys[index]],
                 content=chunk.display_content,
                 content_type=chunk.content_type.value,
                 chunk_index=chunk.chunk_index,
@@ -419,6 +518,14 @@ class IndexingService:
                 start_line=chunk.source_span.start_line,
                 end_line=chunk.source_span.end_line,
                 block_logical_id=chunk.parent_block_ids[0],
+                start_offset=chunk.source_span.start_offset,
+                end_offset=chunk.source_span.end_offset,
+                block_kind=next(
+                    block.block_type.value
+                    for block in parsed.blocks
+                    if block.block_id == chunk.parent_block_ids[0]
+                ),
+                chunk_kind=chunk.content_type.value,
             )
             for index, chunk in enumerate(chunks)
         )
@@ -457,6 +564,61 @@ class IndexingService:
             embedding_dimensions=int(self._provider_attr("dimensions", default=0)) if vectors else None,
             embedding_endpoint=self._provider_attr("endpoint", "_endpoint", default=None) if vectors else None,
         )
+
+    @staticmethod
+    def _stable_document_identities(document: Document) -> Document:
+        ordinals: dict[tuple[object, ...], int] = {}
+        blocks = []
+        for block in document.blocks:
+            key = (
+                block.block_type.value,
+                normalize_heading_path(block.heading_path),
+                content_fingerprint(block.raw_markdown),
+            )
+            ordinal = ordinals.get(key, 0)
+            ordinals[key] = ordinal + 1
+            blocks.append(
+                replace(
+                    block,
+                    block_id=logical_id(
+                        "block",
+                        document.document_id,
+                        *key,
+                        ordinal,
+                        document.parser_version,
+                    ),
+                )
+            )
+        return replace(document, blocks=tuple(blocks))
+
+    def _stable_chunk_identities(
+        self,
+        document: Document,
+        chunks: tuple[RetrievalChunk, ...],
+    ) -> tuple[RetrievalChunk, ...]:
+        ordinals: dict[tuple[object, ...], int] = {}
+        stable = []
+        for chunk in chunks:
+            key = (
+                chunk.parent_block_ids,
+                chunk.content_type.value,
+                content_fingerprint(chunk.display_content),
+            )
+            ordinal = ordinals.get(key, 0)
+            ordinals[key] = ordinal + 1
+            stable.append(
+                replace(
+                    chunk,
+                    chunk_id=logical_id(
+                        "chunk",
+                        document.document_id,
+                        *key,
+                        ordinal,
+                        self.chunker.version,
+                    ),
+                )
+            )
+        return tuple(stable)
 
     @staticmethod
     def _section_paths(paths: Iterable[tuple[str, ...]]) -> list[tuple[str, ...]]:
@@ -519,37 +681,7 @@ class IndexingService:
         return default
 
     def _embedding_profile(self) -> EmbeddingProfile:
-        provider = str(
-            self._provider_attr(
-                "provider_name",
-                "_provider_name",
-                default=self.config.embedding.provider,
-            )
-        )
-        runtime = self.config.embedding.runtime if provider == "lmstudio" else "offline-test"
-        return EmbeddingProfile(
-            name=self.profile,
-            provider=provider,
-            runtime=runtime,
-            model_key=str(
-                self._provider_attr(
-                    "model_name",
-                    "_model_name",
-                    default=self.config.embedding.model,
-                )
-            ),
-            model_family=self.config.embedding.model_family,
-            quantization=self.config.embedding.quantization,
-            output_dimensions=int(
-                self._provider_attr(
-                    "dimensions",
-                    default=self.config.embedding.dimensions,
-                )
-            ),
-            query_instruction=self.config.embedding.query_instruction,
-            normalization_mode=self.config.embedding.normalization_mode,
-            endpoint_family=self.config.embedding.endpoint_family,
-        )
+        return embedding_profile_from_config(self.config, self.provider, self.profile)
 
     @staticmethod
     def _status(stats: dict[str, int]):

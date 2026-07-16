@@ -13,13 +13,13 @@ from typing import Any
 
 import click
 
+from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import MDRackError, StorageError
 from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.repositories import (
-    get_chunk,
     get_file,
     get_neighbors,
     get_section,
@@ -28,6 +28,34 @@ from mdrack.storage.sqlite.repositories import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _record_id(conn: sqlite3.Connection, table: str, public_id: str) -> str | None:
+    if table not in {"files", "sections", "chunks"}:
+        raise ValueError("unsupported read table")
+    row = conn.execute(
+        f"SELECT id FROM {table} WHERE logical_id = ? OR (logical_id IS NULL AND id = ?)",
+        (public_id, public_id),
+    ).fetchone()
+    return str(row["id"]) if row is not None else None
+
+
+def _public_file(record: dict[str, Any]) -> dict[str, Any]:
+    public_id = record.get("logical_id") or record["id"]
+    return {
+        key: value
+        for key, value in record.items()
+        if key not in {"index_run_id", "logical_id", "id"}
+    } | {"id": public_id, "logical_id": public_id}
+
+
+def _public_section(record: dict[str, Any]) -> dict[str, Any]:
+    public_id = record.get("logical_id") or record["id"]
+    return {
+        key: value
+        for key, value in record.items()
+        if key not in {"file_id", "parent_id", "logical_id", "id"}
+    } | {"id": public_id, "logical_id": public_id}
 
 
 def _open_connection(ctx: click.Context) -> sqlite3.Connection:
@@ -90,10 +118,12 @@ def read_chunk(ctx: click.Context, chunk_id: str, context_mode: str) -> None:
     try:
         conn = _open_connection(ctx)
         try:
-            chunk = get_chunk(conn, chunk_id)
+            storage = SQLiteIndexStorage(conn)
+            record_id = _record_id(conn, "chunks", chunk_id)
+            chunk = storage.get_chunk_by_logical_id(chunk_id)
             if chunk is None:
                 payload = envelope_error(
-                    message=f"Chunk '{chunk_id}' not found",
+                    message="Chunk not found",
                     code="NOT_FOUND",
                     command=cmd,
                 )
@@ -103,8 +133,11 @@ def read_chunk(ctx: click.Context, chunk_id: str, context_mode: str) -> None:
             data: dict[str, Any] = {"chunk": chunk}
 
             if context_mode == "neighbors":
-                neighbors = get_neighbors(conn, chunk_id, count=1)
-                data["neighbors"] = neighbors
+                neighbors = get_neighbors(conn, record_id or chunk_id, count=1)
+                data["neighbors"] = [
+                    storage.get_chunk_by_logical_id(str(item.get("logical_id") or item["id"]))
+                    for item in neighbors
+                ]
 
             payload = envelope_success(data, command=cmd)
             _output(ctx, payload)
@@ -132,19 +165,24 @@ def read_section(ctx: click.Context, section_id: str) -> None:
     try:
         conn = _open_connection(ctx)
         try:
-            section = get_section(conn, section_id)
+            record_id = _record_id(conn, "sections", section_id)
+            section = get_section(conn, record_id or section_id)
             if section is None:
                 payload = envelope_error(
-                    message=f"Section '{section_id}' not found",
+                    message="Section not found",
                     code="NOT_FOUND",
                     command=cmd,
                 )
                 _output(ctx, payload)
                 ctx.exit(1)
 
-            chunks = list_chunks_by_section(conn, section_id)
+            storage = SQLiteIndexStorage(conn)
+            chunks = [
+                storage.get_chunk_by_logical_id(str(item.get("logical_id") or item["id"]))
+                for item in list_chunks_by_section(conn, record_id or section_id)
+            ]
             data: dict[str, Any] = {
-                "section": section,
+                "section": _public_section(section),
                 "chunks": chunks,
             }
 
@@ -174,19 +212,23 @@ def read_file(ctx: click.Context, file_id: str) -> None:
     try:
         conn = _open_connection(ctx)
         try:
-            file_record = get_file(conn, file_id)
+            record_id = _record_id(conn, "files", file_id)
+            file_record = get_file(conn, record_id or file_id)
             if file_record is None:
                 payload = envelope_error(
-                    message=f"File '{file_id}' not found",
+                    message="File not found",
                     code="NOT_FOUND",
                     command=cmd,
                 )
                 _output(ctx, payload)
                 ctx.exit(1)
 
-            sections = list_sections(conn, file_id)
+            sections = [
+                _public_section(item)
+                for item in list_sections(conn, record_id or file_id)
+            ]
             data: dict[str, Any] = {
-                "file": file_record,
+                "file": _public_file(file_record),
                 "sections": sections,
             }
 
