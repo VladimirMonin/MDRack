@@ -1,0 +1,27 @@
+queries:
+  - id: BQ001
+    query: "agent previous next chunks"
+    mode: text
+    expected:
+      source_facts:
+        - relative_path: "retrieval-en.md"
+    metrics:
+      recall_at: 5
+
+  - id: BQ002
+    query: "одинаковый отпечаток корпуса пути сортируются"
+    mode: text
+    expected:
+      source_facts:
+        - relative_path: "indexing-ru.md"
+    metrics:
+      recall_at: 5
+
+  - id: BQ003
+    query: "raw queries absolute paths database UUIDs"
+    mode: text
+    expected:
+      source_facts:
+        - relative_path: "privacy-mixed.md"
+    metrics:
+      recall_at: 5

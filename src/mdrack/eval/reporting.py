@@ -8,6 +8,8 @@ from typing import Any
 
 from mdrack.eval.retrieval import EvalReport
 
+_CHECKOUT_STATUSES = frozenset({"available", "unavailable"})
+
 
 def _safe_ref(value: str) -> str:
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
@@ -91,3 +93,62 @@ def build_retrieval_report(
         results=results,
         summary=dict(evaluation.summary),
     )
+
+
+def build_baseline_comparison_report(
+    *,
+    baseline_sha: str,
+    current_sha: str,
+    corpus_ref: str,
+    query_set_ref: str,
+    historical: dict[str, Any],
+    current: dict[str, Any],
+    implementation_identity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the stable, privacy-safe historical/current comparison contract."""
+    for label, checkout in (("historical", historical), ("current", current)):
+        status = checkout.get("status")
+        if status not in _CHECKOUT_STATUSES:
+            raise ValueError(f"{label} checkout has an invalid status")
+        if status == "unavailable" and not checkout.get("historical_baseline_unavailable"):
+            if label == "historical":
+                raise ValueError("historical_baseline_unavailable is required")
+            raise ValueError("current unavailable reason is required")
+
+    comparison: dict[str, Any] = {"comparable": False, "metric_deltas": {}}
+    if historical["status"] == current["status"] == "available":
+        historical_metrics = historical.get("summary", {})
+        current_metrics = current.get("summary", {})
+        metric_names = sorted(set(historical_metrics) & set(current_metrics))
+        comparison = {
+            "comparable": True,
+            "metric_deltas": {
+                name: round(float(current_metrics[name]) - float(historical_metrics[name]), 12)
+                for name in metric_names
+                if isinstance(historical_metrics[name], (int, float))
+                and not isinstance(historical_metrics[name], bool)
+                and isinstance(current_metrics[name], (int, float))
+                and not isinstance(current_metrics[name], bool)
+            },
+        }
+
+    report = {
+        "schema_version": 1,
+        "report_type": "historical_current_baseline",
+        "revisions": {"historical": baseline_sha, "current": current_sha},
+        "corpus_fingerprint": corpus_ref,
+        "query_set_fingerprint": query_set_ref,
+        "historical": historical,
+        "current": current,
+        "comparison": comparison,
+        "privacy": {
+            "absolute_paths_included": False,
+            "raw_queries_included": False,
+            "note_text_included": False,
+            "database_ids_included": False,
+            "provider_bodies_included": False,
+        },
+    }
+    if implementation_identity is not None:
+        report["implementation_identity"] = implementation_identity
+    return report
