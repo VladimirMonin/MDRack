@@ -5,10 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from typing import Literal
 
 
 class IncompatibleEmbeddingProfileError(ValueError):
     """The active profile name is already bound to another fingerprint."""
+
+    code = "incompatible_embedding_profile"
+
+    def __init__(self, unsafe_detail: str | None = None) -> None:
+        del unsafe_detail
+        super().__init__(self.code)
 
 
 @dataclass(frozen=True)
@@ -25,6 +32,8 @@ class EmbeddingProfile:
     query_instruction: str
     normalization_mode: str
     endpoint_family: str
+    instruction_profile: str = "default"
+    schema_version: int = 1
 
     def __post_init__(self) -> None:
         identity = (
@@ -37,11 +46,14 @@ class EmbeddingProfile:
             self.query_instruction,
             self.normalization_mode,
             self.endpoint_family,
+            self.instruction_profile,
         )
         if any(not value.strip() for value in identity):
             raise ValueError("embedding profile identity fields must not be empty")
         if self.output_dimensions < 1:
             raise ValueError("output_dimensions must be positive")
+        if self.schema_version < 1:
+            raise ValueError("schema_version must be positive")
 
     @property
     def fingerprint(self) -> str:
@@ -53,8 +65,10 @@ class EmbeddingProfile:
             "output_dimensions": self.output_dimensions,
             "provider": self.provider,
             "quantization": self.quantization,
-            "query_instruction": self.query_instruction,
+            "instruction_profile": self.instruction_profile,
+            "query_instruction_hash": self.query_instruction_hash,
             "runtime": self.runtime,
+            "schema_version": self.schema_version,
         }
         canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -64,13 +78,33 @@ class EmbeddingProfile:
         return hashlib.sha256(self.query_instruction.encode("utf-8")).hexdigest()
 
 
+CapabilityStatus = Literal["tested", "not_installed", "unsupported", "not_tested"]
+
+
 @dataclass(frozen=True)
 class EmbeddingCapabilities:
     """Observed or declared runtime limits; ``None`` means not probed."""
 
+    status: CapabilityStatus = "not_tested"
     max_output_dimensions: int | None = None
     supports_output_dimensions: bool | None = None
     supported_output_dimensions: tuple[int, ...] = ()
+    requested_dimensions: int | None = None
+    returned_dimensions: int | None = None
+    vector_length_valid: bool | None = None
+
+    def __post_init__(self) -> None:
+        if self.status == "tested" and (
+            self.returned_dimensions is None or self.vector_length_valid is None
+        ):
+            raise ValueError("tested capability requires returned dimensions and vector validation")
+        for value in (
+            self.max_output_dimensions,
+            self.requested_dimensions,
+            self.returned_dimensions,
+        ):
+            if value is not None and value < 1:
+                raise ValueError("embedding dimensions must be positive")
 
 
 @dataclass(frozen=True)

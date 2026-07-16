@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PathsConfig(BaseModel):
@@ -45,6 +45,12 @@ class ChunkingConfig(BaseModel):
     table_rows_per_chunk: int = Field(default=40, ge=1)
     mermaid_window_lines: int = Field(default=80, ge=1)
 
+    @model_validator(mode="after")
+    def validate_limits(self) -> "ChunkingConfig":
+        if self.min_chunk_chars > self.target_chunk_chars:
+            raise ValueError("min_chunk_chars cannot exceed target_chunk_chars")
+        return self
+
     model_config = {"frozen": True}
 
 
@@ -64,12 +70,18 @@ class EmbeddingConfig(BaseModel):
     endpoint: str = Field(default="http://localhost:1234/v1")
     timeout_secs: int = Field(default=120, ge=1)
     dimensions: int = Field(default=1024, gt=0)
+    requested_dimensions: int | None = Field(default=None, gt=0)
+    dimensions_capability: Literal[
+        "tested", "not_installed", "unsupported", "not_tested"
+    ] = Field(default="not_tested")
     runtime: str = Field(default="lmstudio-gui", min_length=1)
     model_family: str = Field(default="qwen3-embedding", min_length=1)
     quantization: str = Field(default="unknown", min_length=1)
     query_instruction: str = Field(default="Represent the query for retrieval", min_length=1)
     normalization_mode: str = Field(default="l2", min_length=1)
     endpoint_family: str = Field(default="openai_embeddings", min_length=1)
+    instruction_profile: str = Field(default="retrieval-query-v1", min_length=1)
+    profile_schema_version: int = Field(default=1, ge=1)
 
     model_config = {"frozen": True}
 

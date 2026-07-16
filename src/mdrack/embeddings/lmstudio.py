@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from mdrack.domain.profiles import CapabilityStatus
 from mdrack.embeddings.protocol import EmbeddingError, EmbeddingHealth
 
 logger = logging.getLogger(__name__)
@@ -549,22 +550,43 @@ class LMStudioProvider:
         model: str,
         dimensions: int,
         timeout: int = 30,
+        *,
+        requested_dimensions: int | None = None,
+        dimensions_capability: CapabilityStatus = "not_tested",
+        native_dimensions: int | None = None,
     ) -> None:
         """Initialize the LM Studio provider.
 
         Args:
             endpoint: Base URL of the LM Studio server (e.g. "http://localhost:1234").
             model: Model name to use for embeddings.
-            dimensions: Expected embedding dimension size.
+            dimensions: Expected returned embedding dimension size.
             timeout: HTTP request timeout in seconds (default: 30).
+            requested_dimensions: Optional dimension sent to the runtime only
+                when ``dimensions_capability`` is ``tested``.
+            dimensions_capability: Evidence state for the runtime's dimensions
+                request parameter. Configuration alone is not live evidence.
+            native_dimensions: Known full model output dimension. Reduced MRL
+                is not claimed unless this is greater than the request.
         """
         self._provider_name = "lmstudio"
         self._model = model
         self._model_name = model
         self._endpoint, self._embeddings_url, _ = _normalize_endpoints(endpoint)
         self._dimensions = dimensions
+        self._requested_dimensions = requested_dimensions
+        self._dimensions_capability = dimensions_capability
+        self._native_dimensions = native_dimensions
+        self._returned_dimensions: int | None = None
+        self._vector_length_valid: bool | None = None
         self._timeout = timeout
         self._endpoint_fields = _endpoint_log_fields(self._endpoint)
+        if dimensions < 1:
+            raise ValueError("dimensions must be positive")
+        if requested_dimensions is not None and requested_dimensions < 1:
+            raise ValueError("requested_dimensions must be positive")
+        if native_dimensions is not None and native_dimensions < 1:
+            raise ValueError("native_dimensions must be positive")
 
     async def close(self) -> None:
         """Close provider resources.
@@ -594,6 +616,20 @@ class LMStudioProvider:
             "model": self._model,
             "input": texts,
         }
+        if self._requested_dimensions is not None:
+            if self._dimensions_capability != "tested":
+                reason = f"requested_dimensions_{self._dimensions_capability}"
+                logger.error(
+                    "llm.request.failed provider=%s model=%s profile=%s reason=%s "
+                    "requested_dimensions=%d calls_attempted=0",
+                    self._provider_name,
+                    self._model,
+                    profile,
+                    reason,
+                    self._requested_dimensions,
+                )
+                raise EmbeddingError(reason)
+            payload["dimensions"] = self._requested_dimensions
         started_at = perf_counter()
         logger.info(
             "llm.request.started provider=%s model=%s profile=%s input_count=%d "
@@ -713,7 +749,13 @@ class LMStudioProvider:
             )
             raise EmbeddingError(f"Invalid embedding structure: {exc}") from exc
 
-        # Validate dimensions
+        returned_lengths = [len(embedding) for embedding in embeddings]
+        self._returned_dimensions = returned_lengths[0] if returned_lengths else None
+        self._vector_length_valid = bool(returned_lengths) and all(
+            length == self._dimensions for length in returned_lengths
+        )
+
+        # Validate complete vectors locally. Never truncate provider output.
         for i, emb in enumerate(embeddings):
             if len(emb) != self._dimensions:
                 logger.error(
@@ -785,6 +827,10 @@ class LMStudioProvider:
                 model=self._model,
                 dimensions=self._dimensions,
                 error=None,
+                requested_dimensions=self._requested_dimensions,
+                returned_dimensions=self._returned_dimensions,
+                vector_length_valid=self._vector_length_valid,
+                mrl_status=self.mrl_status,
             )
         except Exception as exc:
             return EmbeddingHealth(
@@ -793,12 +839,45 @@ class LMStudioProvider:
                 model=self._model,
                 dimensions=self._dimensions,
                 error=str(exc),
+                requested_dimensions=self._requested_dimensions,
+                returned_dimensions=self._returned_dimensions,
+                vector_length_valid=self._vector_length_valid,
+                mrl_status=self.mrl_status,
             )
 
     @property
     def dimensions(self) -> int:
         """Return the configured embedding dimension size."""
         return self._dimensions
+
+    @property
+    def requested_dimensions(self) -> int | None:
+        """Return the dimension explicitly requested from the runtime, if any."""
+        return self._requested_dimensions
+
+    @property
+    def returned_dimensions(self) -> int | None:
+        """Return the last dimension actually returned by the runtime."""
+        return self._returned_dimensions
+
+    @property
+    def vector_length_valid(self) -> bool | None:
+        """Return local validation for the most recent response."""
+        return self._vector_length_valid
+
+    @property
+    def mrl_status(self) -> str:
+        """Report MRL as tested only for matching explicit runtime evidence."""
+        if (
+            self._requested_dimensions is not None
+            and self._dimensions_capability == "tested"
+            and self._native_dimensions is not None
+            and self._requested_dimensions < self._native_dimensions
+            and self._returned_dimensions == self._requested_dimensions
+            and self._vector_length_valid is True
+        ):
+            return "tested"
+        return "unsupported_by_runtime"
 
     @property
     def endpoint(self) -> str:

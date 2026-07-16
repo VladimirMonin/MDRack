@@ -95,6 +95,95 @@ class TestLMStudioProviderEmbed:
         assert all(v == 0.1 for v in vectors[0])
 
     @pytest.mark.asyncio
+    async def test_embed_does_not_send_dimensions_without_explicit_request(
+        self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [{"embedding": [0.1] * 128, "index": 0}]
+        }
+        mock_response.raise_for_status = MagicMock()
+        clients = _patch_async_client(monkeypatch, response=mock_response)
+
+        await provider.embed(["hello"])
+
+        payload = clients[0].calls[0][1]["json"]
+        assert "dimensions" not in payload
+        assert provider.requested_dimensions is None
+        assert provider.returned_dimensions == 128
+        assert provider.vector_length_valid is True
+
+    @pytest.mark.asyncio
+    async def test_embed_sends_explicit_dimensions_only_with_tested_runtime_support(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = LMStudioProvider(
+            endpoint="http://localhost:1234",
+            model="test-model",
+            dimensions=64,
+            requested_dimensions=64,
+            dimensions_capability="tested",
+            native_dimensions=1024,
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [{"embedding": [0.1] * 64, "index": 0}]
+        }
+        mock_response.raise_for_status = MagicMock()
+        clients = _patch_async_client(monkeypatch, response=mock_response)
+
+        vectors = await provider.embed(["hello"])
+
+        assert clients[0].calls[0][1]["json"]["dimensions"] == 64
+        assert len(vectors[0]) == 64
+        assert provider.returned_dimensions == 64
+        assert provider.mrl_status == "tested"
+
+    @pytest.mark.asyncio
+    async def test_matching_dimensions_without_native_dimension_do_not_claim_mrl(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = LMStudioProvider(
+            endpoint="http://localhost:1234",
+            model="test-model",
+            dimensions=64,
+            requested_dimensions=64,
+            dimensions_capability="tested",
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [{"embedding": [0.1] * 64, "index": 0}]
+        }
+        mock_response.raise_for_status = MagicMock()
+        _patch_async_client(monkeypatch, response=mock_response)
+
+        await provider.embed(["hello"])
+
+        assert provider.mrl_status == "unsupported_by_runtime"
+
+    @pytest.mark.asyncio
+    async def test_embed_rejects_requested_dimensions_without_runtime_evidence(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = LMStudioProvider(
+            endpoint="http://localhost:1234",
+            model="test-model",
+            dimensions=64,
+            requested_dimensions=64,
+            dimensions_capability="not_tested",
+        )
+        clients = _patch_async_client(monkeypatch)
+
+        with pytest.raises(EmbeddingError, match="requested_dimensions_not_tested"):
+            await provider.embed(["hello"])
+
+        assert clients == []
+        assert provider.mrl_status == "unsupported_by_runtime"
+
+    @pytest.mark.asyncio
     async def test_embed_multiple_texts(
         self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -228,6 +317,9 @@ class TestLMStudioProviderEmbed:
 
         with pytest.raises(EmbeddingError, match="Dimension mismatch"):
             await provider.embed(["hello"])
+
+        assert provider.returned_dimensions == 64
+        assert provider.vector_length_valid is False
 
     @pytest.mark.asyncio
     async def test_embed_invalid_response_missing_data(

@@ -13,6 +13,10 @@ class EmbeddingHealth:
     model: str
     dimensions: int
     error: str | None = None
+    requested_dimensions: int | None = None
+    returned_dimensions: int | None = None
+    vector_length_valid: bool | None = None
+    mrl_status: str = "unsupported_by_runtime"
 
 
 class EmbeddingError(Exception):

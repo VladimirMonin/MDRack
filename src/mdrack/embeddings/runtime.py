@@ -5,6 +5,7 @@ from __future__ import annotations
 from inspect import isawaitable
 from typing import Any
 
+from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.embeddings.fake import FakeEmbeddingProvider
 from mdrack.embeddings.lmstudio import LMStudioControlClient, LMStudioProvider
 from mdrack.embeddings.protocol import EmbeddingProvider
@@ -22,6 +23,37 @@ def create_embedding_provider(provider_name: str, config: Any) -> EmbeddingProvi
         model=config.embedding.model,
         dimensions=config.embedding.dimensions,
         timeout=config.embedding.timeout_secs,
+        requested_dimensions=config.embedding.requested_dimensions,
+        dimensions_capability=config.embedding.dimensions_capability,
+    )
+
+
+def embedding_profile_from_config(
+    config: Any,
+    provider: object,
+    profile_name: str = "default",
+) -> EmbeddingProfile:
+    """Build the complete vector identity used by indexing and retrieval."""
+    provider_name = str(
+        getattr(provider, "provider_name", getattr(provider, "_provider_name", config.embedding.provider))
+    )
+    model_name = str(
+        getattr(provider, "model_name", getattr(provider, "_model_name", config.embedding.model))
+    )
+    dimensions = int(getattr(provider, "dimensions", config.embedding.dimensions))
+    return EmbeddingProfile(
+        name=profile_name,
+        provider=provider_name,
+        runtime=config.embedding.runtime if provider_name == "lmstudio" else "offline-test",
+        model_key=model_name,
+        model_family=config.embedding.model_family,
+        quantization=config.embedding.quantization,
+        output_dimensions=dimensions,
+        query_instruction=config.embedding.query_instruction,
+        normalization_mode=config.embedding.normalization_mode,
+        endpoint_family=config.embedding.endpoint_family,
+        instruction_profile=config.embedding.instruction_profile,
+        schema_version=config.embedding.profile_schema_version,
     )
 
 

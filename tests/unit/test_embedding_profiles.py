@@ -21,8 +21,10 @@ def _profile(**overrides: object) -> EmbeddingProfile:
         "quantization": "q4_k_m",
         "output_dimensions": 1024,
         "query_instruction": "Represent the query for retrieval",
+        "instruction_profile": "retrieval-query-v1",
         "normalization_mode": "l2",
         "endpoint_family": "openai_embeddings",
+        "schema_version": 1,
     }
     values.update(overrides)
     return EmbeddingProfile(**values)
@@ -40,12 +42,31 @@ def test_profile_fingerprint_is_stable_and_covers_every_identity_field() -> None
         "quantization",
         "output_dimensions",
         "query_instruction",
+        "instruction_profile",
         "normalization_mode",
         "endpoint_family",
+        "schema_version",
     ):
         current = getattr(profile, field_name)
         replacement = current + "-other" if isinstance(current, str) else current + 1
         assert replace(profile, **{field_name: replacement}).fingerprint != profile.fingerprint
+
+
+def test_profile_fingerprint_diagnostic_is_stable_and_does_not_echo_identity() -> None:
+    from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
+
+    error = IncompatibleEmbeddingProfileError("private-model-or-path")
+
+    assert error.code == "incompatible_embedding_profile"
+    assert str(error) == "incompatible_embedding_profile"
+    assert "private-model-or-path" not in str(error)
+
+
+def test_capability_state_rejects_fabricated_tested_evidence() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="tested capability requires"):
+        EmbeddingCapabilities(status="tested")
 
 
 def test_reduced_dimensions_require_runtime_support_without_claiming_live_support() -> None:
