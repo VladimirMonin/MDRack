@@ -1,4 +1,8 @@
-# MDRack Architecture
+# MDRack Architecture (historical overview)
+
+> This document is retained for historical context and contains superseded
+> descriptions. The maintained current architecture starts at
+> [current-architecture/README.md](current-architecture/README.md).
 
 ## Project Overview
 

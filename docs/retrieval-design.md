@@ -1,4 +1,8 @@
-# MDRack Retrieval Design
+# MDRack Retrieval Design (historical overview)
+
+> This document contains superseded retrieval and chunking details. See the
+> maintained [current retrieval architecture](current-architecture/retrieval.md)
+> and [indexing/chunking architecture](current-architecture/indexing-and-chunking.md).
 
 ## Overview
 

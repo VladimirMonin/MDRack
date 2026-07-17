@@ -1,4 +1,7 @@
-# MDRack Storage Design
+# MDRack Storage Design (historical overview)
+
+> This document predates migrations `0003`–`0006` and is not the current schema
+> contract. See [current SQLite persistence and ER model](current-architecture/sqlite-persistence.md).
 
 ## SQLite Schema Overview
 
