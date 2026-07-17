@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -10,18 +12,32 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+import mdrack.storage.sqlite.migrations as migration_module
 from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.application.retrieval import RetrievalService
 from mdrack.cli import main
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import (
+    EXPECTED_MIGRATION_MANIFEST,
+    EXPECTED_MIGRATION_MANIFEST_DIGEST,
+    EXPECTED_MIGRATION_VERSION,
     MigrationPlanError,
+    _framed_manifest_digest,
     apply_migrations,
     get_applied_migrations,
     get_migrations_dir,
 )
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "src" / "mdrack" / "storage" / "sqlite" / "migrations"
+
+
+def _apply_migration_prefix(conn: sqlite3.Connection, names: tuple[str, ...]) -> None:
+    """Build a historical fixture without weakening production package validation."""
+    for name in names:
+        version = name[:4]
+        conn.executescript((MIGRATIONS_DIR / name).read_text(encoding="utf-8"))
+        conn.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
+    conn.commit()
 
 
 def _fresh_db() -> tuple[sqlite3.Connection, Path]:
@@ -133,14 +149,13 @@ def test_get_migrations_dir_points_to_sql_files() -> None:
     ]
 
 
-def test_0002_database_upgrades_to_0003_and_preserves_legacy_rows(tmp_path: Path) -> None:
-    legacy_dir = tmp_path / "legacy-migrations"
-    legacy_dir.mkdir()
-    for name in ("0000_schema_migrations.sql", "0001_initial.sql", "0002_fts.sql"):
-        (legacy_dir / name).write_bytes((MIGRATIONS_DIR / name).read_bytes())
+def test_0002_database_upgrades_to_0003_and_preserves_legacy_rows() -> None:
     conn, db_path = _fresh_db()
     try:
-        apply_migrations(conn, legacy_dir)
+        _apply_migration_prefix(
+            conn,
+            ("0000_schema_migrations.sql", "0001_initial.sql", "0002_fts.sql"),
+        )
         conn.execute(
             "INSERT INTO files (id, relative_path, title, source_hash, indexed_at) VALUES (?, ?, ?, ?, ?)",
             ("legacy-file", "legacy.md", "Legacy", "hash", "2026-01-01T00:00:00Z"),
@@ -169,20 +184,16 @@ def test_0002_database_upgrades_to_0003_and_preserves_legacy_rows(tmp_path: Path
 
 
 def test_0005_database_upgrades_with_defensible_public_provenance(tmp_path: Path) -> None:
-    legacy_dir = tmp_path / "legacy-migrations"
-    legacy_dir.mkdir()
-    for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        if migration.name.startswith("0006_"):
-            continue
-        (legacy_dir / migration.name).write_bytes(migration.read_bytes())
-
     root = tmp_path / "vault"
     store = root / ".mdrack"
     store.mkdir(parents=True)
     db_path = store / "knowledge.db"
     conn = get_connection(db_path)
     try:
-        apply_migrations(conn, legacy_dir)
+        _apply_migration_prefix(
+            conn,
+            tuple(path.name for path in sorted(MIGRATIONS_DIR.glob("*.sql")) if not path.name.startswith("0006_")),
+        )
         conn.execute(
             "INSERT INTO files "
             "(id, logical_id, root_id, relative_path, title, source_hash, indexed_at) "
@@ -271,12 +282,36 @@ def test_0005_database_upgrades_with_defensible_public_provenance(tmp_path: Path
         conn.close()
 
 
-def test_failed_migration_rolls_back_schema_and_version(tmp_path: Path) -> None:
+def test_compiled_migration_manifest_reproduces_exact_identity() -> None:
+    entries = [(path.name, path.read_bytes()) for path in sorted(MIGRATIONS_DIR.glob("*.sql"))]
+
+    assert EXPECTED_MIGRATION_VERSION == "0006"
+    assert [(name, hashlib.sha256(content).hexdigest()) for name, content in entries] == list(
+        EXPECTED_MIGRATION_MANIFEST
+    )
+    assert _framed_manifest_digest(entries) == EXPECTED_MIGRATION_MANIFEST_DIGEST
+    assert EXPECTED_MIGRATION_MANIFEST_DIGEST == "bd33d44185be1edb9bca9c2d82eed3b013f5ba8425b3d8ad98f0cf69c1e6a700"
+
+
+def test_validated_pending_migration_failure_rolls_back_schema_and_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     migrations_dir = tmp_path / "broken"
     migrations_dir.mkdir()
-    (migrations_dir / "0000_broken.sql").write_text(
-        "CREATE TABLE should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n",
-        encoding="utf-8",
+    path = migrations_dir / "0000_broken.sql"
+    path.write_text("CREATE TABLE should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n", encoding="utf-8")
+    content = path.read_bytes()
+    monkeypatch.setattr(migration_module, "EXPECTED_MIGRATION_VERSION", "0000")
+    monkeypatch.setattr(
+        migration_module,
+        "EXPECTED_MIGRATION_MANIFEST",
+        ((path.name, hashlib.sha256(content).hexdigest()),),
+    )
+    monkeypatch.setattr(
+        migration_module,
+        "EXPECTED_MIGRATION_MANIFEST_DIGEST",
+        _framed_manifest_digest([(path.name, content)]),
     )
     conn, db_path = _fresh_db()
     try:
@@ -291,32 +326,68 @@ def test_failed_migration_rolls_back_schema_and_version(tmp_path: Path) -> None:
         db_path.unlink(missing_ok=True)
 
 
+@pytest.mark.parametrize("damage", ["missing", "extra", "renamed", "duplicate", "reordered", "tampered"])
+def test_invalid_package_identity_fails_before_any_sql(tmp_path: Path, damage: str) -> None:
+    migrations_dir = tmp_path / "migrations"
+    shutil.copytree(MIGRATIONS_DIR, migrations_dir)
+    if damage == "missing":
+        (migrations_dir / "0003_provenance.sql").unlink()
+    elif damage == "extra":
+        shutil.copy(migrations_dir / "0006_complete_provenance.sql", migrations_dir / "0007_extra.sql")
+    elif damage == "renamed":
+        (migrations_dir / "0003_provenance.sql").rename(migrations_dir / "0003_renamed.sql")
+    elif damage == "duplicate":
+        shutil.copy(migrations_dir / "0003_provenance.sql", migrations_dir / "0003_duplicate.sql")
+    elif damage == "reordered":
+        first = migrations_dir / "0002_fts.sql"
+        second = migrations_dir / "0003_provenance.sql"
+        first_bytes, second_bytes = first.read_bytes(), second.read_bytes()
+        first.write_bytes(second_bytes)
+        second.write_bytes(first_bytes)
+    else:
+        with (migrations_dir / "0004_embedding_profiles.sql").open("ab") as stream:
+            stream.write(b"-- tampered\n")
+
+    class NoSqlConnection:
+        def __getattr__(self, name: str) -> object:
+            raise AssertionError(f"connection touched before package validation: {name}")
+
+    with pytest.raises(MigrationPlanError):
+        apply_migrations(NoSqlConnection(), migrations_dir)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
-    "names",
+    "versions",
     [
-        ("0000_first.sql", "0000_duplicate.sql"),
-        ("0000_first.sql", "0002_gap.sql"),
-        ("unexpected.sql",),
+        ["0000", "0002"],
+        ["0000", "0000"],
+        ["9999"],
+        ["future"],
     ],
 )
-def test_invalid_migration_history_fails_before_schema_changes(
-    tmp_path: Path,
-    names: tuple[str, ...],
-) -> None:
-    migrations_dir = tmp_path / "invalid"
-    migrations_dir.mkdir()
-    for name in names:
-        (migrations_dir / name).write_text("CREATE TABLE leaked (id INTEGER);", encoding="utf-8")
-    conn, db_path = _fresh_db()
-    try:
-        with pytest.raises(MigrationPlanError):
-            apply_migrations(conn, migrations_dir)
-        assert conn.execute(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='leaked'"
-        ).fetchone()[0] == 0
-    finally:
-        conn.close()
-        db_path.unlink(missing_ok=True)
+def test_invalid_ledger_fails_before_pending_sql(versions: list[str]) -> None:
+    class Cursor:
+        def fetchall(self) -> list[dict[str, str]]:
+            return [{"version": version} for version in versions]
+
+    class LedgerSpy:
+        executescript_calls = 0
+
+        def execute(self, sql: str) -> Cursor | None:
+            if sql.startswith("SELECT"):
+                return Cursor()
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def executescript(self, sql: str) -> None:
+            self.executescript_calls += 1
+
+    connection = LedgerSpy()
+    with pytest.raises(MigrationPlanError):
+        apply_migrations(connection, MIGRATIONS_DIR)  # type: ignore[arg-type]
+    assert connection.executescript_calls == 0
 
 
 def test_database_with_unknown_future_version_fails_closed() -> None:
@@ -325,7 +396,7 @@ def test_database_with_unknown_future_version_fails_closed() -> None:
         apply_migrations(conn, MIGRATIONS_DIR)
         conn.execute("INSERT INTO schema_migrations (version) VALUES ('9999')")
         conn.commit()
-        with pytest.raises(MigrationPlanError, match="unavailable"):
+        with pytest.raises(MigrationPlanError, match="unknown or non-contiguous"):
             apply_migrations(conn, MIGRATIONS_DIR)
     finally:
         conn.close()
