@@ -8,8 +8,9 @@ import time
 from collections.abc import Hashable, Iterable
 
 from ..domain.batches import PreparedResourceBatch
+from ..domain.common import freeze_json_mapping, require_non_empty, require_utf8_encodable
 from ..domain.errors import CatalogExecutionError, CoreError, ErrorCategory
-from ..domain.resources import RepresentationRecord, SearchUnitRecord
+from ..domain.resources import Locator, RepresentationRecord, SearchUnitRecord
 from ..observability import LifecycleStatus, SafeEvent, emit_event
 from ..ports.catalog import ResourceWritePort
 
@@ -76,7 +77,9 @@ class CoreIndexingService:
 
     def delete(self, resource_id: str) -> None:
         """Idempotently delete one graph by its caller-owned logical resource ID."""
-        if not isinstance(resource_id, str) or not resource_id.strip():
+        try:
+            require_non_empty(resource_id, "resource_id")
+        except ValueError:
             raise CoreError(ErrorCategory.VALIDATION)
         try:
             self._write_port.delete_resource(resource_id)
@@ -96,6 +99,7 @@ class CoreIndexingService:
         if not batch.units:
             raise ValueError("a resource graph must contain a search unit")
 
+        cls._validate_persisted_strings(batch)
         resource_id = batch.resource.resource_id
         cls._require_unique(
             (item.representation_id for item in batch.representations),
@@ -127,12 +131,10 @@ class CoreIndexingService:
         vector_units: set[str] = set()
 
         for representation in batch.representations:
-            cls._require_utf8_text(representation.text)
             if representation.resource_id != resource_id:
                 raise ValueError("representation belongs to another resource")
 
         for unit in batch.units:
-            cls._require_utf8_text(unit.text)
             if unit.resource_id != resource_id:
                 raise ValueError("unit belongs to another resource")
             owner_representation = representations.get(unit.representation_id)
@@ -173,14 +175,72 @@ class CoreIndexingService:
     def _has_text(record: RepresentationRecord | SearchUnitRecord) -> bool:
         return isinstance(record.text, str) and bool(record.text.strip())
 
+    @classmethod
+    def _validate_persisted_strings(cls, batch: PreparedResourceBatch) -> None:
+        resource = batch.resource
+        cls._require_strings(
+            resource.resource_id,
+            resource.resource_kind,
+            resource.media_type,
+            resource.source_namespace,
+            resource.content_hash,
+            resource.title,
+        )
+        cls._require_locator(resource.locator)
+        freeze_json_mapping(resource.metadata, "resource.metadata")
+
+        for representation in batch.representations:
+            cls._require_strings(
+                representation.representation_id,
+                representation.resource_id,
+                representation.representation_kind,
+                representation.modality,
+                representation.text,
+                representation.language,
+                representation.producer_fingerprint,
+                representation.token_count_kind,
+            )
+            freeze_json_mapping(representation.metadata, "representation.metadata")
+
+        for unit in batch.units:
+            cls._require_strings(
+                unit.unit_id,
+                unit.resource_id,
+                unit.representation_id,
+                unit.unit_kind,
+                unit.modality,
+                unit.text,
+                unit.token_count_kind,
+            )
+            cls._require_locator(unit.evidence_locator)
+            freeze_json_mapping(unit.metadata, "unit.metadata")
+
+        for space in batch.spaces:
+            cls._require_strings(space.space_id, space.metric, space.fingerprint)
+            freeze_json_mapping(space.metadata, "space.metadata")
+
+        for vector in batch.vectors:
+            cls._require_strings(vector.unit_id, vector.space_id)
+
+        for assignment in batch.facets:
+            cls._require_strings(
+                assignment.resource_id,
+                assignment.facet.namespace,
+                assignment.facet.value,
+                assignment.origin,
+                assignment.producer_fingerprint,
+            )
+
     @staticmethod
-    def _require_utf8_text(value: str | None) -> None:
-        if value is None:
-            return
-        try:
-            value.encode("utf-8")
-        except UnicodeEncodeError:
-            raise ValueError("text must be UTF-8 encodable") from None
+    def _require_strings(*values: str | None) -> None:
+        for value in values:
+            if value is not None:
+                require_utf8_encodable(value, "persisted string")
+
+    @staticmethod
+    def _require_locator(locator: Locator) -> None:
+        require_utf8_encodable(locator.kind, "locator.kind")
+        freeze_json_mapping(locator.payload, "locator.payload")
 
     @staticmethod
     def _require_unique(values: Iterable[Hashable], field_name: str) -> None:

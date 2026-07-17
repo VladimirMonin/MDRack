@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
@@ -37,6 +38,13 @@ from mdrack_core.domain.search import (
     VectorBranch,
 )
 from mdrack_core.domain.vectors import EmbeddingSpaceRecord, VectorRecord
+
+
+class EncodeBypass(str):
+    """Adversarial string whose instance encoder lies about the exact value."""
+
+    def encode(self, encoding: str = "utf-8", errors: str = "strict") -> bytes:
+        return b"bypass"
 
 
 def resource_record(**changes: object) -> ResourceRecord:
@@ -124,6 +132,40 @@ def test_json_serialization_is_deterministic_and_unicode_preserving() -> None:
 
     assert canonical_json(first) == canonical_json(second)
     assert canonical_json(first) == '{"a":{"я":"да"},"z":[3,2]}'
+
+
+@pytest.mark.parametrize(
+    "create",
+    [
+        lambda value: resource_record(resource_id=value),
+        lambda value: resource_record(title=value),
+        lambda value: representation_record(representation_kind=value),
+        lambda value: representation_record(language=value),
+        lambda value: search_unit_record(text=value),
+        lambda value: Locator(value, {}),
+        lambda value: Locator("custom", {value: "value"}),
+        lambda value: Locator("custom", {"nested": (value,)}),
+        lambda value: resource_record(metadata={"nested": {value: "value"}}),
+        lambda value: resource_record(metadata={"nested": {"value": value}}),
+        lambda value: Facet(value, "value"),
+        lambda value: EmbeddingSpaceRecord("space-1", 2, "cosine", value),
+        lambda value: VectorRecord(value, "space-1", (0.0,)),
+    ],
+)
+@pytest.mark.parametrize(
+    "make_value",
+    [lambda: "value\ud800", lambda: EncodeBypass("value\ud800")],
+    ids=("built-in-str", "str-subclass-encode-override"),
+)
+def test_persisted_strings_and_nested_json_require_utf8_encodability(
+    create: object,
+    make_value: object,
+) -> None:
+    value = make_value()  # type: ignore[operator]
+    with pytest.raises(UnicodeEncodeError):
+        str.encode(value, "utf-8", "strict")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="UTF-8 encodable"):
+        create(value)  # type: ignore[operator]
 
 
 @pytest.mark.parametrize(
@@ -243,6 +285,13 @@ def test_embedding_space_and_vector_validation() -> None:
     for bad_vector in ((), (1, float("nan")), (True, 1), "123"):
         with pytest.raises(ValueError):
             VectorRecord("unit-1", "space-1", bad_vector)  # type: ignore[arg-type]
+
+
+def test_vectors_preserve_signed_zero_exactly_in_deterministic_json() -> None:
+    vector = VectorRecord("unit-1", "space-1", (0.0, -0.0))
+
+    assert [math.copysign(1.0, value) for value in vector.vector] == [1.0, -1.0]
+    assert canonical_json(vector.vector) == "[0.0,-0.0]"
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,7 @@ from .common import (
     require_integer,
     require_non_empty,
     require_optional_non_empty,
+    require_utf8_encodable,
 )
 
 RESOURCE_DOCUMENT = "document"
@@ -97,8 +98,8 @@ class ResourceRecord:
         if not isinstance(self.locator, Locator):
             raise ValueError("locator must be a Locator")
         require_optional_non_empty(self.content_hash, "content_hash")
-        if self.title is not None and not isinstance(self.title, str):
-            raise ValueError("title must be a string or None")
+        if self.title is not None:
+            require_utf8_encodable(self.title, "title")
         object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata, "metadata"))
 
 
@@ -120,8 +121,8 @@ class RepresentationRecord:
         require_non_empty(self.resource_id, "resource_id")
         require_non_empty(self.representation_kind, "representation_kind")
         require_non_empty(self.modality, "modality")
-        if self.text is not None and not isinstance(self.text, str):
-            raise ValueError("text must be a string or None")
+        if self.text is not None:
+            require_utf8_encodable(self.text, "text")
         require_optional_non_empty(self.language, "language")
         require_optional_non_empty(self.producer_fingerprint, "producer_fingerprint")
         count, kind = _validate_token_count(self.token_count, self.token_count_kind)
@@ -150,8 +151,8 @@ class SearchUnitRecord:
         require_non_empty(self.representation_id, "representation_id")
         require_non_empty(self.unit_kind, "unit_kind")
         require_non_empty(self.modality, "modality")
-        if self.text is not None and not isinstance(self.text, str):
-            raise ValueError("text must be a string or None")
+        if self.text is not None:
+            require_utf8_encodable(self.text, "text")
         if not isinstance(self.evidence_locator, Locator):
             raise ValueError("evidence_locator must be a Locator")
         require_integer(self.ordinal, "ordinal", minimum=0)

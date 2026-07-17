@@ -64,6 +64,12 @@ IDs are caller supplied. Producers in `mdrack` generate deterministic resource,
 representation, and unit IDs using source semantics. Core validates non-empty values,
 uniqueness, relationships, and batch ownership but never regenerates source IDs.
 
+Every string that can cross the catalog persistence boundary, including locator and
+metadata JSON keys and values, must be UTF-8 encodable. This rejects unpaired
+surrogates without normalizing or otherwise narrowing valid Unicode. Finite vectors
+preserve their exact floating-point values across catalogs, including the sign of
+`-0.0`; an adapter must not normalize signed zero.
+
 Core ports are frozen as complete use-case surfaces before retrieval and indexing
 lanes diverge:
 

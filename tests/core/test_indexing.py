@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import replace
 
 import pytest
@@ -22,6 +23,14 @@ from mdrack_core.domain import (
     SearchUnitRecord,
     VectorRecord,
 )
+from mdrack_core.domain.common import canonical_json
+
+
+class EncodeBypass(str):
+    """Adversarial string whose instance encoder lies about the exact value."""
+
+    def encode(self, encoding: str = "utf-8", errors: str = "strict") -> bytes:
+        return b"bypass"
 
 
 def _resource(
@@ -352,9 +361,18 @@ def test_rejects_non_batch_and_invalid_delete_identity_without_calling_catalog()
         service.index(object())  # type: ignore[arg-type]
     with pytest.raises(CoreError) as delete_error:
         service.delete("   ")
+    with pytest.raises(CoreError) as surrogate_delete_error:
+        service.delete("resource\ud800")
+    bypass = EncodeBypass("resource\ud800")
+    with pytest.raises(UnicodeEncodeError):
+        str.encode(bypass, "utf-8", "strict")
+    with pytest.raises(CoreError) as subclass_delete_error:
+        service.delete(bypass)
 
     assert batch_error.value.category is ErrorCategory.VALIDATION
     assert delete_error.value.category is ErrorCategory.VALIDATION
+    assert surrogate_delete_error.value.category is ErrorCategory.VALIDATION
+    assert subclass_delete_error.value.category is ErrorCategory.VALIDATION
     assert catalog.replace_calls == []
     assert catalog.delete_calls == []
 
@@ -382,10 +400,9 @@ def test_lone_surrogate_text_fails_with_safe_validation_lifecycle(
 ) -> None:
     catalog = MemoryCatalog()
     private_invalid_text = "PRIVATE_SURROGATE_SENTINEL\ud800"
-    invalid = _batch(
-        representations=(_representation(text=private_invalid_text),),
-        units=(_unit(text=private_invalid_text),),
-    )
+    invalid = _batch()
+    object.__setattr__(invalid.representations[0], "text", private_invalid_text)
+    object.__setattr__(invalid.units[0], "text", private_invalid_text)
 
     with caplog.at_level(logging.INFO, logger="mdrack_core.application.indexing"):
         with pytest.raises(CoreError) as caught:
@@ -401,6 +418,60 @@ def test_lone_surrogate_text_fails_with_safe_validation_lifecycle(
     assert '"category":"validation"' in caplog.text
     assert "PRIVATE_SURROGATE_SENTINEL" not in caplog.text
     assert "\ud800" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "forge",
+    [
+        lambda batch, value: object.__setattr__(batch.resource, "resource_id", value),
+        lambda batch, value: object.__setattr__(batch.resource, "title", value),
+        lambda batch, value: object.__setattr__(batch.resource.locator, "kind", value),
+        lambda batch, value: object.__setattr__(batch.resource, "metadata", {value: "value"}),
+        lambda batch, value: object.__setattr__(
+            batch.resource,
+            "metadata",
+            {"nested": {"value": value}},
+        ),
+        lambda batch, value: object.__setattr__(batch.spaces[0], "fingerprint", value),
+        lambda batch, value: object.__setattr__(batch.facets[0].facet, "value", value),
+    ],
+)
+@pytest.mark.parametrize(
+    "make_value",
+    [
+        lambda: "PRIVATE_SURROGATE_SENTINEL\ud800",
+        lambda: EncodeBypass("PRIVATE_SURROGATE_SENTINEL\ud800"),
+    ],
+    ids=("built-in-str", "str-subclass-encode-override"),
+)
+def test_forged_non_utf8_persisted_strings_fail_before_catalog(
+    forge: object,
+    make_value: object,
+) -> None:
+    catalog = MemoryCatalog()
+    batch = _batch()
+    value = make_value()  # type: ignore[operator]
+    with pytest.raises(UnicodeEncodeError):
+        str.encode(value, "utf-8", "strict")  # type: ignore[arg-type]
+    forge(batch, value)  # type: ignore[operator]
+
+    with pytest.raises(CoreError) as caught:
+        CoreIndexingService(catalog).index(batch)
+
+    assert caught.value.category is ErrorCategory.VALIDATION
+    assert catalog.replace_calls == []
+
+
+def test_memory_catalog_preserves_vector_signed_zero_exactly() -> None:
+    catalog = MemoryCatalog()
+    batch = _batch(vectors=(_vector(vector=(0.0, -0.0)),))
+
+    CoreIndexingService(catalog).index(batch)
+
+    stored = catalog.read_vector("unit-caller-supplied", "space-caller-supplied")
+    assert stored is not None
+    assert [math.copysign(1.0, value) for value in stored.vector] == [1.0, -1.0]
+    assert canonical_json(stored.vector) == "[0.0,-0.0]"
 
 
 def test_delete_is_idempotent_and_uses_only_the_logical_resource_id() -> None:

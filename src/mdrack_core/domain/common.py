@@ -16,11 +16,22 @@ MAX_JSON_ITEMS = 10_000
 MAX_JSON_BYTES = 1_000_000
 
 
+def require_utf8_encodable(value: object, field_name: str) -> str:
+    """Return a string only when its exact value is UTF-8 encodable."""
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+    try:
+        str.encode(value, "utf-8", "strict")
+    except UnicodeEncodeError:
+        raise ValueError(f"{field_name} must be UTF-8 encodable") from None
+    return value
+
+
 def require_non_empty(value: object, field_name: str) -> str:
     """Return a non-blank string without changing caller-supplied identity."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string")
-    return value
+    return require_utf8_encodable(value, field_name)
 
 
 def require_optional_non_empty(value: object, field_name: str) -> str | None:
@@ -51,8 +62,10 @@ def _freeze_json_value(value: object, *, depth: int, item_count: list[int]) -> J
     if depth > MAX_JSON_DEPTH:
         raise ValueError(f"JSON value exceeds maximum depth {MAX_JSON_DEPTH}")
 
-    if value is None or isinstance(value, (bool, str)):
+    if value is None or isinstance(value, bool):
         return value
+    if isinstance(value, str):
+        return require_utf8_encodable(value, "JSON string")
     if type(value) is int:
         return value
     if isinstance(value, float):
@@ -67,6 +80,8 @@ def _freeze_json_value(value: object, *, depth: int, item_count: list[int]) -> J
         keys = list(value)
         if any(not isinstance(key, str) for key in keys):
             raise ValueError("JSON object keys must be strings")
+        for key in keys:
+            require_utf8_encodable(key, "JSON object key")
         frozen: dict[str, JSONValue] = {}
         for key in sorted(keys):
             frozen[key] = _freeze_json_value(
