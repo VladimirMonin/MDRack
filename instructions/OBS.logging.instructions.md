@@ -20,6 +20,9 @@ absolute paths, raw URLs, embedding payloads, provider bodies, or database conte
 - Log lifecycle and safe branch outcomes for important operations: started, completed,
   skipped/degraded/retrying/failed, with reason categories and counts/durations.
 - Do not add noisy per-token, per-vector, or per-character logs in hot loops.
+- One shared redaction/event primitive may be frozen for `mdrack_core`; indexing and
+  retrieval own separate event payload schemas. Downstream lanes must not fork the
+  primitive or create competing event vocabularies.
 - Preserve exception context with `logger.exception` only after ensuring the message,
   arguments, chained error, and attached metadata cannot contain sensitive values.
 
@@ -46,6 +49,21 @@ endpoint strings, authorization material, or provider bodies.
 Diagnostics and support exports obey the same redaction rules as logs. They must not create
 a second, less-safe representation. CLI-facing errors use stable categories/codes and safe
 messages; detailed internal traces stay out of stdout JSON.
+
+Evaluation, support, doctor, and release evidence are observability surfaces, not a
+privacy exception. They must use safe references/categories and must not emit raw
+queries, source/generated text, paths, IDs derived from private locations, endpoint
+parts, metadata/facet values, vectors, provider bodies, or raw exception strings.
+
+## v0.3 privacy oracle
+
+For success, empty, degradation, validation/storage/provider failure, and cleanup
+failure, capture logs, CLI stdout, CLI stderr, diagnostics, and generated
+eval/support/release JSON. Supply distinct sentinels for query; Markdown/OCR/caption
+text; relative/absolute path; root name; URL and host/port/path fragments; vector;
+frontmatter/metadata/facet; provider body; and private-derived exception text.
+Fail if a sentinel appears outside an explicitly tested intentional public result
+payload. Assert that CLI stdout remains one parseable JSON object.
 
 ## Verification
 

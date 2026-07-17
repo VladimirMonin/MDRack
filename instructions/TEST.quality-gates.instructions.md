@@ -58,7 +58,36 @@ Use these boundaries explicitly:
 - `unit/offline`: isolated code with fakes or fixtures;
 - `local components`: real local SQLite/filesystem/provider process as stated;
 - `installed package`: built/installed artifact exercised outside the source import path;
+- `real source`: separately authorized source corpus with before/after and sanitized evidence;
 - `live external`: real external service/data with guarded side effects and cleanup.
+- `Windows`: commands actually executed on Windows.
 
 Never promote a PASS from one boundary to a stronger one. A green command is evidence
 only for the revision and environment where it ran.
+
+For v0.3, deterministic fake extraction/vectors plus real local SQLite/filesystem
+fixtures are offline/local orchestration evidence only. They do not prove live
+OCR/caption/visual quality, installed artifacts, a real vault, Windows, or an
+external runtime. Installed-wheel imports are mandatory for compatibility surfaces;
+source-tree imports alone are insufficient.
+
+## v0.3 contract-plan gates
+
+- Core boundary: standalone/copy import, forbidden import/identifier scan, and no
+  reverse `mdrack_core -> mdrack` edge.
+- Compatibility: exact CLI envelope and DTO key/alias/rank/nullability/locator
+  tests, CLI/engine parity, importer inventory, and installed-wheel imports from
+  `docs/compatibility/v0.3-compatibility-registry.md`.
+- Storage generations: expected migration manifest, fresh/populated migration,
+  non-ready fail-closed states, candidate interruption, atomic pointer switch,
+  reader old/new visibility, rollback, and separate cleanup authorization.
+- Adapter contracts: the same memory and SQLite suite for replace/read/delete,
+  injected failure atomicity, filters before limits, vector spaces/metrics,
+  facets/hash, stable ordering, and no internal IDs.
+- Markdown policy: full parser/chunker/indexing/storage removal oracle,
+  filesystem spy, source hashes, stable IDs, and production-symbol scan.
+- Privacy: scan logs, stdout, stderr, diagnostics, and eval/support/release JSON for
+  supplied query/content/path/root/endpoint/vector/metadata/facet/exception sentinels
+  across success, empty, degradation, failure, and cleanup branches.
+- Release claims: separately record fake/offline, local components, installed
+  package, real source, live external, and Windows outcomes plus explicit non-claims.

@@ -1,5 +1,5 @@
 ---
-applyTo: "src/mdrack/**/*.py"
+applyTo: "src/**/*.py"
 name: "ARCH.System"
 description: "When to use: architecture, module boundaries, dependency direction, public CLI/engine surfaces, parser/chunker or retrieval composition."
 ---
@@ -43,6 +43,31 @@ explicitly changes that architecture.
 - Production reranking is unsupported; non-null reranker injection must fail closed.
 - Public APIs prefer logical IDs and `SourceLocator`; internal SQLite record IDs are not new public contracts.
 
+## Approved v0.3 transition contract
+
+- The approved reusable boundary is a separate `src/mdrack_core/` import root in
+  the existing distribution. Until its reviewed implementation lands, current
+  `mdrack` behavior remains authoritative.
+- `mdrack_core` is stdlib-only and must not import `mdrack`, Click, HTTP, SQLite,
+  Markdown/parser, provider/model, filesystem, or network code.
+- Current Markdown IR, `PreparedFile`, `SourceLocator`, `EmbeddingProfile`, and
+  public retrieval DTOs remain app compatibility types; do not alias them as core records.
+- App/source producers own deterministic logical-ID generation. Core validates
+  caller-supplied IDs, uniqueness, batch ownership, and graph relationships only.
+- Freeze complete core domain/locator/error/export, catalog/search port, and shared
+  observability surfaces before retrieval and indexing implementation lanes diverge.
+- Exactly one production owner exists for resource validation, weighted RRF,
+  branch grouping, query-vector preparation, ID generation, compatibility mapping,
+  migration identity, and active-store switching. Compatibility wrappers delegate.
+- Query and index providers remain app-side and pass ready vectors plus explicit
+  embedding-space identity to core.
+- Legacy public/import surfaces survive only according to
+  `docs/compatibility/v0.3-compatibility-registry.md`; removal requires its exact
+  importer, parity, and installed-package oracles.
+- Markdown image syntax and explicit direct-image ingestion are separate product
+  paths. Markdown may project alt/textual alias once as prose but must not create or
+  inspect image resources; direct image ingestion is explicit app behavior.
+
 ## Explicit non-goals
 
 Do not add a GUI, web server, MCP server, specialized vector database, cloud
@@ -56,6 +81,8 @@ approved architecture/specification change.
 3. Keep provider/database specifics behind ports.
 4. Update current architecture/contracts and ADRs when a boundary or limitation changes.
 5. Run the gates in `TEST.quality-gates.instructions.md`.
+6. For v0.3 work, follow ADR-0002 and the audited phase/ownership graph; return to
+   the frozen contract owner if a downstream slice needs to change a shared surface.
 
 ## Review questions
 

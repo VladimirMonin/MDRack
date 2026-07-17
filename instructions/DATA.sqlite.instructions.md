@@ -20,6 +20,9 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 - Apply each migration atomically with its `schema_migrations` record.
 - Bump documented schema state and add migration notes whenever a migration is added.
 - Verify actual foreign-key actions from SQL; do not infer `CASCADE` from model relationships.
+- Before adding a new expected migration, freeze and enforce a compiled expected
+  schema version plus the exact ordered migration manifest/digest. Directory
+  contiguity alone is not package identity.
 
 ## Current persistence responsibilities
 
@@ -33,6 +36,34 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 
 Future migrations extend this ledger; this instruction must be updated when the
 current schema advances.
+
+## Approved v0.3 generation and schema preconditions
+
+- Build a v0.3 resource index in a separate candidate database/store generation,
+  never in the active v0.2 file. A v0.2 build must never be asked to open `0007`.
+- Schema version and store readiness are separate. Persist generation identity and
+  fail-closed states `legacy_only`, `rebuild_required`, `building`, `ready`, and
+  `failed`; only `ready` may serve production search/write.
+- Verify and close/checkpoint/fsync the candidate, then atomically switch an
+  app-owned active-generation pointer under one-writer quiescence. Readers see old
+  or new only. Rollback switches to the untouched retained v0.2 generation.
+- Retain the complete old generation read-only for at least one compatibility
+  release. Cleanup is a separate explicitly authorized destructive action.
+- No `0007` SQL may be authored before an independent schema review maps every
+  frozen core field/invariant to exact DDL, FK action, CHECK, UNIQUE/index,
+  transaction, and contract test.
+- The create-only `0007` must not mutate/backfill legacy rows or drop legacy tables.
+- The schema review must settle canonical source identity/rename semantics,
+  same-resource graph constraints, explicit delete actions, ordinal/range/type
+  checks, NULL-safe facet deduplication, orphan policy, vector codec/finite values/
+  dimensions/metrics/fingerprint behavior, and indexes for pre-limit filters.
+- `replace_resource()` initially owns one serialized SQLite transaction and rejects
+  an active caller transaction. Validation, provider calls, and filesystem work
+  finish before it opens; graph/FTS/vector/facet checks commit together; any failure
+  preserves the prior complete graph.
+- Candidate path/ID, lock and busy behavior, WAL/SHM, reader lifecycle,
+  checkpoint/fsync, atomic switch, interruption recovery, retention, and cleanup
+  semantics must be tested before active cutover.
 
 ## Transaction and integrity invariants
 
@@ -61,3 +92,5 @@ current schema advances.
 3. Add migration/repository/round-trip and failure-atomicity tests.
 4. Update current schema/architecture documentation and this migration ledger.
 5. Run the full quality gates and `git diff --check`.
+6. For v0.3, require contract-freeze PASS before data design, schema-review PASS
+   before SQL, and executable generation rollback review before active cutover.
