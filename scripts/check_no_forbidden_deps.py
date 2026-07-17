@@ -5,6 +5,11 @@ import sys
 import tomllib
 from pathlib import Path
 
+try:
+    from scripts.check_core_boundaries import check_repository as check_core_repository
+except ModuleNotFoundError:  # Direct execution puts scripts/ first on sys.path.
+    from check_core_boundaries import check_repository as check_core_repository
+
 FORBIDDEN = {
     "torch", "transformers", "sentence-transformers",
     "qdrant-client", "chromadb", "lancedb",
@@ -54,8 +59,13 @@ def check_imports() -> list[str]:
                         violations.append(f"{py_file}: forbidden import '{node.module}'")
     return violations
 
+def check_core_boundaries() -> list[str]:
+    """Include the mandatory provider/storage-neutral core boundary gate."""
+    return [f"core boundary: {violation.render()}" for violation in check_core_repository()]
+
+
 def main() -> int:
-    violations = check_pyproject() + check_imports()
+    violations = check_pyproject() + check_imports() + check_core_boundaries()
     if violations:
         print("FORBIDDEN DEPENDENCIES FOUND:")
         for v in violations:

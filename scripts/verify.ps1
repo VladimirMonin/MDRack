@@ -7,4 +7,5 @@ uv sync --all-extras
 uv run pytest
 uv run ruff check src/ tests/
 uv run python scripts/check_no_forbidden_deps.py
+uv run python scripts/check_core_boundaries.py
 git diff --check

@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "evidence_boundary": "unit/offline plus named local SQLite/filesystem components",
+  "provenance": {
+    "captured_from_revision": "88f2e40fc62c1b457b34ba0d896844f9d3bbe061",
+    "captured_product_version": "0.2.0",
+    "source_fixture": "tests/fixtures/baseline_corpus",
+    "query_fixture": "tests/retrieval_eval/baseline_queries.yaml",
+    "markdown_sha256": {
+      "indexing-ru.md": "30320ec082ee64651e358ea6fa54f98858be32c2c9724d1c37fff72775e53256",
+      "privacy-mixed.md": "f3b7410f5b1c767450896fc2bf96d33936e0b752c1b33cd0d16dc137f322e3f3",
+      "retrieval-en.md": "f7b770216ec115b61fac0f75eb3544cc2efa8c7fc2cfdc340dd556eeac79ec68"
+    },
+    "note": "Public synthetic v0.2 inputs copied byte-for-byte for the v0.3 compatibility baseline."
+  },
+  "retrieval_metrics": {
+    "counts": {
+      "files": 3,
+      "blocks": 20,
+      "chunks": 12,
+      "errors": 0
+    },
+    "queries": [
+      {
+        "query": "agent previous next chunks",
+        "k": 5,
+        "expected_path": "retrieval-en.md",
+        "expected_heading_path": "[\"Agent Retrieval Guide\", \"Neighbor context\"]",
+        "retrieved_count": 1,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.2
+      },
+      {
+        "query": "одинаковый отпечаток корпуса пути сортируются",
+        "k": 5,
+        "expected_path": "indexing-ru.md",
+        "expected_heading_path": "[\"Детерминированная индексация\", \"Повторяемость\"]",
+        "retrieved_count": 1,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.2
+      },
+      {
+        "query": "raw queries absolute paths database UUIDs",
+        "k": 5,
+        "expected_path": "privacy-mixed.md",
+        "expected_heading_path": "[\"Mixed Reference\", \"Privacy boundary\"]",
+        "retrieved_count": 1,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.2
+      }
+    ]
+  },
+  "compatibility": {
+    "success_envelope": {
+      "ok": true,
+      "data": {"count": 1},
+      "meta": {"command": "scan"}
+    },
+    "error_envelope": {
+      "ok": false,
+      "error": {
+        "message": "failed",
+        "code": "E_TEST",
+        "details": {"count": 1}
+      },
+      "meta": {"command": "scan"}
+    },
+    "hybrid_result": {
+      "query": "public baseline query",
+      "mode": "hybrid",
+      "results": [
+        {
+          "logical_id": "shared",
+          "chunk_id": "shared",
+          "score": 0.03252247488101534,
+          "text_score": 0.9,
+          "semantic_score": 0.85,
+          "text_rank": 1,
+          "semantic_rank": 2,
+          "rrf_rank": 1,
+          "rrf_score": 0.03252247488101534,
+          "rerank_rank": null,
+          "rerank_score": null,
+          "content_preview": "public preview shared",
+          "snippet": "public preview shared",
+          "file": "markdown/shared.md",
+          "section_title": "Shared",
+          "heading_path": ["Baseline", "shared"],
+          "source_locator": {
+            "root_id": "baseline",
+            "relative_path": "markdown/shared.md",
+            "start_line": 2,
+            "end_line": 4,
+            "start_offset": 10,
+            "end_offset": 30,
+            "heading_path": ["Baseline", "shared"],
+            "block_kind": "paragraph",
+            "chunk_kind": "structural",
+            "block_logical_id": "block_shared",
+            "chunk_logical_id": "shared"
+          }
+        },
+        {
+          "logical_id": "semantic",
+          "chunk_id": "semantic",
+          "score": 0.01639344262295082,
+          "text_score": null,
+          "semantic_score": 0.95,
+          "text_rank": null,
+          "semantic_rank": 1,
+          "rrf_rank": 2,
+          "rrf_score": 0.01639344262295082,
+          "rerank_rank": null,
+          "rerank_score": null,
+          "content_preview": "public preview semantic",
+          "snippet": "public preview semantic",
+          "file": "markdown/semantic.md",
+          "section_title": "Semantic",
+          "heading_path": ["Baseline", "semantic"],
+          "source_locator": {
+            "root_id": "baseline",
+            "relative_path": "markdown/semantic.md",
+            "start_line": 2,
+            "end_line": 4,
+            "start_offset": 10,
+            "end_offset": 30,
+            "heading_path": ["Baseline", "semantic"],
+            "block_kind": "paragraph",
+            "chunk_kind": "structural",
+            "block_logical_id": "block_semantic",
+            "chunk_logical_id": "semantic"
+          }
+        },
+        {
+          "logical_id": "text",
+          "chunk_id": "text",
+          "score": 0.016129032258064516,
+          "text_score": 0.8,
+          "semantic_score": null,
+          "text_rank": 2,
+          "semantic_rank": null,
+          "rrf_rank": 3,
+          "rrf_score": 0.016129032258064516,
+          "rerank_rank": null,
+          "rerank_score": null,
+          "content_preview": "public preview text",
+          "snippet": "public preview text",
+          "file": "markdown/text.md",
+          "section_title": "Text",
+          "heading_path": ["Baseline", "text"],
+          "source_locator": {
+            "root_id": "baseline",
+            "relative_path": "markdown/text.md",
+            "start_line": 2,
+            "end_line": 4,
+            "start_offset": 10,
+            "end_offset": 30,
+            "heading_path": ["Baseline", "text"],
+            "block_kind": "paragraph",
+            "chunk_kind": "structural",
+            "block_logical_id": "block_text",
+            "chunk_logical_id": "text"
+          }
+        }
+      ],
+      "total_count": 3,
+      "degraded": false,
+      "degraded_reason": null
+    }
+  },
+  "privacy": {
+    "safe_report": {
+      "schema_version": 1,
+      "summary": {"files_count": 3, "chunks_count": 12},
+      "corpus_ref": "sha256:public-corpus",
+      "query_set_ref": "sha256:public-query-set"
+    },
+    "forbidden_values": [
+      "PRIVATE_QUERY_SENTINEL",
+      "PRIVATE_MARKDOWN_SENTINEL",
+      "PRIVATE_VECTOR_SENTINEL"
+    ],
+    "leak_categories": ["absolute_path", "forbidden_value", "raw_url"]
+  }
+}
