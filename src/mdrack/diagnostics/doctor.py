@@ -5,8 +5,9 @@ from __future__ import annotations
 import dataclasses
 import re
 import sqlite3
+from pathlib import Path
 
-from mdrack.diagnostics.integrity import get_store_status
+from mdrack.diagnostics.integrity import get_generation_status, get_store_status
 from mdrack.embeddings.hashing import hash_embedding_text
 from mdrack.storage.sqlite.migrations import get_applied_migrations, get_migrations_dir
 
@@ -62,6 +63,7 @@ def run_doctor(
     expected_model: str | None = None,
     expected_dimensions: int | None = None,
     expected_endpoint: str | None = None,
+    store_dir: Path | None = None,
 ) -> DoctorReport:
     """Run all diagnostic checks on the knowledge store.
 
@@ -79,14 +81,75 @@ def run_doctor(
     """
     findings: list[DoctorFinding] = []
 
+    if store_dir is not None:
+        generation = get_generation_status(store_dir)
+        generation_state = str(generation["generation_state"])
+        pointer_status = str(generation["generation_pointer_status"])
+        if pointer_status == "invalid":
+            findings.append(
+                DoctorFinding(
+                    severity="error",
+                    code="GENERATION_POINTER_INVALID",
+                    message="The active store generation pointer is invalid",
+                    details={"generation_state": "failed", "reason_code": "pointer_invalid"},
+                )
+            )
+        elif pointer_status == "missing" and generation["generation_metadata_count"]:
+            findings.append(
+                DoctorFinding(
+                    severity="error",
+                    code="GENERATION_POINTER_MISSING",
+                    message="The active store generation pointer is missing",
+                    details={"generation_state": "failed", "reason_code": "pointer_missing"},
+                )
+            )
+        elif generation_state == "building":
+            findings.append(
+                DoctorFinding(
+                    severity="warning",
+                    code="GENERATION_BUILDING",
+                    message="A store generation rebuild is incomplete",
+                    details={
+                        "generation_state": generation_state,
+                        "count": generation["generation_building_count"],
+                    },
+                )
+            )
+        elif generation_state == "failed":
+            findings.append(
+                DoctorFinding(
+                    severity="warning",
+                    code="GENERATION_FAILED",
+                    message="A store generation rebuild failed",
+                    details={
+                        "generation_state": generation_state,
+                        "count": generation["generation_failed_count"],
+                    },
+                )
+            )
+        else:
+            findings.append(
+                DoctorFinding(
+                    severity="info",
+                    code="GENERATION_READY" if generation_state == "ready" else "GENERATION_LEGACY",
+                    message=(
+                        "The active store generation is ready"
+                        if generation_state == "ready"
+                        else "The active store uses the legacy contract"
+                    ),
+                    details={"generation_state": generation_state},
+                )
+            )
+
     try:
         status = get_store_status(conn, profile_name=expected_profile)
-    except Exception as exc:
+    except Exception:
         findings.append(
             DoctorFinding(
                 severity="error",
                 code="STATUS_ERROR",
-                message=f"Failed to get store status: {exc}",
+                message="Store status could not be read",
+                details={"reason_code": "status_unavailable"},
             )
         )
         return DoctorReport(findings=findings, ok=False)
@@ -365,13 +428,13 @@ def run_doctor(
                     },
                 )
             )
-    except Exception as exc:
+    except Exception:
         findings.append(
             DoctorFinding(
                 severity="error",
                 code="SCHEMA_CHECK_ERROR",
-                message=f"Failed to check schema migrations: {exc}",
-                details={},
+                message="Schema migrations could not be checked",
+                details={"reason_code": "schema_check_failed"},
             )
         )
 

@@ -212,6 +212,12 @@ def status(ctx: click.Context) -> None:
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
     db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
 
+    store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
+    from mdrack.diagnostics.integrity import get_generation_status
+
+    generation_status = get_generation_status(store_dir)
+    generation_projection = {"generation_state": generation_status["generation_state"]}
+
     if not db_path.is_file():
         payload = envelope_success(
             {
@@ -226,6 +232,7 @@ def status(ctx: click.Context) -> None:
                 "profile_dimensions": None,
                 "profile_endpoint": None,
                 "schema_version": None,
+                **generation_projection,
             },
             command=cmd,
         )
@@ -240,6 +247,8 @@ def status(ctx: click.Context) -> None:
         status_data = get_store_status(conn)
     finally:
         conn.close()
+
+    status_data.update(generation_projection)
 
     if config is not None:
         status_data.update(
@@ -263,6 +272,7 @@ def doctor(ctx: click.Context) -> None:
     cmd = _command_name(ctx)
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
     db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
+    store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
 
     from mdrack.diagnostics.doctor import DoctorFinding, DoctorReport, report_to_dict, run_doctor
     from mdrack.storage.sqlite.connection import get_connection
@@ -273,11 +283,8 @@ def doctor(ctx: click.Context) -> None:
                 DoctorFinding(
                     severity="error",
                     code="DATABASE_NOT_FOUND",
-                    message=(
-                        f"Knowledge store database not found at {db_path}. "
-                        "Run 'mdrack init' and 'mdrack scan' first."
-                    ),
-                    details={"db_path": str(db_path)},
+                    message="Knowledge store database was not found",
+                    details={"reason_code": "database_missing"},
                 )
             ],
             ok=False,
@@ -293,6 +300,7 @@ def doctor(ctx: click.Context) -> None:
             expected_model=config.embedding.model if config is not None else None,
             expected_dimensions=config.embedding.dimensions if config is not None else None,
             expected_endpoint=config.embedding.endpoint if config is not None else None,
+            store_dir=store_dir,
         )
     finally:
         conn.close()

@@ -328,3 +328,49 @@ def test_pointer_payload_contains_only_public_contract_fields() -> None:
     ).to_bytes()
 
     assert set(json.loads(payload)) == {"version", "generation_id", "contract_kind"}
+
+
+def test_generation_metadata_serialization_is_canonical_and_round_trips() -> None:
+    generation = _generation()
+
+    payload = generation.to_bytes()
+
+    assert StoreGeneration.from_bytes(payload) == generation
+    assert payload == json.dumps(
+        json.loads(payload),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    assert set(json.loads(payload)) == {
+        "contract_kind",
+        "created_at",
+        "failure_reason_code",
+        "fingerprints",
+        "generation_id",
+        "migration_manifest_digest",
+        "retention",
+        "schema_version",
+        "state",
+        "verified_at",
+    }
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"not-json",
+        b"{}",
+        b'{"generation_id":"../private"}',
+    ],
+)
+def test_generation_metadata_rejects_corrupt_noncanonical_and_private_payloads(
+    payload: bytes,
+) -> None:
+    with pytest.raises(StoreGenerationContractError):
+        StoreGeneration.from_bytes(payload)
+
+    canonical = _generation().to_bytes()
+    noncanonical = json.dumps(json.loads(canonical), indent=2).encode("utf-8")
+    with pytest.raises(StoreGenerationContractError, match="not canonical"):
+        StoreGeneration.from_bytes(noncanonical)

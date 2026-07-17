@@ -128,6 +128,88 @@ class StoreGeneration:
         elif self.failure_reason_code is not None:
             raise StoreGenerationContractError("failure reason code is valid only for failed generation")
 
+    def to_bytes(self) -> bytes:
+        """Return canonical UTF-8 JSON for durable app-owned metadata."""
+        return json.dumps(
+            {
+                "contract_kind": self.contract_kind.value,
+                "created_at": self.created_at,
+                "failure_reason_code": self.failure_reason_code,
+                "fingerprints": [
+                    {"name": item.name, "value": item.value} for item in self.fingerprints
+                ],
+                "generation_id": self.generation_id,
+                "migration_manifest_digest": self.migration_manifest_digest,
+                "retention": {
+                    "mode": self.retention.mode.value,
+                    "retain_through_release": self.retention.retain_through_release,
+                },
+                "schema_version": self.schema_version,
+                "state": self.state.value,
+                "verified_at": self.verified_at,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+
+    @classmethod
+    def from_bytes(cls, payload: bytes) -> StoreGeneration:
+        """Parse one exact canonical metadata record without filesystem access."""
+        if not isinstance(payload, bytes):
+            raise StoreGenerationContractError("generation metadata payload must be bytes")
+        try:
+            value = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise StoreGenerationContractError("generation metadata payload is invalid") from exc
+        expected_fields = {
+            "contract_kind",
+            "created_at",
+            "failure_reason_code",
+            "fingerprints",
+            "generation_id",
+            "migration_manifest_digest",
+            "retention",
+            "schema_version",
+            "state",
+            "verified_at",
+        }
+        if not isinstance(value, dict) or set(value) != expected_fields:
+            raise StoreGenerationContractError("generation metadata fields are invalid")
+        fingerprints = value["fingerprints"]
+        retention = value["retention"]
+        if (
+            not isinstance(fingerprints, list)
+            or any(not isinstance(item, dict) or set(item) != {"name", "value"} for item in fingerprints)
+            or not isinstance(retention, dict)
+            or set(retention) != {"mode", "retain_through_release"}
+        ):
+            raise StoreGenerationContractError("generation metadata fields are invalid")
+        try:
+            generation = cls(
+                generation_id=value["generation_id"],
+                contract_kind=GenerationContractKind(value["contract_kind"]),
+                migration_manifest_digest=value["migration_manifest_digest"],
+                schema_version=value["schema_version"],
+                state=GenerationState(value["state"]),
+                created_at=value["created_at"],
+                fingerprints=tuple(
+                    GenerationFingerprint(item["name"], item["value"])
+                    for item in fingerprints
+                ),
+                verified_at=value["verified_at"],
+                failure_reason_code=value["failure_reason_code"],
+                retention=GenerationRetention(
+                    mode=RetentionMode(retention["mode"]),
+                    retain_through_release=retention["retain_through_release"],
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise StoreGenerationContractError("generation metadata payload is invalid") from exc
+        if generation.to_bytes() != payload:
+            raise StoreGenerationContractError("generation metadata payload is not canonical")
+        return generation
+
 
 @dataclass(frozen=True)
 class ActiveGenerationPointer:

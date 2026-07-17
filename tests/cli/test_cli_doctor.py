@@ -5,8 +5,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
+from mdrack.adapters.sqlite.generation_runtime import SQLiteGenerationRuntime
+from mdrack.application.generation_manager import StoreGenerationManager
+from mdrack.application.store_generations import (
+    GenerationContractKind,
+    GenerationRetention,
+    GenerationState,
+    RetentionMode,
+    StoreGeneration,
+)
 from mdrack.cli import main
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations
@@ -68,6 +78,8 @@ def test_doctor_reports_missing_database_as_structured_json(tmp_path: Path) -> N
     assert payload["data"]["ok"] is False
     assert payload["data"]["summary"]["errors"] == 1
     assert payload["data"]["findings"][0]["code"] == "DATABASE_NOT_FOUND"
+    assert set(payload["data"]["findings"][0]["details"]) == {"reason_code"}
+    assert str(tmp_path) not in result.output
 
 
 def test_doctor_reports_seeded_fts_inconsistency(tmp_path: Path) -> None:
@@ -128,3 +140,77 @@ def test_doctor_reports_profile_config_mismatch(tmp_path: Path) -> None:
         "expected_dimensions": 12,
         "actual_dimensions": 8,
     }
+
+
+def test_doctor_reports_corrupt_generation_pointer_with_safe_fixed_fields(tmp_path: Path) -> None:
+    _setup_db(tmp_path)
+    pointer = tmp_path / ".mdrack" / "active-generation.json"
+    pointer.write_text("PRIVATE_PATH_VECTOR_EXCEPTION_SENTINEL", encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["--root", str(tmp_path), "doctor"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    findings = {finding["code"]: finding for finding in payload["data"]["findings"]}
+    assert findings["GENERATION_POINTER_INVALID"] == {
+        "severity": "error",
+        "code": "GENERATION_POINTER_INVALID",
+        "message": "The active store generation pointer is invalid",
+        "details": {"generation_state": "failed", "reason_code": "pointer_invalid"},
+    }
+    assert "PRIVATE_PATH_VECTOR_EXCEPTION_SENTINEL" not in result.output
+    assert str(tmp_path) not in result.output
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        GenerationState.LEGACY_ONLY,
+        GenerationState.BUILDING,
+        GenerationState.READY,
+        GenerationState.FAILED,
+    ],
+)
+def test_doctor_reports_missing_pointer_with_any_generation_metadata_as_error(
+    tmp_path: Path,
+    state: GenerationState,
+) -> None:
+    _setup_db(tmp_path)
+    manager = StoreGenerationManager(tmp_path / ".mdrack", runtime=SQLiteGenerationRuntime())
+    manager.generations_dir.mkdir(parents=True, exist_ok=True)
+    legacy = state is GenerationState.LEGACY_ONLY
+    generation = StoreGeneration(
+        generation_id=f"private-{state.value}",
+        contract_kind=(
+            GenerationContractKind.LEGACY_V0_2
+            if legacy
+            else GenerationContractKind.RESOURCE_CORE_V1
+        ),
+        migration_manifest_digest="a" * 64,
+        schema_version="0006" if legacy else "0007",
+        state=state,
+        created_at="2026-07-18T00:00:00Z",
+        verified_at="2026-07-18T00:00:00Z" if state is GenerationState.READY else None,
+        failure_reason_code="rebuild_failed" if state is GenerationState.FAILED else None,
+        retention=(
+            GenerationRetention(RetentionMode.RETAINED_READ_ONLY, "v0.3")
+            if legacy
+            else GenerationRetention()
+        ),
+    )
+    manager.metadata_path(generation.generation_id).write_bytes(generation.to_bytes())
+
+    result = CliRunner().invoke(main, ["--root", str(tmp_path), "doctor"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    findings = {finding["code"]: finding for finding in payload["data"]["findings"]}
+    assert findings["GENERATION_POINTER_MISSING"] == {
+        "severity": "error",
+        "code": "GENERATION_POINTER_MISSING",
+        "message": "The active store generation pointer is missing",
+        "details": {"generation_state": "failed", "reason_code": "pointer_missing"},
+    }
+    assert payload["data"]["ok"] is False
+    assert str(tmp_path) not in result.output
+    assert generation.generation_id not in result.output
