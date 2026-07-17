@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 _MIGRATION_PATTERN = re.compile(r"^(\d{4})_(.+)\.sql$")
 
-EXPECTED_MIGRATION_VERSION = "0006"
+ACTIVE_MIGRATION_VERSION = "0006"
+EXPECTED_MIGRATION_VERSION = "0007"
 EXPECTED_MIGRATION_MANIFEST: tuple[tuple[str, str], ...] = (
     ("0000_schema_migrations.sql", "9ae14a55be5ba6c6b6684e93173ab2d1ddb1cb498ef49b419d24e45ba389dc92"),
     ("0001_initial.sql", "878a7a644eec78b94eb0e9fc74f2285375eeeb52429a202048038c0e441fe786"),
@@ -22,8 +23,9 @@ EXPECTED_MIGRATION_MANIFEST: tuple[tuple[str, str], ...] = (
     ("0004_embedding_profiles.sql", "379b66e472f664b552689f866c0093151b181b07f000953c754a2bc0eee07937"),
     ("0005_assets.sql", "cc450db00514676ca328ded3c942afcb962a9b60c6fc6370b1890a9b70ec2400"),
     ("0006_complete_provenance.sql", "06aa00f1553285e51b96e2d5e0d331fe773703e737134ccb6e8a2dc835d5a69e"),
+    ("0007_resource_core.sql", "a4c792db7d49530c35f7b70486a5ed05143ed3dea291f33e78590ab13933613a"),
 )
-EXPECTED_MIGRATION_MANIFEST_DIGEST = "bd33d44185be1edb9bca9c2d82eed3b013f5ba8425b3d8ad98f0cf69c1e6a700"
+EXPECTED_MIGRATION_MANIFEST_DIGEST = "fc15536cd2730fa7fe105436bf7cc6a48239387f1f6153baae0be800e6bda727"
 
 
 class MigrationPlanError(RuntimeError):
@@ -61,7 +63,11 @@ def _migration_plan(migrations_dir: Path) -> list[tuple[str, Path]]:
     return plan
 
 
-def _validated_compiled_plan(migrations_dir: Path) -> list[tuple[str, Path, str]]:
+def _validated_compiled_plan(
+    migrations_dir: Path,
+    *,
+    target_version: str,
+) -> list[tuple[str, Path, str]]:
     """Validate and freeze the exact compiled migration contents before SQL access."""
     plan = _migration_plan(migrations_dir)
     expected_names = [filename for filename, _ in EXPECTED_MIGRATION_MANIFEST]
@@ -81,7 +87,10 @@ def _validated_compiled_plan(migrations_dir: Path) -> list[tuple[str, Path, str]
         raise MigrationPlanError("migration package does not match compiled manifest digest")
     if plan[-1][0] != EXPECTED_MIGRATION_VERSION:
         raise MigrationPlanError("compiled migration version does not match manifest")
-    return compiled_plan
+    versions = [version for version, _path, _sql in compiled_plan]
+    if target_version not in versions:
+        raise MigrationPlanError("target migration version is unavailable")
+    return [item for item in compiled_plan if item[0] <= target_version]
 
 
 def get_migrations_dir() -> Path:
@@ -116,7 +125,10 @@ def get_applied_migrations(conn: sqlite3.Connection) -> set[str]:
     return {row["version"] for row in cursor.fetchall()}
 
 
-def _validated_applied_migrations(conn: sqlite3.Connection) -> set[str]:
+def _validated_applied_migrations(
+    conn: sqlite3.Connection,
+    available_versions: list[str],
+) -> set[str]:
     cursor = conn.execute("SELECT version FROM schema_migrations")
     versions = [row["version"] for row in cursor.fetchall()]
     if any(not isinstance(version, str) for version in versions):
@@ -124,15 +136,19 @@ def _validated_applied_migrations(conn: sqlite3.Connection) -> set[str]:
     if len(versions) != len(set(versions)):
         raise MigrationPlanError("database migration ledger contains duplicate versions")
 
-    available = [f"{index:04d}" for index in range(len(EXPECTED_MIGRATION_MANIFEST))]
     ordered = sorted(versions)
-    if ordered != available[: len(ordered)]:
+    if ordered != available_versions[: len(ordered)]:
         raise MigrationPlanError("database migration ledger is unknown or non-contiguous")
     return set(versions)
 
 
-def apply_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
-    """Validate and apply the exact compiled migration package in version order.
+def _apply_migrations(
+    conn: sqlite3.Connection,
+    migrations_dir: Path,
+    *,
+    target_version: str,
+) -> None:
+    """Validate and apply one bounded prefix of the compiled migration package.
 
     Package identity is validated before the connection is touched. Applied ledger
     versions must form a unique contiguous prefix of the compiled history.
@@ -141,9 +157,10 @@ def apply_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
         conn: An open SQLite connection.
         migrations_dir: Directory containing the compiled .sql migration package.
     """
-    plan = _validated_compiled_plan(migrations_dir)
+    plan = _validated_compiled_plan(migrations_dir, target_version=target_version)
     _ensure_schema_migrations(conn)
-    applied = _validated_applied_migrations(conn)
+    available_versions = [version for version, _path, _sql in plan]
+    applied = _validated_applied_migrations(conn, available_versions)
     available = {version for version, _, _ in plan}
     if applied - available:
         raise MigrationPlanError("database contains migration versions unavailable to this build")
@@ -167,3 +184,17 @@ def apply_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
             conn.rollback()
             logger.exception("Migration %s failed, rolled back", version)
             raise
+
+
+def apply_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
+    """Apply only the active v0.2 migration history through exact version 0006.
+
+    The package may contain reviewed candidate migrations, but unchanged active
+    composition must neither apply nor accept them before generation cutover.
+    """
+    _apply_migrations(conn, migrations_dir, target_version=ACTIVE_MIGRATION_VERSION)
+
+
+def apply_candidate_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
+    """Apply the full reviewed schema only to an explicitly bound candidate DB."""
+    _apply_migrations(conn, migrations_dir, target_version=EXPECTED_MIGRATION_VERSION)

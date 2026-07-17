@@ -8,21 +8,24 @@ import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
 
 import mdrack.storage.sqlite.migrations as migration_module
-from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
+from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage, create_sqlite_index_storage
 from mdrack.application.retrieval import RetrievalService
 from mdrack.cli import main
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import (
+    ACTIVE_MIGRATION_VERSION,
     EXPECTED_MIGRATION_MANIFEST,
     EXPECTED_MIGRATION_MANIFEST_DIGEST,
     EXPECTED_MIGRATION_VERSION,
     MigrationPlanError,
     _framed_manifest_digest,
+    apply_candidate_migrations,
     apply_migrations,
     get_applied_migrations,
     get_migrations_dir,
@@ -80,6 +83,8 @@ def test_migrations_apply_to_fresh_db() -> None:
         assert "0004" in applied
         assert "0005" in applied
         assert "0006" in applied
+        assert "0007" not in applied
+        assert max(applied) == ACTIVE_MIGRATION_VERSION == "0006"
         chunk_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(chunks)").fetchall()
         }
@@ -87,6 +92,67 @@ def test_migrations_apply_to_fresh_db() -> None:
     finally:
         conn.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_candidate_migrations_reach_exact_0007_and_active_runner_rejects_it() -> None:
+    conn, db_path = _fresh_db()
+    try:
+        apply_candidate_migrations(conn, MIGRATIONS_DIR)
+        assert sorted(get_applied_migrations(conn)) == [f"{index:04d}" for index in range(8)]
+        assert conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='core_resources'"
+        ).fetchone()[0] == 1
+        with pytest.raises(MigrationPlanError, match="unknown or non-contiguous"):
+            apply_migrations(conn, MIGRATIONS_DIR)
+    finally:
+        conn.close()
+        db_path.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize("active_path", ["composition", "init", "rebuild-fts"])
+def test_unchanged_active_paths_keep_populated_v02_store_at_0006(
+    tmp_path: Path,
+    active_path: str,
+) -> None:
+    root = tmp_path / active_path
+    db_path = root / ".mdrack" / "knowledge.db"
+    db_path.parent.mkdir(parents=True)
+    connection = get_connection(db_path)
+    try:
+        _apply_migration_prefix(
+            connection,
+            tuple(name for name, _digest in EXPECTED_MIGRATION_MANIFEST if name[:4] <= "0006"),
+        )
+        connection.execute(
+            "INSERT INTO files(id, relative_path, source_hash, indexed_at) VALUES(?,?,?,?)",
+            ("legacy", "legacy.md", "hash", "2026-01-01"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    if active_path == "composition":
+        storage = create_sqlite_index_storage(
+            root,
+            SimpleNamespace(paths=SimpleNamespace(store=".mdrack")),
+        )
+        storage.close()
+    else:
+        command = ["--root", str(root), "init"]
+        if active_path == "rebuild-fts":
+            command = ["--root", str(root), "rebuild", "fts"]
+        result = CliRunner().invoke(main, command)
+        assert result.exit_code == 0, result.output
+
+    check = get_connection(db_path)
+    try:
+        assert sorted(get_applied_migrations(check)) == [f"{index:04d}" for index in range(7)]
+        assert check.execute("SELECT COUNT(*) FROM files WHERE id='legacy'").fetchone()[0] == 1
+        assert check.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='core_resources'"
+        ).fetchone()[0] == 0
+    finally:
+        check.close()
 
 
 def test_migrations_are_idempotent() -> None:
@@ -128,6 +194,7 @@ def test_schema_migrations_table_populated() -> None:
         assert row_0001["version"] == "0001"
         assert row_0001["applied_at"] is not None
         assert {"0000", "0001", "0002", "0003", "0004", "0005", "0006"} <= get_applied_migrations(conn)
+        assert "0007" not in get_applied_migrations(conn)
     finally:
         conn.close()
         db_path.unlink(missing_ok=True)
@@ -146,6 +213,7 @@ def test_get_migrations_dir_points_to_sql_files() -> None:
         "0004_embedding_profiles.sql",
         "0005_assets.sql",
         "0006_complete_provenance.sql",
+        "0007_resource_core.sql",
     ]
 
 
@@ -192,7 +260,11 @@ def test_0005_database_upgrades_with_defensible_public_provenance(tmp_path: Path
     try:
         _apply_migration_prefix(
             conn,
-            tuple(path.name for path in sorted(MIGRATIONS_DIR.glob("*.sql")) if not path.name.startswith("0006_")),
+            tuple(
+                path.name
+                for path in sorted(MIGRATIONS_DIR.glob("*.sql"))
+                if not path.name.startswith(("0006_", "0007_"))
+            ),
         )
         conn.execute(
             "INSERT INTO files "
@@ -285,12 +357,12 @@ def test_0005_database_upgrades_with_defensible_public_provenance(tmp_path: Path
 def test_compiled_migration_manifest_reproduces_exact_identity() -> None:
     entries = [(path.name, path.read_bytes()) for path in sorted(MIGRATIONS_DIR.glob("*.sql"))]
 
-    assert EXPECTED_MIGRATION_VERSION == "0006"
+    assert EXPECTED_MIGRATION_VERSION == "0007"
     assert [(name, hashlib.sha256(content).hexdigest()) for name, content in entries] == list(
         EXPECTED_MIGRATION_MANIFEST
     )
     assert _framed_manifest_digest(entries) == EXPECTED_MIGRATION_MANIFEST_DIGEST
-    assert EXPECTED_MIGRATION_MANIFEST_DIGEST == "bd33d44185be1edb9bca9c2d82eed3b013f5ba8425b3d8ad98f0cf69c1e6a700"
+    assert EXPECTED_MIGRATION_MANIFEST_DIGEST == "fc15536cd2730fa7fe105436bf7cc6a48239387f1f6153baae0be800e6bda727"
 
 
 def test_validated_pending_migration_failure_rolls_back_schema_and_ledger(
@@ -303,6 +375,7 @@ def test_validated_pending_migration_failure_rolls_back_schema_and_ledger(
     path.write_text("CREATE TABLE should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n", encoding="utf-8")
     content = path.read_bytes()
     monkeypatch.setattr(migration_module, "EXPECTED_MIGRATION_VERSION", "0000")
+    monkeypatch.setattr(migration_module, "ACTIVE_MIGRATION_VERSION", "0000")
     monkeypatch.setattr(
         migration_module,
         "EXPECTED_MIGRATION_MANIFEST",

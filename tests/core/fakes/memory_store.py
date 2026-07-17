@@ -1,19 +1,31 @@
 from __future__ import annotations
 
+import math
+
 from mdrack_core.domain import (
+    BranchExecutionError,
+    CatalogExecutionError,
+    EmbeddingSpaceRecord,
+    ErrorCategory,
+    LexicalBranch,
     PreparedResourceBatch,
+    RankedCandidate,
     ResourceRecord,
     SearchScope,
     SearchUnitRecord,
+    VectorBranch,
     VectorRecord,
 )
+from mdrack_core.domain.common import canonical_json
 
 
 class MemoryCatalog:
     """Deterministic test-only catalog implementing the frozen catalog ports."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, enforce_resource_contract: bool = False) -> None:
         self._batches: dict[str, PreparedResourceBatch] = {}
+        self._spaces: dict[str, EmbeddingSpaceRecord] = {}
+        self._enforce_resource_contract = enforce_resource_contract
         self.replace_calls: list[PreparedResourceBatch] = []
         self.delete_calls: list[str] = []
         self._replace_failure: BaseException | None = None
@@ -27,13 +39,41 @@ class MemoryCatalog:
 
     def replace_resource(self, batch: PreparedResourceBatch) -> None:
         self.replace_calls.append(batch)
-        candidate = dict(self._batches)
-        candidate[batch.resource.resource_id] = batch
         if self._replace_failure is not None:
             error = self._replace_failure
             self._replace_failure = None
             raise error
-        self._batches = candidate
+        try:
+            resource_id = batch.resource.resource_id
+            source_key = self._source_key(batch)
+            current = self._batches.get(resource_id)
+            if (
+                self._enforce_resource_contract
+                and current is not None
+                and self._source_key(current) != source_key
+            ):
+                raise ValueError("resource_id is bound to another source identity")
+            for other_id, other in self._batches.items():
+                if (
+                    self._enforce_resource_contract
+                    and other_id != resource_id
+                    and self._source_key(other) == source_key
+                ):
+                    raise ValueError("source identity is bound to another resource_id")
+            spaces = dict(self._spaces)
+            for space in batch.spaces:
+                existing = spaces.get(space.space_id)
+                if self._enforce_resource_contract and existing is not None and existing != space:
+                    raise ValueError("embedding space identity mismatch")
+                spaces[space.space_id] = space
+            candidate = dict(self._batches)
+            candidate[resource_id] = batch
+            self._batches = candidate
+            self._spaces = spaces
+        except CatalogExecutionError:
+            raise
+        except Exception:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
 
     def delete_resource(self, resource_id: str) -> None:
         self.delete_calls.append(resource_id)
@@ -72,7 +112,84 @@ class MemoryCatalog:
         return [
             batch.resource
             for batch in self._ordered_batches()
-            if batch.resource.content_hash == content_hash and self._matches_scope(batch, scope)
+            if batch.resource.content_hash == content_hash
+            and any(self._matches_unit_scope(batch, unit, scope) for unit in batch.units)
+        ]
+
+    def search_lexical(
+        self,
+        branch: LexicalBranch,
+        *,
+        scope: SearchScope,
+    ) -> list[RankedCandidate]:
+        scored: list[tuple[float, SearchUnitRecord]] = []
+        query = branch.query.casefold()
+        for batch in self._ordered_batches():
+            for unit in batch.units:
+                if not self._matches_unit_scope(batch, unit, scope):
+                    continue
+                score = 0.0 if unit.text is None else float(unit.text.casefold().count(query))
+                if score > 0.0:
+                    scored.append((score, unit))
+        scored.sort(key=lambda item: (-item[0], item[1].unit_id))
+        return [
+            RankedCandidate(
+                unit.unit_id,
+                unit.resource_id,
+                unit.representation_id,
+                rank,
+                score,
+                branch.branch_id,
+                unit.evidence_locator,
+                unit.metadata,
+            )
+            for rank, (score, unit) in enumerate(scored[: branch.candidate_limit], start=1)
+        ]
+
+    def search_vector(
+        self,
+        branch: VectorBranch,
+        *,
+        scope: SearchScope,
+    ) -> list[RankedCandidate]:
+        scored: list[tuple[float, SearchUnitRecord]] = []
+        for batch in self._ordered_batches():
+            spaces = {space.space_id: space for space in batch.spaces}
+            space = spaces.get(branch.space_id)
+            if space is None:
+                continue
+            if len(branch.vector) != space.dimensions:
+                raise BranchExecutionError(
+                    ErrorCategory.INCOMPATIBLE_VECTOR_SPACE,
+                    branch_id=branch.branch_id,
+                )
+            units = {unit.unit_id: unit for unit in batch.units}
+            for vector in batch.vectors:
+                if vector.space_id != branch.space_id:
+                    continue
+                unit = units[vector.unit_id]
+                if not self._matches_unit_scope(batch, unit, scope):
+                    continue
+                score = self._vector_score(
+                    branch.vector,
+                    vector.vector,
+                    space.metric,
+                    branch.branch_id,
+                )
+                scored.append((score, unit))
+        scored.sort(key=lambda item: (-item[0], item[1].unit_id))
+        return [
+            RankedCandidate(
+                unit.unit_id,
+                unit.resource_id,
+                unit.representation_id,
+                rank,
+                score,
+                branch.branch_id,
+                unit.evidence_locator,
+                unit.metadata,
+            )
+            for rank, (score, unit) in enumerate(scored[: branch.candidate_limit], start=1)
         ]
 
     def batch(self, resource_id: str) -> PreparedResourceBatch | None:
@@ -83,7 +200,20 @@ class MemoryCatalog:
         return tuple(self._batches[key] for key in sorted(self._batches))
 
     @staticmethod
-    def _matches_scope(batch: PreparedResourceBatch, scope: SearchScope) -> bool:
+    def _source_key(batch: PreparedResourceBatch) -> tuple[str, str, str]:
+        resource = batch.resource
+        return (
+            resource.source_namespace,
+            resource.locator.kind,
+            canonical_json(resource.locator.payload),
+        )
+
+    @staticmethod
+    def _matches_unit_scope(
+        batch: PreparedResourceBatch,
+        unit: SearchUnitRecord,
+        scope: SearchScope,
+    ) -> bool:
         resource = batch.resource
         if scope.resource_kinds and resource.resource_kind not in scope.resource_kinds:
             return False
@@ -92,15 +222,17 @@ class MemoryCatalog:
         if scope.source_namespaces and resource.source_namespace not in scope.source_namespaces:
             return False
 
-        representation_kinds = {item.representation_kind for item in batch.representations}
-        if scope.representation_kinds and representation_kinds.isdisjoint(scope.representation_kinds):
+        representation = next(
+            item for item in batch.representations if item.representation_id == unit.representation_id
+        )
+        if (
+            scope.representation_kinds
+            and representation.representation_kind not in scope.representation_kinds
+        ):
             return False
-        modalities = {item.modality for item in batch.representations}
-        modalities.update(item.modality for item in batch.units)
-        if scope.modalities and modalities.isdisjoint(scope.modalities):
+        if scope.modalities and unit.modality not in scope.modalities:
             return False
-        unit_kinds = {item.unit_kind for item in batch.units}
-        if scope.unit_kinds and unit_kinds.isdisjoint(scope.unit_kinds):
+        if scope.unit_kinds and unit.unit_kind not in scope.unit_kinds:
             return False
 
         facets = {item.facet for item in batch.facets}
@@ -111,3 +243,26 @@ class MemoryCatalog:
         if scope.facets_none and not facets.isdisjoint(scope.facets_none):
             return False
         return True
+
+    @staticmethod
+    def _vector_score(
+        query: tuple[float, ...],
+        candidate: tuple[float, ...],
+        metric: str,
+        branch_id: str,
+    ) -> float:
+        if metric == "dot":
+            return sum(left * right for left, right in zip(query, candidate, strict=True))
+        if metric == "l2":
+            return -math.sqrt(
+                sum((left - right) ** 2 for left, right in zip(query, candidate, strict=True))
+            )
+        denominator = math.sqrt(sum(value * value for value in query)) * math.sqrt(
+            sum(value * value for value in candidate)
+        )
+        if denominator == 0.0:
+            raise BranchExecutionError(
+                ErrorCategory.INCOMPATIBLE_VECTOR_SPACE,
+                branch_id=branch_id,
+            )
+        return sum(left * right for left, right in zip(query, candidate, strict=True)) / denominator
