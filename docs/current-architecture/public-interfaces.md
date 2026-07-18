@@ -165,4 +165,4 @@ discovery scope/results; pure generic core DTOs remain under `mdrack_core`.
 - Shared DTO: `src/mdrack/domain/retrieval.py`
 - Image API DTOs: `src/mdrack/ingestion/images.py`
 - Resource discovery DTOs: `src/mdrack/application/resources.py`
-- Pure core exports: `src/mdrack_core/__init__.py`
+- Pure core exports: `packages/mdrack-core/src/mdrack_core/__init__.py`

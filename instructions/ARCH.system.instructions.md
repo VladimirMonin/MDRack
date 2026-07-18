@@ -49,9 +49,10 @@ explicitly changes that architecture.
 
 ## Approved v0.3 transition contract
 
-- The approved reusable boundary is a separate `src/mdrack_core/` import root in
-  the existing distribution. Its reviewed v0.3 implementation is current; `mdrack`
-  remains the compatibility/application owner around the reusable core.
+- The approved reusable boundary is the standalone `mdrack-core` distribution at
+  `packages/mdrack-core/`, with its sole import source under
+  `packages/mdrack-core/src/mdrack_core/`. The `mdrack` app distribution depends on
+  it and remains the compatibility/application owner around the reusable core.
 - `mdrack_core` is stdlib-only and must not import `mdrack`, Click, HTTP, SQLite,
   Markdown/parser, provider/model, filesystem, or network code.
 - Current Markdown IR, `PreparedFile`, `SourceLocator`, `EmbeddingProfile`, and

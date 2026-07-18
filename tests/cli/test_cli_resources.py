@@ -400,7 +400,7 @@ def test_offline_installed_wheel_resource_cli_and_engine_behavior(tmp_path: Path
 
     wheel_dir = tmp_path / "wheel"
     subprocess.run(
-        [uv, "build", "--wheel", "--out-dir", str(wheel_dir)],
+        [uv, "build", "--wheel", "--all-packages", "--out-dir", str(wheel_dir)],
         cwd=repository,
         env=environment,
         check=True,
@@ -408,7 +408,9 @@ def test_offline_installed_wheel_resource_cli_and_engine_behavior(tmp_path: Path
         text=True,
     )
     wheels = tuple(wheel_dir.glob("mdrack-*.whl"))
+    core_wheels = tuple(wheel_dir.glob("mdrack_core-*.whl"))
     assert len(wheels) == 1
+    assert len(core_wheels) == 1
     virtualenv = tmp_path / "venv"
     subprocess.run(
         [uv, "venv", "--python", sys.executable, str(virtualenv)],
@@ -419,7 +421,16 @@ def test_offline_installed_wheel_resource_cli_and_engine_behavior(tmp_path: Path
     )
     python = virtualenv / "bin" / "python"
     subprocess.run(
-        [uv, "pip", "install", "--python", str(python), "--offline", str(wheels[0])],
+        [
+            uv,
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            "--offline",
+            str(core_wheels[0]),
+            str(wheels[0]),
+        ],
         env=environment,
         check=True,
         capture_output=True,

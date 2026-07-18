@@ -128,6 +128,7 @@ the prior complete graph visible.
 - Scanner: `src/mdrack/indexing/scanner.py`
 - Atomic handoff: `src/mdrack/adapters/sqlite/index_storage.py`
 - Core projection: `src/mdrack/application/compatibility.py`
-- Provider-free validation: `src/mdrack_core/application/indexing.py`
+- Provider-free validation:
+  `packages/mdrack-core/src/mdrack_core/application/indexing.py`
 - Domain records: `src/mdrack/domain/blocks.py`,
   `src/mdrack/domain/documents.py`, `src/mdrack/domain/chunks.py`

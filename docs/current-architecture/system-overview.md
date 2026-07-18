@@ -110,7 +110,8 @@ surfaces rather than the preferred home for new behavior.
 ## Primary source anchors
 
 - Entry points: `src/mdrack/cli/__init__.py`, `src/mdrack/public_api/engine.py`
-- Pure core: `src/mdrack_core/`
+- Pure core distribution/source: `packages/mdrack-core/`,
+  `packages/mdrack-core/src/mdrack_core/`
 - Store generations: `src/mdrack/application/generation_manager.py`,
   `src/mdrack/application/store_generations.py`
 - Resource adapter: `src/mdrack/adapters/sqlite/resource_store.py`

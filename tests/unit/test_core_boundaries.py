@@ -28,7 +28,7 @@ EXPECTED = json.loads((FIXTURE_ROOT / "expected.json").read_text(encoding="utf-8
 
 
 def _write_core(root: Path, relative_path: str, source: str) -> Path:
-    path = root / "src" / "mdrack_core" / relative_path
+    path = root / "packages" / "mdrack-core" / "src" / "mdrack_core" / relative_path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding="utf-8")
     return path
@@ -56,7 +56,7 @@ def _candidate(logical_id: str, score: float) -> RetrievalCandidate:
     )
 
 
-def test_repository_guard_passes_before_core_exists() -> None:
+def test_repository_guard_passes_for_standalone_core_source() -> None:
     assert check_repository(Path(__file__).resolve().parents[2]) == []
 
 
@@ -110,7 +110,10 @@ def test_guard_rejects_reverse_third_party_and_infrastructure_leaks(
 ) -> None:
     path = _write_core(tmp_path, "leak.py", source)
 
-    violations = check_python_file(path, display_path=Path("src/mdrack_core/leak.py"))
+    violations = check_python_file(
+        path,
+        display_path=Path("packages/mdrack-core/src/mdrack_core/leak.py"),
+    )
 
     assert category in {violation.category for violation in violations}
     assert all(str(tmp_path) not in violation.render() for violation in violations)
@@ -150,7 +153,13 @@ def test_application_code_may_import_core_because_only_core_is_scanned(tmp_path:
 def test_dependency_and_platform_verify_gates_include_core_boundary_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    finding = Violation("src/mdrack_core/leak.py", 1, 1, "reverse-import", "test finding")
+    finding = Violation(
+        "packages/mdrack-core/src/mdrack_core/leak.py",
+        1,
+        1,
+        "reverse-import",
+        "test finding",
+    )
     monkeypatch.setattr(check_no_forbidden_deps, "check_core_repository", lambda: [finding])
 
     assert check_no_forbidden_deps.check_core_boundaries() == [

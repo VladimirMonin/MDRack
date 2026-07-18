@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-CORE_RELATIVE_PATH = Path("src/mdrack_core")
+CORE_RELATIVE_PATH = Path("packages/mdrack-core/src/mdrack_core")
 
 # These stdlib modules provide infrastructure behavior that the pure core must not own.
 FORBIDDEN_STDLIB_IMPORT_ROOTS = {
@@ -211,7 +211,7 @@ def check_python_file(path: Path, *, display_path: Path | None = None) -> list[V
 
 
 def check_repository(root: Path = Path(".")) -> list[Violation]:
-    """Check only ``src/mdrack_core``; application imports of core remain allowed."""
+    """Check only the standalone core source; application imports remain allowed."""
     root = root.resolve()
     core_root = root / CORE_RELATIVE_PATH
     if not core_root.exists():

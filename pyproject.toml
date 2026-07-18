@@ -9,6 +9,7 @@ description = "Local command-line Markdown knowledge rack for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "mdrack-core==1.0.0rc1",
     "click>=8.1",
     "pydantic>=2.0",
     "toml>=0.10",
@@ -36,6 +37,9 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["mdrack", "mdrack_core"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
@@ -45,7 +49,13 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mdrack", "src/mdrack_core"]
+packages = ["src/mdrack"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/docs/evidence/*.json", "/docs/evidence/*.md"]
+exclude = ["/docs/evidence/*.json", "/docs/evidence/*.md", "/packages"]
+
+[tool.uv.sources]
+mdrack-core = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/mdrack-core"]

@@ -30,9 +30,11 @@ generation, privacy, image-ingestion, and retrieval slices described below.
 
 ### A. Physical package boundary
 
-Create `src/mdrack_core/` as a separate import root in the existing MDRack
-distribution. A second repository or PyPI distribution is deferred until there is a
-proven second consumer.
+The v0.3 implementation first created `src/mdrack_core/` as a separate import root
+inside the MDRack distribution. The later accepted packaging slice promoted that
+same authoritative source, without copying it, to the standalone `mdrack-core`
+distribution under `packages/mdrack-core/`; the `mdrack` distribution now depends
+on it.
 
 The dependency direction is:
 

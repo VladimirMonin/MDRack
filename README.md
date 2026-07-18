@@ -3,10 +3,11 @@
 MDRack 0.3 is a local Python 3.11+ command-line and embedded retrieval rack for
 Markdown documents and explicitly supplied images.
 
-The distribution contains a stdlib-only `mdrack_core` package for provider- and
-persistence-neutral resource indexing/retrieval contracts plus the `mdrack`
-application package for Markdown/image ingestion, SQLite, LM Studio integration,
-Click JSON commands, and `MDRackEngine`.
+The application depends on the standalone, stdlib-only `mdrack-core`
+distribution for provider- and persistence-neutral resource indexing/retrieval
+contracts. The `mdrack` distribution owns Markdown/image ingestion, SQLite,
+LM Studio integration, Click JSON commands, and `MDRackEngine`; it does not
+vendor a second copy of `mdrack_core`.
 
 ## Quick start
 

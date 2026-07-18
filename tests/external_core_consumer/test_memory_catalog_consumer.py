@@ -111,7 +111,8 @@ class MemoryCatalog:
         return []
 
 
-def test_external_memory_catalog_indexes_and_retrieves_without_mdrack_imports() -> None:
+def run_external_memory_catalog_workflow() -> None:
+    """Exercise the frozen core using only an external in-memory adapter."""
     catalog = MemoryCatalog()
     batch = PreparedResourceBatch(
         resource=ResourceRecord(
@@ -157,3 +158,11 @@ def test_external_memory_catalog_indexes_and_retrieves_without_mdrack_imports() 
 
     assert [item.logical_id for item in result.items] == ["unit-external"]
     assert catalog.read_resource("resource-external") == batch.resource
+
+
+def test_external_memory_catalog_indexes_and_retrieves_without_mdrack_imports() -> None:
+    run_external_memory_catalog_workflow()
+
+
+if __name__ == "__main__":
+    run_external_memory_catalog_workflow()

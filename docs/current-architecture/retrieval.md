@@ -160,7 +160,8 @@ completion or model lifecycle call substitutes for reranking. `rerank_rank` and
 - FTS: `src/mdrack/storage/sqlite/fts.py`, `src/mdrack/search/text.py`
 - Vector scan: `src/mdrack/storage/sqlite/vector.py`
 - CLI mapping: `src/mdrack/cli/commands/search.py`
-- Core retrieval/fusion: `src/mdrack_core/application/retrieval.py`,
-  `src/mdrack_core/application/fusion.py`
+- Core retrieval/fusion:
+  `packages/mdrack-core/src/mdrack_core/application/retrieval.py`,
+  `packages/mdrack-core/src/mdrack_core/application/fusion.py`
 - Resource discovery façade: `src/mdrack/application/resources.py`
 - SQLite resource search: `src/mdrack/adapters/sqlite/resource_store.py`
