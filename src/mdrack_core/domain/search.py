@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from .common import (
     JSONValue,
     freeze_json_mapping,
+    normalize_optional_request_id,
     require_finite_number,
     require_integer,
     require_non_empty,
@@ -89,6 +90,7 @@ class VectorBranch:
     vector: tuple[float, ...]
     weight: float = 1.0
     candidate_limit: int = 100
+    expected_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         require_non_empty(self.branch_id, "branch_id")
@@ -99,6 +101,7 @@ class VectorBranch:
             raise ValueError("weight must be positive")
         object.__setattr__(self, "weight", weight)
         require_integer(self.candidate_limit, "candidate_limit", minimum=1)
+        require_optional_non_empty(self.expected_fingerprint, "expected_fingerprint")
 
 
 @dataclass(frozen=True)
@@ -150,7 +153,7 @@ class SearchRequest:
         )
         if not isinstance(self.allow_partial, bool):
             raise ValueError("allow_partial must be a boolean")
-        require_optional_non_empty(self.request_id, "request_id")
+        object.__setattr__(self, "request_id", normalize_optional_request_id(self.request_id))
         object.__setattr__(self, "lexical_branches", lexical)
         object.__setattr__(self, "vector_branches", vectors)
 

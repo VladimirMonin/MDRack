@@ -36,7 +36,7 @@ def _fusion_candidate(candidate: RankedCandidate) -> FusionCandidate:
     )
 
 
-def test_weighted_rrf_uses_arbitrary_branch_weights_and_candidate_ranks() -> None:
+def test_weighted_rrf_uses_arbitrary_branch_weights_and_dense_branch_positions() -> None:
     a1 = _candidate("a", branch_id="lexical", rank=1)
     b1 = _candidate("b", branch_id="lexical", rank=2)
     b2 = _candidate("b", branch_id="visual", rank=1)
@@ -53,28 +53,34 @@ def test_weighted_rrf_uses_arbitrary_branch_weights_and_candidate_ranks() -> Non
 
     assert [item.logical_id for item in fused] == ["b", "a"]
     assert fused[0].score == pytest.approx(1 / 12 + 3 / 11)
-    assert fused[1].score == pytest.approx(1 / 11 + 3 / 14)
+    assert fused[1].score == pytest.approx(1 / 11 + 3 / 12)
     assert fused[0].representative is b1
 
 
 def test_first_duplicate_per_branch_wins_and_contributes_only_once() -> None:
     first = _candidate("same", branch_id="branch", rank=8)
     duplicate = _candidate("same", branch_id="branch", rank=1)
+    later = _candidate("later", branch_id="branch", rank=9)
 
     fused = weighted_rrf(
         (
             FusionBranch(
                 "branch",
                 2.0,
-                (_fusion_candidate(first), _fusion_candidate(duplicate)),
+                (
+                    _fusion_candidate(first),
+                    _fusion_candidate(duplicate),
+                    _fusion_candidate(later),
+                ),
             ),
         ),
         rrf_k=10,
         evidence_limit=2,
     )
 
-    assert len(fused) == 1
-    assert fused[0].score == pytest.approx(2 / 18)
+    assert [item.logical_id for item in fused] == ["same", "later"]
+    assert fused[0].score == pytest.approx(2 / 11)
+    assert fused[1].score == pytest.approx(2 / 12)
     assert fused[0].representative is first
 
 

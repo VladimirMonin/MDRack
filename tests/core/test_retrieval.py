@@ -183,6 +183,8 @@ def test_resource_grouping_happens_per_branch_before_fusion() -> None:
     )
 
     assert [item.logical_id for item in result.items] == ["short", "long"]
+    assert result.items[0].score == pytest.approx(1 / 12 + 1 / 11)
+    assert result.items[1].score == pytest.approx(1 / 11)
     assert result.items[0].unit_id is None
     assert [candidate.unit_id for candidate in result.items[0].evidence] == [
         "short-vector",
@@ -421,7 +423,7 @@ def test_events_expose_only_frozen_safe_fields_and_no_private_values(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     query = "PRIVATE_QUERY_SENTINEL"
-    request_id = "PRIVATE_REQUEST_SENTINEL"
+    request_id = "123E4567-E89B-12D3-A456-426614174000"
     branch = LexicalBranch("PRIVATE_BRANCH_SENTINEL", query)
     port = SearchPortSpy(
         {
@@ -445,7 +447,6 @@ def test_events_expose_only_frozen_safe_fields_and_no_private_values(
     assert "core.search.failed" in messages
     for sentinel in (
         query,
-        request_id,
         branch.branch_id,
         "PRIVATE_EXCEPTION_SENTINEL",
         "/private/home/sentinel",
@@ -453,6 +454,7 @@ def test_events_expose_only_frozen_safe_fields_and_no_private_values(
         "0.123456",
     ):
         assert sentinel not in messages
+    assert request_id.lower() in messages
     assert "sha256:" in messages
     assert "adapter_error" in messages, messages
 

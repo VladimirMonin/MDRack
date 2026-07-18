@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
 
+from .domain.common import _SafeRequestId
 from .domain.errors import DegradationCategory, ErrorCategory
 
 REDACTED = "[redacted]"
@@ -118,6 +119,8 @@ def _sanitize_value(value: object) -> object:
         return value
     if isinstance(value, SafeFingerprint):
         return value.value
+    if isinstance(value, _SafeRequestId):
+        return str(value)
     if isinstance(value, (LifecycleStatus, ErrorCategory, DegradationCategory)):
         return value.value
     return REDACTED

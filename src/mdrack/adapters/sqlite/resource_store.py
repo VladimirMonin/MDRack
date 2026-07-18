@@ -344,7 +344,14 @@ class SQLiteResourceStore:
             space = self.connection.execute(
                 "SELECT * FROM core_embedding_spaces WHERE space_id = ?", (branch.space_id,)
             ).fetchone()
-            if space is None or len(branch.vector) != space["dimensions"]:
+            if (
+                space is None
+                or len(branch.vector) != space["dimensions"]
+                or (
+                    branch.expected_fingerprint is not None
+                    and branch.expected_fingerprint != space["fingerprint"]
+                )
+            ):
                 raise BranchExecutionError(
                     ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id
                 )

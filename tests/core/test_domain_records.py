@@ -392,6 +392,8 @@ def test_search_branch_candidate_limits_and_query_vector_are_validated() -> None
         VectorBranch("semantic", "space-1", ())
     with pytest.raises(ValueError, match="candidate_limit"):
         VectorBranch("semantic", "space-1", (1.0,), candidate_limit=True)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="expected_fingerprint"):
+        VectorBranch("semantic", "space-1", (1.0,), expected_fingerprint=" ")
 
 
 def test_search_request_validates_branches_targets_ranges_and_unique_ids() -> None:
@@ -419,6 +421,51 @@ def test_search_request_validates_branches_targets_ranges_and_unique_ids() -> No
     for create in invalid_requests:
         with pytest.raises(ValueError):
             create()
+
+
+@pytest.mark.parametrize(
+    ("request_id", "canonical"),
+    [
+        ("123E4567-E89B-12D3-A456-426614174000", "123e4567-e89b-12d3-a456-426614174000"),
+        ("01ARZ3NDEKTSV4RRFFQ69G5FAV", "01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+    ],
+)
+def test_search_request_accepts_only_canonical_safe_correlation_ids(
+    request_id: str,
+    canonical: str,
+) -> None:
+    request = SearchRequest(
+        (LexicalBranch("lexical", "query"),),
+        (),
+        SearchScope(),
+        "unit",
+        1,
+        request_id=request_id,
+    )
+
+    assert request.request_id == canonical
+
+
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "not-a-uuid",
+        "123e4567e89b12d3a456426614174000",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAI",
+        "81ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "01arz3ndektsv4rrffq69g5fav",
+    ],
+)
+def test_search_request_rejects_unsafe_or_noncanonical_correlation_ids(request_id: str) -> None:
+    with pytest.raises(ValueError, match="UUID or ULID"):
+        SearchRequest(
+            (LexicalBranch("lexical", "query"),),
+            (),
+            SearchScope(),
+            "unit",
+            1,
+            request_id=request_id,
+        )
 
 
 @pytest.mark.parametrize(

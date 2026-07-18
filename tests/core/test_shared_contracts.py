@@ -176,7 +176,12 @@ def test_prepared_batch_rejects_wrong_record_types(field_name: str, bad_value: o
 def test_result_records_are_frozen_typed_and_json_safe() -> None:
     degradation = Degradation("semantic", DegradationCategory.ADAPTER_TIMEOUT)
     item = result_item()
-    result = SearchResult("unit", [item], [degradation], "request-1")  # type: ignore[arg-type]
+    result = SearchResult(
+        "unit",
+        [item],  # type: ignore[arg-type]
+        [degradation],  # type: ignore[arg-type]
+        "123e4567-e89b-12d3-a456-426614174000",
+    )
     similarity = SimilarityResult("unit-query", "space-1", [item], [degradation])  # type: ignore[arg-type]
 
     assert result.items == (item,)

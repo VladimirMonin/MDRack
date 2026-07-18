@@ -85,15 +85,17 @@ def weighted_rrf(
 
     for branch in branches:
         seen_in_branch: set[str] = set()
+        branch_rank = 0
         for candidate in branch.candidates:
             logical_id = candidate.logical_id
             if logical_id in seen_in_branch:
                 continue
             seen_in_branch.add(logical_id)
+            branch_rank += 1
             first_seen.setdefault(logical_id, candidate_ordinal)
             representatives.setdefault(logical_id, candidate.representative)
             scores[logical_id] = scores.get(logical_id, 0.0) + (
-                branch.weight / (rrf_k + candidate.representative.rank)
+                branch.weight / (rrf_k + branch_rank)
             )
             evidence = evidence_by_id.setdefault(logical_id, [])
             known_evidence = {

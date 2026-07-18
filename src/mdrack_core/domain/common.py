@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+import uuid
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import TypeAlias
@@ -14,6 +16,40 @@ JSONValue: TypeAlias = JSONScalar | tuple["JSONValue", ...] | Mapping[str, "JSON
 MAX_JSON_DEPTH = 16
 MAX_JSON_ITEMS = 10_000
 MAX_JSON_BYTES = 1_000_000
+
+_UUID_PATTERN = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_ULID_PATTERN = re.compile(r"[0-7][0-9A-HJKMNP-TV-Z]{25}")
+
+
+class _SafeRequestId(str):
+    """Validated correlation identity that observability may serialize verbatim."""
+
+
+def normalize_request_id(value: object, field_name: str = "request_id") -> _SafeRequestId:
+    """Validate and canonicalize a UUID or canonical Crockford-base32 ULID."""
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a UUID or ULID")
+    if _UUID_PATTERN.fullmatch(value):
+        try:
+            return _SafeRequestId(str(uuid.UUID(value)))
+        except ValueError:
+            pass
+    if _ULID_PATTERN.fullmatch(value):
+        return _SafeRequestId(value)
+    raise ValueError(f"{field_name} must be a UUID or ULID")
+
+
+def normalize_optional_request_id(
+    value: object,
+    field_name: str = "request_id",
+) -> _SafeRequestId | None:
+    """Validate an optional correlation identity."""
+    if value is None:
+        return None
+    return normalize_request_id(value, field_name)
 
 
 def require_utf8_encodable(value: object, field_name: str) -> str:

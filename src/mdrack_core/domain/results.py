@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from .common import (
     JSONValue,
     freeze_json_mapping,
+    normalize_optional_request_id,
     require_finite_number,
     require_integer,
     require_non_empty,
@@ -75,7 +76,7 @@ class SearchResult:
         require_non_empty(self.target, "target")
         if self.target not in TARGETS:
             raise ValueError("target must be unit or resource")
-        require_optional_non_empty(self.request_id, "request_id")
+        object.__setattr__(self, "request_id", normalize_optional_request_id(self.request_id))
         object.__setattr__(self, "items", _freeze_typed(self.items, "items", SearchResultItem))
         object.__setattr__(
             self,

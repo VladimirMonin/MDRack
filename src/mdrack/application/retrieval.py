@@ -228,7 +228,13 @@ class RetrievalService:
                     SearchRequest(
                         lexical_branches=(),
                         vector_branches=(
-                            VectorBranch("semantic", space_id, vector, candidate_limit=limit),
+                            VectorBranch(
+                                "semantic",
+                                space_id,
+                                vector,
+                                candidate_limit=limit,
+                                expected_fingerprint=self.profile_fingerprint,
+                            ),
                         ),
                         scope=SearchScope(),
                         target=TARGET_UNIT,
@@ -288,6 +294,7 @@ class RetrievalService:
                             vector,
                             weight=self.semantic_weight,
                             candidate_limit=limit * 2,
+                            expected_fingerprint=self.profile_fingerprint,
                         ),
                     )
             request = SearchRequest(

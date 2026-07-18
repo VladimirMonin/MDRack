@@ -14,8 +14,10 @@ from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_candidate_migrations, get_migrations_dir
 from mdrack_core.domain import (
+    BranchExecutionError,
     CatalogExecutionError,
     EmbeddingSpaceRecord,
+    ErrorCategory,
     Facet,
     LexicalBranch,
     Locator,
@@ -158,11 +160,29 @@ def test_generic_catalog_and_search_contract(
             scope=scope,
         )
         vector = store.search_vector(
-            VectorBranch("vector", "space", (1.0, 0.0), candidate_limit=1),
+            VectorBranch(
+                "vector",
+                "space",
+                (1.0, 0.0),
+                candidate_limit=1,
+                expected_fingerprint="fingerprint",
+            ),
             scope=scope,
         )
         assert [item.unit_id for item in lexical] == ["unit-included"]  # type: ignore[attr-defined]
         assert [item.unit_id for item in vector] == ["unit-included"]  # type: ignore[attr-defined]
+        with pytest.raises(BranchExecutionError) as mismatch:
+            store.search_vector(
+                VectorBranch(
+                    "vector-mismatch",
+                    "space",
+                    (1.0, 0.0),
+                    expected_fingerprint="PRIVATE_FINGERPRINT_SENTINEL",
+                ),
+                scope=scope,
+            )
+        assert mismatch.value.category is ErrorCategory.INCOMPATIBLE_VECTOR_SPACE
+        assert str(mismatch.value) == "incompatible_vector_space"
 
         multi = _multi_representation_batch()
         store.replace_resource(multi)

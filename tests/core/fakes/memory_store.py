@@ -159,7 +159,13 @@ class MemoryCatalog:
             space = spaces.get(branch.space_id)
             if space is None:
                 continue
-            if len(branch.vector) != space.dimensions:
+            if (
+                len(branch.vector) != space.dimensions
+                or (
+                    branch.expected_fingerprint is not None
+                    and branch.expected_fingerprint != space.fingerprint
+                )
+            ):
                 raise BranchExecutionError(
                     ErrorCategory.INCOMPATIBLE_VECTOR_SPACE,
                     branch_id=branch.branch_id,
