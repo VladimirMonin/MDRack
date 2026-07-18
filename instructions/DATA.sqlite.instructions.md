@@ -28,7 +28,8 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 
 - `packages/mdrack-sqlite/src/mdrack_sqlite/` owns the generic `core_*` resource
   catalog/search adapter, FTS query fallback, lifecycle API, safe errors, and bridge
-  verification. It must not import `mdrack`.
+  verification. Its independent clean identity is `mdrack_sqlite_catalog_v1` with
+  immutable package migrations `0000`–`0003`; it must not import `mdrack`.
 - App migration history and generation switching remain under `src/mdrack`; the
   standalone package must not copy or rewrite migrations `0000`–`0007`.
 

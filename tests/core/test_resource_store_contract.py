@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import math
-import sqlite3
 from pathlib import Path
 from typing import Protocol
 
 import pytest
 from fakes.memory_store import MemoryCatalog
 
-from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
-from mdrack.storage.sqlite.connection import get_connection
-from mdrack.storage.sqlite.migrations import apply_candidate_migrations, get_migrations_dir
 from mdrack_core.domain import (
     BranchExecutionError,
     CatalogExecutionError,
@@ -31,6 +27,7 @@ from mdrack_core.domain import (
     VectorBranch,
     VectorRecord,
 )
+from mdrack_sqlite import SQLiteCatalog
 
 
 class ContractStore(Protocol):
@@ -131,13 +128,13 @@ def test_generic_catalog_and_search_contract(
     backend: str,
     tmp_path: Path,
 ) -> None:
-    connection: sqlite3.Connection | None = None
+    catalog: SQLiteCatalog | None = None
     if backend == "memory":
         store: ContractStore = MemoryCatalog(enforce_resource_contract=True)
     else:
-        connection = get_connection(tmp_path / "generic-contract.db")
-        apply_candidate_migrations(connection, get_migrations_dir())
-        store = SQLiteResourceStore(connection)
+        created_catalog = SQLiteCatalog.create(tmp_path / "generic-contract.db")
+        catalog = created_catalog
+        store = created_catalog
     try:
         excluded = _batch("excluded", "other", "needle needle", (10.0, 0.0))
         included = _batch("included", "vault", "needle", (1.0, -0.0))
@@ -246,5 +243,5 @@ def test_generic_catalog_and_search_contract(
         assert store.read_unit("unit-included") is None
         assert store.read_vector("unit-included", "space") is None
     finally:
-        if connection is not None:
-            connection.close()
+        if catalog is not None:
+            catalog.close()

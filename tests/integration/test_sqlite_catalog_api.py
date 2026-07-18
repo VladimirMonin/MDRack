@@ -324,11 +324,10 @@ def test_verify_fails_closed_on_required_index_drift(tmp_path: Path) -> None:
     finally:
         connection.close()
 
-    with SQLiteCatalog.open(database) as catalog:
-        with pytest.raises(SQLiteCatalogError) as error:
-            catalog.verify()
-        assert error.value.code is SQLiteErrorCode.VERIFY_FAILED
-        assert "drift.db" not in str(error.value)
+    with pytest.raises(SQLiteCatalogError) as error:
+        SQLiteCatalog.open(database)
+    assert error.value.code is SQLiteErrorCode.VERIFY_FAILED
+    assert "drift.db" not in str(error.value)
 
 
 def test_open_failures_are_safe_and_do_not_create_database(tmp_path: Path) -> None:

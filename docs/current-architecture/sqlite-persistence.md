@@ -30,6 +30,24 @@ The runner validates a compiled ordered filename/content manifest and digest bef
 touching a connection. `apply_migrations` is intentionally bounded at `0006` for
 the legacy database; only explicit candidate composition may apply `0007`.
 
+The standalone package has a separate immutable clean history named
+`mdrack_sqlite_catalog_v1`: `0000_identity`, `0001_catalog`,
+`0002_vectors_facets`, and `0003_search`. It persists exact filename/content
+digests in `mdrack_sqlite_migrations` and the final schema/version/manifest identity
+in `mdrack_sqlite_schema`. It reuses the `core_*` DDL semantics from frozen app
+bridge migration `0007`; it does not copy the app history or make the clean catalog
+the app default. `SQLiteCatalog.create()` is exclusive, while `open()` and
+`open_readonly()` accept only a complete recognized clean identity or the frozen
+app bridge and verify integrity before use.
+
+For the clean identity only, verification binds the ledger to a compiled normalized
+`sqlite_master` fingerprint derived from those immutable package migrations. It
+rejects added, changed, or removed application tables, views, indexes, and triggers.
+SQLite-owned `sqlite_*` internals are derived from the canonical DDL; the exact five
+FTS5 shadow tables are checked as a fixed inventory before their engine-generated
+DDL is excluded from the fingerprint. Prefix lookalikes are not excluded. The
+frozen app bridge retains its existing compatibility verification.
+
 ## Store generations and recovery
 
 Generation metadata records identity, readiness, migration manifest, contract
@@ -230,6 +248,10 @@ lossless whole-document archive.
 - Resource adapter owner and lifecycle API:
   `packages/mdrack-sqlite/src/mdrack_sqlite/resource_store.py`,
   `packages/mdrack-sqlite/src/mdrack_sqlite/catalog.py`
+- Clean package runner and immutable SQL:
+  `packages/mdrack-sqlite/src/mdrack_sqlite/migrations.py`,
+  `packages/mdrack-sqlite/src/mdrack_sqlite/migrations/0000_identity.sql`
+  through `0003_search.sql`
 - App compatibility re-export: `src/mdrack/adapters/sqlite/resource_store.py`
 - Generation manager/runtime: `src/mdrack/application/generation_manager.py`,
   `src/mdrack/adapters/sqlite/generation_runtime.py`

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,8 +20,14 @@ from mdrack_core.domain import (
     VectorBranch,
     VectorRecord,
 )
-from mdrack_sqlite.contract import SQLITE_BRIDGE_SCHEMA_ID
+from mdrack_sqlite.contract import SQLITE_BRIDGE_SCHEMA_ID, SQLITE_CATALOG_SCHEMA_ID
 from mdrack_sqlite.errors import SQLiteCatalogError, SQLiteErrorCode
+from mdrack_sqlite.migrations import (
+    SQLiteMigrationError,
+    apply_migrations,
+    validate_clean_identity,
+    validate_clean_schema,
+)
 from mdrack_sqlite.resource_store import SQLiteResourceStore
 
 _REQUIRED_TABLES = frozenset(
@@ -108,11 +115,72 @@ class SQLiteCatalog(SQLiteResourceStore):
         *,
         readonly: bool = False,
         owns_connection: bool = False,
+        schema_id: str = SQLITE_BRIDGE_SCHEMA_ID,
     ) -> None:
         super().__init__(connection)
         self._readonly = readonly
         self._owns_connection = owns_connection
+        self._schema_id = schema_id
         self._closed = False
+
+    @classmethod
+    def create(
+        cls,
+        database_path: str | Path,
+        *,
+        timeout: float = 5.0,
+    ) -> SQLiteCatalog:
+        """Create one new clean ``mdrack_sqlite_catalog_v1`` database."""
+        connection: sqlite3.Connection | None = None
+        path: Path | None = None
+        created = False
+        try:
+            timeout_value = cls._timeout_value(timeout)
+            path = Path(database_path).expanduser().resolve(strict=False)
+            if not path.parent.is_dir():
+                raise ValueError
+            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+            created = True
+            connection = sqlite3.connect(
+                f"{path.as_uri()}?mode=rw",
+                uri=True,
+                timeout=timeout_value,
+            )
+            cls._configure_connection(connection, timeout_value=timeout_value, readonly=False)
+            connection.execute("PRAGMA synchronous=FULL")
+            connection.execute("PRAGMA journal_mode=WAL")
+            apply_migrations(connection)
+            catalog = cls(
+                connection,
+                readonly=False,
+                owns_connection=True,
+                schema_id=SQLITE_CATALOG_SCHEMA_ID,
+            )
+            catalog.verify()
+            return catalog
+        except FileExistsError:
+            raise SQLiteCatalogError(SQLiteErrorCode.DATABASE_EXISTS) from None
+        except SQLiteMigrationError:
+            if connection is not None:
+                connection.close()
+            cls._remove_created_database(path if created else None)
+            raise SQLiteCatalogError(SQLiteErrorCode.MIGRATION_FAILED) from None
+        except (TypeError, ValueError):
+            if connection is not None:
+                connection.close()
+            cls._remove_created_database(path if created else None)
+            raise SQLiteCatalogError(SQLiteErrorCode.INVALID_PATH) from None
+        except SQLiteCatalogError:
+            if connection is not None:
+                connection.close()
+            cls._remove_created_database(path if created else None)
+            raise
+        except Exception:
+            if connection is not None:
+                connection.close()
+            cls._remove_created_database(path if created else None)
+            raise SQLiteCatalogError(SQLiteErrorCode.OPEN_FAILED) from None
 
     @classmethod
     def open(
@@ -148,11 +216,7 @@ class SQLiteCatalog(SQLiteResourceStore):
     ) -> SQLiteCatalog:
         error_code = SQLiteErrorCode.READ_ONLY_OPEN_FAILED if readonly else SQLiteErrorCode.OPEN_FAILED
         try:
-            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
-                raise ValueError
-            timeout_value = float(timeout)
-            if not math.isfinite(timeout_value) or timeout_value <= 0:
-                raise ValueError
+            timeout_value = cls._timeout_value(timeout)
             path = Path(database_path).expanduser().resolve(strict=True)
             if not path.is_file():
                 raise ValueError
@@ -163,25 +227,39 @@ class SQLiteCatalog(SQLiteResourceStore):
                 timeout=timeout_value,
             )
             try:
-                connection.row_factory = sqlite3.Row
-                connection.execute("PRAGMA foreign_keys=ON")
-                connection.execute(f"PRAGMA busy_timeout={int(timeout_value * 1000)}")
-                if readonly:
-                    connection.execute("PRAGMA query_only=ON")
-                else:
+                cls._configure_connection(
+                    connection,
+                    timeout_value=timeout_value,
+                    readonly=readonly,
+                )
+                catalog = cls(
+                    connection,
+                    readonly=readonly,
+                    owns_connection=True,
+                    schema_id=cls._detect_schema_id(connection),
+                )
+                catalog.verify()
+                if not readonly:
+                    connection.execute("PRAGMA synchronous=FULL")
                     connection.execute("PRAGMA journal_mode=WAL")
-                return cls(connection, readonly=readonly, owns_connection=True)
+                return catalog
             except Exception:
                 connection.close()
                 raise
         except (TypeError, ValueError):
             raise SQLiteCatalogError(SQLiteErrorCode.INVALID_PATH) from None
+        except SQLiteCatalogError:
+            raise
         except Exception:
             raise SQLiteCatalogError(error_code) from None
 
     @property
     def readonly(self) -> bool:
         return self._readonly
+
+    @property
+    def schema_id(self) -> str:
+        return self._schema_id
 
     @property
     def closed(self) -> bool:
@@ -240,6 +318,12 @@ class SQLiteCatalog(SQLiteResourceStore):
         if self.connection.in_transaction:
             raise SQLiteCatalogError(SQLiteErrorCode.ACTIVE_TRANSACTION)
         try:
+            self._verify_schema_identity()
+            if self._schema_id == SQLITE_CATALOG_SCHEMA_ID:
+                try:
+                    validate_clean_schema(self.connection)
+                except SQLiteMigrationError:
+                    raise ValueError from None
             integrity = [row[0] for row in self.connection.execute("PRAGMA integrity_check")]
             if integrity != ["ok"]:
                 raise ValueError
@@ -289,7 +373,7 @@ class SQLiteCatalog(SQLiteResourceStore):
                 raise ValueError
 
             return SQLiteVerification(
-                schema_id=SQLITE_BRIDGE_SCHEMA_ID,
+                schema_id=self._schema_id,
                 resources=self._count("core_resources"),
                 representations=self._count("core_representations"),
                 units=self._count("core_search_units"),
@@ -310,6 +394,11 @@ class SQLiteCatalog(SQLiteResourceStore):
             if self.connection.in_transaction:
                 self.connection.rollback()
             if self._owns_connection:
+                if not self._readonly:
+                    try:
+                        self.connection.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                    except sqlite3.Error:
+                        pass
                 self.connection.close()
         finally:
             self._closed = True
@@ -333,3 +422,82 @@ class SQLiteCatalog(SQLiteResourceStore):
 
     def _count(self, table: str) -> int:
         return int(self.connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
+
+    def _verify_schema_identity(self) -> None:
+        if self._schema_id == SQLITE_CATALOG_SCHEMA_ID:
+            try:
+                validate_clean_identity(self.connection)
+            except SQLiteMigrationError:
+                raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
+            return
+        if self._schema_id != SQLITE_BRIDGE_SCHEMA_ID:
+            raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
+        versions = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            )
+        ]
+        if versions != [f"{version:04d}" for version in range(8)]:
+            raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
+
+    @staticmethod
+    def _timeout_value(timeout: float) -> float:
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+            raise ValueError
+        value = float(timeout)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError
+        return value
+
+    @staticmethod
+    def _configure_connection(
+        connection: sqlite3.Connection,
+        *,
+        timeout_value: float,
+        readonly: bool,
+    ) -> None:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(f"PRAGMA busy_timeout={int(timeout_value * 1000)}")
+        if readonly:
+            connection.execute("PRAGMA query_only=ON")
+
+    @staticmethod
+    def _detect_schema_id(connection: sqlite3.Connection) -> str:
+        objects = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
+            )
+        }
+        if {"mdrack_sqlite_migrations", "mdrack_sqlite_schema"} <= objects:
+            try:
+                validate_clean_identity(connection)
+            except SQLiteMigrationError:
+                raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
+            return SQLITE_CATALOG_SCHEMA_ID
+        if "schema_migrations" in objects:
+            versions = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations ORDER BY version"
+                )
+            ]
+            if versions == [f"{version:04d}" for version in range(8)]:
+                return SQLITE_BRIDGE_SCHEMA_ID
+        raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
+
+    @staticmethod
+    def _remove_created_database(path: Path | None) -> None:
+        if path is None:
+            return
+        for candidate in (
+            path.with_name(path.name + "-wal"),
+            path.with_name(path.name + "-shm"),
+            path,
+        ):
+            try:
+                candidate.unlink(missing_ok=True)
+            except OSError:
+                pass

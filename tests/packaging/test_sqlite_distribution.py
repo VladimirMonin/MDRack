@@ -39,9 +39,14 @@ def test_sqlite_root_exports_and_legacy_fts_helper_are_frozen() -> None:
     assert mdrack_sqlite.__all__ == [
         "SQLITE_BRIDGE_SCHEMA_ID",
         "SQLITE_CATALOG_API_VERSION",
+        "SQLITE_CATALOG_SCHEMA_ID",
+        "SQLITE_CATALOG_SCHEMA_VERSION",
+        "SQLITE_MIGRATION_MANIFEST",
+        "SQLITE_MIGRATION_MANIFEST_DIGEST",
         "SQLiteCatalog",
         "SQLiteCatalogError",
         "SQLiteErrorCode",
+        "SQLiteMigrationError",
         "SQLiteResourceStore",
         "SQLiteVerification",
     ]
@@ -57,6 +62,10 @@ def test_sqlite_distribution_carries_public_docs_and_typing_marker() -> None:
         "API.md",
         "CHANGELOG.md",
         "src/mdrack_sqlite/py.typed",
+        "src/mdrack_sqlite/migrations/0000_identity.sql",
+        "src/mdrack_sqlite/migrations/0001_catalog.sql",
+        "src/mdrack_sqlite/migrations/0002_vectors_facets.sql",
+        "src/mdrack_sqlite/migrations/0003_search.sql",
     ):
         assert (SQLITE_PROJECT / relative_path).exists()
 

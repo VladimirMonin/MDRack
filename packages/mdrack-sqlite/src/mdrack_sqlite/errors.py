@@ -7,8 +7,11 @@ from enum import StrEnum
 
 class SQLiteErrorCode(StrEnum):
     INVALID_PATH = "invalid_path"
+    DATABASE_EXISTS = "database_exists"
     OPEN_FAILED = "open_failed"
     READ_ONLY_OPEN_FAILED = "readonly_open_failed"
+    SCHEMA_MISMATCH = "schema_mismatch"
+    MIGRATION_FAILED = "migration_failed"
     CLOSED = "closed"
     ACTIVE_TRANSACTION = "active_transaction"
     VERIFY_FAILED = "verify_failed"
