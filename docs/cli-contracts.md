@@ -54,6 +54,18 @@ mdrack [--root <dir>] [--json] [--config-file <path.toml>] <command>
 | `--json` | `true` | When `true` (default) output is compact JSON. When `false` output is pretty-printed with `indent=2`. |
 | `--config-file <path>` | none | Path to a TOML config file. When omitted, `.mdrack/config.toml` is read if it exists; otherwise defaults are used. |
 
+An explicit missing, unreadable, or invalid `--config-file` fails before command
+dispatch with exactly this fixed public error; the supplied path and parser or I/O
+exception are never emitted or logged:
+
+```json
+{
+  "ok": false,
+  "error": {"message": "Configuration could not be loaded", "code": "CONFIG_ERROR"},
+  "meta": {"command": "mdrack"}
+}
+```
+
 ---
 
 ## 1. `mdrack init`
@@ -798,17 +810,19 @@ Show summary statistics of the knowledge store.
 {
   "ok": true,
   "data": {
+    "generation_state": "ready",
     "files_count": 15,
     "chunks_count": 142,
     "embeddings_count": 142,
     "active_profile": "default",
     "profile_model": "text-embedding-qwen3-embedding-4b",
     "profile_dimensions": 2560,
-    "profile_endpoint": "http://localhost:1234/v1",
     "configured_model": "text-embedding-qwen3-embedding-4b",
     "configured_dimensions": 2560,
-    "configured_endpoint": "http://localhost:1234/v1",
-    "schema_version": "0003"
+    "endpoint_configured": true,
+    "endpoint_profile_recorded": true,
+    "endpoint_match": true,
+    "schema_version": "0006"
   },
   "meta": { "command": "status" }
 }
@@ -816,16 +830,18 @@ Show summary statistics of the knowledge store.
 
 | Field | Type | Description |
 |---|---|---|
+| `generation_state` | string | Privacy-safe active generation readiness state. |
 | `files_count` | integer | Total files in the store. |
 | `chunks_count` | integer | Total chunks across all files. |
 | `embeddings_count` | integer | Embeddings for the `"default"` profile. |
 | `active_profile` | string | Always `"default"`. |
 | `profile_model` | string or null | Model recorded in `embedding_profiles` for the active profile. |
 | `profile_dimensions` | integer or null | Stored vector dimension for the active profile. |
-| `profile_endpoint` | string or null | Stored LM Studio endpoint for the active profile. |
 | `configured_model` | string or null | Current model from the resolved MDRack config. |
 | `configured_dimensions` | integer or null | Current dimension from the resolved MDRack config. |
-| `configured_endpoint` | string or null | Current LM Studio endpoint from the resolved MDRack config. |
+| `endpoint_configured` | boolean | Whether config contains an endpoint; the value is never emitted. |
+| `endpoint_profile_recorded` | boolean | Whether the profile records an endpoint; the value is never emitted. |
+| `endpoint_match` | boolean or null | Equality result, or `null` when either endpoint is unavailable. |
 | `schema_version` | string or null | Maximum applied migration version, or `null` if none. |
 
 ### Success (store does not exist)
@@ -834,23 +850,37 @@ Show summary statistics of the knowledge store.
 {
   "ok": true,
   "data": {
+    "generation_state": "legacy_only",
     "files_count": 0,
     "chunks_count": 0,
     "embeddings_count": 0,
-    "active_profile": null,
+    "active_profile": "default",
+    "profile_model": null,
+    "profile_dimensions": null,
+    "configured_model": "text-embedding-qwen3-embedding-4b",
+    "configured_dimensions": 2560,
+    "endpoint_configured": true,
+    "endpoint_profile_recorded": false,
+    "endpoint_match": null,
     "schema_version": null
   },
   "meta": { "command": "status" }
 }
 ```
 
-If the database file is absent, all counts are zero and `active_profile`
-and `schema_version` are `null`.
+If the database file is absent, all counts are zero, profile fields are `null`,
+and endpoint information remains presence/comparison booleans only.
 
 ### Notes
 
 - Database read is `<store>/knowledge.db` (default `.mdrack/knowledge.db`).
 - `schema_version` is the maximum integer from the `schema_migrations` table.
+- Generation, connection, store-status, projection, or JSON serialization failures
+  return one fixed error envelope:
+
+```json
+{"ok":false,"error":{"message":"Status could not be read","code":"STATUS_ERROR"},"meta":{"command":"status"}}
+```
 
 ---
 
@@ -896,8 +926,40 @@ Run diagnostic checks on the knowledge store.
 - The outer envelope `ok` indicates CLI execution success.
 - The inner `data.ok` indicates store health.
 - `summary` contains stable severity counts.
-- `findings` contains the real diagnostics output from `diagnostics/doctor.py`.
-- Doctor now reports profile metadata presence and config/profile mismatch explicitly.
+- Finding keys are exactly `severity`, `code`, `message`, and `details`.
+- `message` is fixed by `code`; `details` contains only allowlisted counts,
+  dimensions, profile/model identifiers, migration versions, generation state,
+  fingerprints, booleans, and stable reason codes.
+- Paths, endpoint values, URLs, query/content/vector/provider bodies, exception text,
+  and `expected_*`/`actual_*` private values are never emitted.
+- Connection, diagnostic execution, projection, or JSON serialization failures
+  return one fixed error envelope:
+
+```json
+{"ok":false,"error":{"message":"Diagnostics could not be completed","code":"DOCTOR_ERROR"},"meta":{"command":"doctor"}}
+```
+
+Support, recovery, and release tooling may aggregate only the common safe record:
+
+```json
+{
+  "schema_version": 1,
+  "generated_for": "release",
+  "status": "degraded",
+  "checks": [
+    {
+      "code": "PROVIDER_CHECK",
+      "status": "degraded",
+      "reason_code": "provider_unavailable",
+      "counts": {"attempted": 0},
+      "dimensions": {"configured": 2560},
+      "fingerprint": "sha256:0123456789abcdef"
+    }
+  ]
+}
+```
+
+The top-level and check key sets are closed; raw payload passthrough is rejected.
 
 ---
 
@@ -1042,7 +1104,7 @@ Example success payload:
     "new_model": "text-embedding-qwen3-embedding-4b",
     "old_dimensions": 1024,
     "new_dimensions": 2560,
-    "config_path": "C:/tmp/project/.mdrack/config.toml",
+
     "rebuild": {
       "embedded_count": 3,
       "total_chunks": 3,
@@ -1079,6 +1141,9 @@ Notes:
   LM Studio key after a successful switch.
 - `unload_previous.reason` may be `"same_model"` or `"previous_model_not_loaded"`
   when there is nothing to unload.
+- Provider response records are mapped field by field. Failures use a stable
+  `{code,message,details.reason_code}` error and never include endpoint values,
+  provider bodies, or raw exception text.
 
 ---
 
@@ -1195,21 +1260,24 @@ Run retrieval evaluation queries against the indexed store.
 {
   "ok": true,
   "data": {
-    "queries_path": "tests/retrieval_eval/queries.yaml",
+    "query_set": {
+      "kind": "file",
+      "query_count": 1
+    },
     "k": 5,
     "results": [
       {
-        "query_id": "Q001",
-        "query": "how can an agent read neighboring chunks",
+        "case_ordinal": 1,
         "mode": "hybrid",
         "k": 5,
         "recall_at_k": 1.0,
         "mrr": 1.0,
         "precision_at_k": 0.5,
+        "ndcg_at_k": 1.0,
         "retrieved_count": 2,
         "expected_count": 1,
         "conditions_met": true,
-        "error": null
+        "status": "ok"
       }
     ],
     "summary": {
@@ -1230,7 +1298,11 @@ Run retrieval evaluation queries against the indexed store.
 
 - Query loading validates supported `expected` and `metrics` clauses.
 - Per-query `metrics.recall_at` overrides the top-level `--k` for that query.
-- Failed semantic or hybrid queries surface an `error` field in per-query output.
+- Input paths, basenames, query IDs/text, retrieved IDs, free-form errors, provider
+  bodies, and exception text are never emitted. Failed cases use `status:"failed"`
+  plus a stable `reason_code`.
+- Load/storage/provider/internal errors preserve the outer envelope and use fixed
+  public messages selected by stable error code.
 
 ---
 
@@ -1239,6 +1311,8 @@ Run retrieval evaluation queries against the indexed store.
 | Code | Typical cause |
 |---|---|
 | `CONFIG_ERROR` | Configuration missing or failed to load. |
+| `STATUS_ERROR` | Status generation, storage, projection, or serialization failed. |
+| `DOCTOR_ERROR` | Doctor connection, execution, projection, or serialization failed. |
 | `STORAGE_ERROR` | Database file not found or inaccessible. |
 | `EMBEDDING_ERROR` | LM Studio unavailable or model error during embedding. |
 | `NOT_FOUND` | Requested ID does not exist in the store. |

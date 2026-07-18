@@ -135,10 +135,10 @@ def test_doctor_reports_profile_config_mismatch(tmp_path: Path) -> None:
     assert "PROFILE_CONFIG_MISMATCH" in findings
     assert findings["PROFILE_CONFIG_MISMATCH"]["details"] == {
         "profile": "default",
-        "expected_model": MODEL_LARGE,
-        "actual_model": MODEL_SMALL,
-        "expected_dimensions": 12,
-        "actual_dimensions": 8,
+        "configured_model": MODEL_LARGE,
+        "profile_model": MODEL_SMALL,
+        "configured_dimensions": 12,
+        "profile_dimensions": 8,
     }
 
 

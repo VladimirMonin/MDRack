@@ -8,14 +8,15 @@ from typing import Any
 
 import click
 
-from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.eval.queries import load_queries
+from mdrack.eval.reporting import build_safe_eval_results, build_safe_eval_summary
 from mdrack.eval.retrieval import run_retrieval_eval
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import StorageError
 from mdrack.output.json_output import emit_json
+from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.storage.sqlite.connection import get_connection
 
 logger = logging.getLogger(__name__)
@@ -75,15 +76,24 @@ def retrieval(
 
     try:
         query_set = load_queries(queries_path)
-    except Exception as exc:
-        _output(ctx, envelope_error(str(exc), "EVAL_LOAD_ERROR", cmd))
+    except Exception:
+        logger.warning("cli.eval.failed code=EVAL_LOAD_ERROR reason=invalid_query_set")
+        _output(
+            ctx,
+            envelope_error(
+                "Evaluation query set could not be loaded",
+                "EVAL_LOAD_ERROR",
+                cmd,
+            ),
+        )
         ctx.exit(1)
         return
 
     try:
         conn = _open_connection(db_path)
     except StorageError as exc:
-        _output(ctx, envelope_error(str(exc), exc.code, cmd))
+        logger.warning("cli.eval.failed code=%s reason=store_unavailable", exc.code)
+        _output(ctx, envelope_error("Evaluation store is unavailable", exc.code, cmd))
         ctx.exit(1)
         return
 
@@ -96,33 +106,17 @@ def retrieval(
             conn, query_set, provider, config, profile="default", k=k,
         )
 
-        per_query: list[dict[str, Any]] = []
-        for r in report.results:
-            per_query.append({
-                "query_id": r.query_id,
-                "query": r.query,
-                "mode": r.mode,
-                "k": r.k,
-                "recall_at_k": r.recall_at_k,
-                "mrr": r.mrr,
-                "precision_at_k": r.precision_at_k,
-                "ndcg_at_k": r.ndcg_at_k,
-                "retrieved_count": len(r.retrieved_ids),
-                "expected_count": len(r.expected_ids),
-                "conditions_met": r.conditions_met,
-                "error": r.error,
-            })
-
         data: dict[str, Any] = {
-            "queries_path": queries_path.as_posix(),
+            "query_set": {"kind": "file", "query_count": len(query_set.queries)},
             "k": k,
-            "results": per_query,
-            "summary": report.summary,
+            "results": build_safe_eval_results(report),
+            "summary": build_safe_eval_summary(report),
         }
         _output(ctx, envelope_success(data, command=cmd))
-    except Exception as exc:
-        logger.exception("Eval retrieval command failed")
-        _output(ctx, envelope_error(str(exc), "INTERNAL_ERROR", cmd))
+    except Exception:
+        logger.error("cli.eval.failed code=INTERNAL_ERROR reason=unexpected_failure")
+        _output(ctx, envelope_error("Evaluation failed", "INTERNAL_ERROR", cmd))
+        ctx.exit(1)
     finally:
         conn.close()
         try:
@@ -130,4 +124,4 @@ def retrieval(
 
             asyncio.run(close_async_resource(provider))
         except Exception:
-            logger.debug("Failed to close embedding provider", exc_info=True)
+            logger.warning("cli.eval.cleanup.failed reason=provider_close_failed")

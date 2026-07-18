@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import Any
 
 from mdrack.eval.retrieval import EvalReport
 
 _CHECKOUT_STATUSES = frozenset({"available", "unavailable"})
-
-
-def _safe_ref(value: str) -> str:
-    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
-    return f"sha256:{digest}"
+_SUMMARY_KEYS = frozenset(
+    {
+        "queries_total",
+        "queries_successful",
+        "queries_failed",
+        "queries_with_zero_gold",
+        "avg_recall_at_k",
+        "avg_mrr",
+        "avg_precision_at_k",
+        "avg_ndcg_at_k",
+    }
+)
 
 
 def _error_category(error: str | None) -> str | None:
@@ -27,6 +33,42 @@ def _error_category(error: str | None) -> str | None:
     if "search" in lowered:
         return "search_error"
     return "evaluation_error"
+
+
+def build_safe_eval_results(evaluation: EvalReport) -> list[dict[str, Any]]:
+    """Project per-query internals into ordinal-only safe result records."""
+    return [
+        {
+            "case_ordinal": ordinal,
+            "mode": result.mode,
+            "k": result.k,
+            "recall_at_k": result.recall_at_k,
+            "mrr": result.mrr,
+            "precision_at_k": result.precision_at_k,
+            "ndcg_at_k": result.ndcg_at_k,
+            "retrieved_count": len(result.retrieved_ids),
+            "expected_count": len(result.expected_ids),
+            "conditions_met": result.conditions_met,
+            "status": "ok" if result.conditions_met else "failed",
+            **(
+                {"reason_code": reason_code}
+                if (reason_code := _error_category(result.error)) is not None
+                else {}
+            ),
+        }
+        for ordinal, result in enumerate(evaluation.results, start=1)
+    ]
+
+
+def build_safe_eval_summary(evaluation: EvalReport) -> dict[str, int | float]:
+    """Keep only aggregate numeric metrics from an internal evaluation report."""
+    return {
+        key: value
+        for key, value in evaluation.summary.items()
+        if key in _SUMMARY_KEYS
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+    }
 
 
 @dataclass(frozen=True)
@@ -67,22 +109,7 @@ def build_retrieval_report(
     chunker_ref: str,
 ) -> RetrievalBaselineReport:
     """Project an internal evaluation result into a privacy-safe contract."""
-    results = [
-        {
-            "query_ref": _safe_ref(result.query_id),
-            "mode": result.mode,
-            "k": result.k,
-            "recall_at_k": result.recall_at_k,
-            "mrr": result.mrr,
-            "precision_at_k": result.precision_at_k,
-            "ndcg_at_k": result.ndcg_at_k,
-            "retrieved_count": len(result.retrieved_ids),
-            "expected_count": len(result.expected_ids),
-            "conditions_met": result.conditions_met,
-            "error_category": _error_category(result.error),
-        }
-        for result in evaluation.results
-    ]
+    results = build_safe_eval_results(evaluation)
     return RetrievalBaselineReport(
         benchmark_ref=benchmark_ref,
         corpus_ref=corpus_ref,
@@ -91,7 +118,7 @@ def build_retrieval_report(
         parser_ref=parser_ref,
         chunker_ref=chunker_ref,
         results=results,
-        summary=dict(evaluation.summary),
+        summary=build_safe_eval_summary(evaluation),
     )
 
 

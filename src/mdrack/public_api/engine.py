@@ -10,8 +10,8 @@ from mdrack.application.indexing import IndexingService
 from mdrack.application.query import ReadService, SearchService
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
-from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import embedding_profile_from_config
+from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
 
 

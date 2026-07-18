@@ -12,7 +12,7 @@ from mdrack.domain.retrieval import (
     RetrievalMode,
     RetrievalResult,
 )
-from mdrack.embeddings.protocol import EmbeddingError, EmbeddingProvider
+from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack.ports.storage import RetrievalStorage
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_core.domain import (

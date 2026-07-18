@@ -132,10 +132,12 @@ def test_status_reports_configured_and_profile_embedding_metadata(tmp_path: Path
     assert data["active_profile"] == "default"
     assert data["configured_model"] == MODEL_LARGE
     assert data["configured_dimensions"] == 12
-    assert data["configured_endpoint"] == "http://localhost:1234/v1"
     assert data["profile_model"] == MODEL_SMALL
     assert data["profile_dimensions"] == 8
-    assert data["profile_endpoint"] == "http://localhost:1234/v1"
+    assert data["endpoint_configured"] is True
+    assert data["endpoint_profile_recorded"] is True
+    assert data["endpoint_match"] is True
+    assert "localhost" not in result.output
 
 
 def test_status_fails_closed_for_incomplete_generation_without_pointer_or_private_paths(

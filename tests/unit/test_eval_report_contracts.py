@@ -79,7 +79,7 @@ def test_retrieval_baseline_report_omits_queries_paths_and_chunk_ids() -> None:
     assert payload["parser_ref"] == "sha256:parser"
     assert payload["chunker_ref"] == "sha256:chunker"
     assert set(payload["results"][0]) == {
-        "query_ref",
+        "case_ordinal",
         "mode",
         "k",
         "recall_at_k",
@@ -89,7 +89,7 @@ def test_retrieval_baseline_report_omits_queries_paths_and_chunk_ids() -> None:
         "retrieved_count",
         "expected_count",
         "conditions_met",
-        "error_category",
+        "status",
     }
     rendered = str(payload)
     assert "SECRET_QUERY_SENTINEL" not in rendered

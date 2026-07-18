@@ -14,20 +14,51 @@ import click
 
 from mdrack.cli.commands.rebuild import rebuild_embeddings_in_db
 from mdrack.config.loader import write_config
-from mdrack.embeddings.lmstudio import LMStudioProvider
-from mdrack.embeddings.protocol import EmbeddingError as ProviderEmbeddingError
 from mdrack.embeddings.runtime import close_async_resource, create_lmstudio_control_client
 from mdrack.indexing.indexer import run_indexer
+from mdrack.integrations.lmstudio import LMStudioProvider
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, EmbeddingError, MDRackError
 from mdrack.output.json_output import emit_json
+from mdrack.ports.embeddings import EmbeddingError as ProviderEmbeddingError
 
 logger = logging.getLogger(__name__)
 
 _DOWNLOAD_DONE_STATES = {"completed", "downloaded", "finished", "ready"}
 _DOWNLOAD_FAILED_STATES = {"failed", "error", "cancelled"}
 _DEFAULT_PROFILE = "default"
+_SAFE_PROVIDER_FIELDS = frozenset(
+    {
+        "id",
+        "key",
+        "model",
+        "state",
+        "status",
+        "loaded",
+        "display_name",
+        "model_type",
+        "publisher",
+        "selected_variant",
+        "variants",
+        "instance_ids",
+        "instance_id",
+        "download_id",
+        "progress",
+        "downloaded_bytes",
+        "total_bytes",
+        "models",
+        "downloads",
+        "unload",
+        "download",
+        "load",
+    }
+)
+_FIXED_ERROR_MESSAGES = {
+    "CONFIG_ERROR": "Model command configuration is invalid",
+    "EMBEDDING_ERROR": "LM Studio operation failed",
+    "INTERNAL_ERROR": "Model command failed",
+}
 
 
 def _model_name_matches(left: str, right: str) -> bool:
@@ -71,9 +102,24 @@ def _to_jsonable(value: Any) -> Any:
     return value
 
 
+def _provider_to_jsonable(value: Any) -> Any:
+    """Serialize provider records field by field without raw response passthrough."""
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        value = dataclasses.asdict(value)
+    if isinstance(value, (list, tuple)):
+        return [_provider_to_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _provider_to_jsonable(item)
+            for key, item in value.items()
+            if key in _SAFE_PROVIDER_FIELDS
+        }
+    return value
+
+
 def _handle_error(ctx: click.Context, cmd: str, exc: Exception) -> None:
     if isinstance(exc, ProviderEmbeddingError):
-        exc = EmbeddingError(str(exc))
+        exc = EmbeddingError("provider_operation_failed")
 
     if isinstance(exc, MDRackError):
         logger.warning(
@@ -84,25 +130,26 @@ def _handle_error(ctx: click.Context, cmd: str, exc: Exception) -> None:
         _output(
             ctx,
             envelope_error(
-                message=str(exc),
+                message=_FIXED_ERROR_MESSAGES.get(exc.code, "Model command failed"),
                 code=exc.code,
                 command=cmd,
-                details=exc.details,
+                details={"reason_code": "operation_failed"},
             ),
         )
         ctx.exit(1)
         return
 
-    logger.exception(
+    logger.error(
         "cli.command.failed command=%s code=INTERNAL_ERROR reason=unexpected_exception",
         cmd,
     )
     _output(
         ctx,
         envelope_error(
-            message=str(exc),
+            message=_FIXED_ERROR_MESSAGES["INTERNAL_ERROR"],
             code="INTERNAL_ERROR",
             command=cmd,
+            details={"reason_code": "unexpected_failure"},
         ),
     )
     ctx.exit(1)
@@ -134,9 +181,9 @@ def _run_model_command(
         if result is None:
             data = empty_result or {}
         elif isinstance(result, dict):
-            data = _to_jsonable(result)
+            data = _provider_to_jsonable(result)
         else:
-            data = {collection_key: _to_jsonable(result)}
+            data = {collection_key: _provider_to_jsonable(result)}
     except Exception as exc:
         _handle_error(ctx, cmd, exc)
         return
@@ -144,7 +191,7 @@ def _run_model_command(
         try:
             asyncio.run(close_async_resource(client))
         except Exception:
-            logger.debug("Failed to close model control client", exc_info=True)
+            logger.warning("cli.model.cleanup.failed reason=control_client_close_failed")
 
     logger.info("cli.command.finished command=%s status=success", cmd)
     _output(ctx, envelope_success(data, command=cmd))
@@ -158,7 +205,7 @@ def _resolve_requested_model_name(client: object, model_name: str) -> str:
     try:
         models = _invoke_client_method(client, "list_models")
     except Exception:
-        logger.debug("Model alias resolution skipped after list_models failure", exc_info=True)
+        logger.debug("Model alias resolution skipped reason=list_models_failed")
         return model_name
     return _resolve_requested_model_name_from_models(models, model_name)
 
@@ -253,7 +300,7 @@ async def _wait_for_model_download(client: object, model_name: str) -> list[dict
     for _ in range(1800):
         result = client.get_download_status()
         downloads = await result if isawaitable(result) else result
-        download_items = [_to_jsonable(item) for item in downloads]
+        download_items = [_provider_to_jsonable(item) for item in downloads]
         for item in downloads:
             key = getattr(item, "key", None)
             status = (getattr(item, "status", None) or "").lower()
@@ -310,7 +357,7 @@ def _already_loaded_result(
     try:
         loaded_models = _invoke_client_method(client, "list_loaded_models")
     except Exception:
-        logger.debug("Loaded-model fallback check failed", exc_info=True)
+        logger.debug("Loaded-model fallback skipped reason=list_loaded_models_failed")
         return None
 
     for item in loaded_models:
@@ -334,7 +381,7 @@ def _loaded_instance_ids_for_model(client: object, model: Any | None) -> tuple[s
     try:
         loaded_models = _invoke_client_method(client, "list_loaded_models")
     except Exception:
-        logger.debug("Loaded-model instance lookup failed", exc_info=True)
+        logger.debug("Loaded-model instance lookup skipped reason=list_loaded_models_failed")
         return ()
 
     return tuple(
@@ -379,15 +426,10 @@ def _unload_previous_model(
                 instance_id,
                 type(exc).__name__,
             )
-            errors.append(
-                {
-                    "instance_id": instance_id,
-                    "message": str(exc),
-                }
-            )
+            errors.append({"instance_id": instance_id, "reason_code": "unload_failed"})
             continue
 
-        payload = _to_jsonable(result)
+        payload = _provider_to_jsonable(result)
         if not isinstance(payload, dict):
             payload = {}
         payload.setdefault("instance_id", instance_id)
@@ -479,7 +521,7 @@ def _run_switch_rebuild(
         try:
             asyncio.run(close_async_resource(provider))
         except Exception:
-            logger.debug("Failed to close target embedding provider", exc_info=True)
+            logger.warning("cli.model.cleanup.failed reason=target_provider_close_failed")
 
 
 @click.group()
@@ -514,7 +556,7 @@ def model_download(ctx: click.Context, model_name: str) -> None:
         client = create_model_control_client(ctx)
         resolved_model_name = _resolve_requested_model_name(client, model_name)
         result = _invoke_client_method(client, "download_model", resolved_model_name)
-        data = _to_jsonable(result) if isinstance(result, dict) else _to_jsonable(result)
+        data = _provider_to_jsonable(result)
         if not isinstance(data, dict):
             data = {"download": data}
     except Exception as exc:
@@ -524,7 +566,7 @@ def model_download(ctx: click.Context, model_name: str) -> None:
         try:
             asyncio.run(close_async_resource(client))
         except Exception:
-            logger.debug("Failed to close model control client", exc_info=True)
+            logger.warning("cli.model.cleanup.failed reason=control_client_close_failed")
 
     logger.info("cli.command.finished command=%s status=success", cmd)
     _output(ctx, envelope_success(data, command=cmd))
@@ -559,7 +601,7 @@ def model_load(ctx: click.Context, model_name: str) -> None:
             data = loaded_result
         else:
             result = _invoke_client_method(client, "load_model", resolved_model_name)
-            data = _to_jsonable(result) if isinstance(result, dict) else _to_jsonable(result)
+            data = _provider_to_jsonable(result)
         if not isinstance(data, dict):
             data = {"load": data}
     except Exception as exc:
@@ -569,7 +611,7 @@ def model_load(ctx: click.Context, model_name: str) -> None:
         try:
             asyncio.run(close_async_resource(client))
         except Exception:
-            logger.debug("Failed to close model control client", exc_info=True)
+            logger.warning("cli.model.cleanup.failed reason=control_client_close_failed")
 
     logger.info("cli.command.finished command=%s status=success", cmd)
     _output(ctx, envelope_success(data, command=cmd))
@@ -726,10 +768,9 @@ def model_switch(
             "new_model": resolved_model_name,
             "old_dimensions": config.embedding.dimensions,
             "new_dimensions": detected_dimensions,
-            "config_path": str(config_path),
             "rebuild": rebuild_data,
             "download": download_info,
-            "load": _to_jsonable(load_result) if load_result is not None else None,
+            "load": _provider_to_jsonable(load_result) if load_result is not None else None,
             "unload_previous": unload_previous,
         }
     except Exception as exc:
@@ -739,7 +780,7 @@ def model_switch(
         try:
             asyncio.run(close_async_resource(client))
         except Exception:
-            logger.debug("Failed to close model control client", exc_info=True)
+            logger.warning("cli.model.cleanup.failed reason=control_client_close_failed")
 
     logger.info("cli.command.finished command=%s status=success", cmd)
     _output(ctx, envelope_success(data, command=cmd))

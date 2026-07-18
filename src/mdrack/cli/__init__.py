@@ -72,6 +72,26 @@ def _command_name(ctx: click.Context) -> str:
     return " ".join(reversed(parts)) or "mdrack"
 
 
+def _emit_fixed_command_error(
+    ctx: click.Context,
+    *,
+    code: str,
+    message: str,
+    event: str,
+    reason: str,
+) -> None:
+    """Emit one privacy-safe command error without serializing the exception."""
+    logger.error(
+        event,
+        extra={"status": "failed", "reason": reason},
+    )
+    _output(
+        ctx,
+        envelope_error(message=message, code=code, command=_command_name(ctx)),
+    )
+    ctx.exit(1)
+
+
 def _handle_exception(ctx: click.Context, exc: Exception) -> None:
     """Catch exceptions and output JSON error envelope."""
     if isinstance(exc, MDRackError):
@@ -121,8 +141,14 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
         ctx.obj[CTX_CONFIG_PATH] = resolved_config_path
         ctx.obj[CTX_STORE_DIR] = _resolve_store_dir(resolved_root, config.paths.store)
         ctx.obj[CTX_DB_PATH] = ctx.obj[CTX_STORE_DIR] / "knowledge.db"
-    except Exception as exc:
-        _handle_exception(ctx, ConfigError(f"Failed to load config: {exc}"))
+    except Exception:
+        _emit_fixed_command_error(
+            ctx,
+            code="CONFIG_ERROR",
+            message="Configuration could not be loaded",
+            event="cli.config.failed",
+            reason="config_invalid",
+        )
         return
 
     if ctx.invoked_subcommand is None:
@@ -209,6 +235,21 @@ main.add_command(model_group)
 def status(ctx: click.Context) -> None:
     """Show index status summary."""
     cmd = _command_name(ctx)
+    try:
+        safe_status = _build_status_data(ctx)
+        _output(ctx, envelope_success(safe_status, command=cmd))
+    except Exception:
+        _emit_fixed_command_error(
+            ctx,
+            code="STATUS_ERROR",
+            message="Status could not be read",
+            event="cli.status.failed",
+            reason="status_unavailable",
+        )
+
+
+def _build_status_data(ctx: click.Context) -> dict[str, object]:
+    """Build the allowlisted status payload or raise to the command boundary."""
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
     db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
 
@@ -216,28 +257,24 @@ def status(ctx: click.Context) -> None:
     from mdrack.diagnostics.integrity import get_generation_status
 
     generation_status = get_generation_status(store_dir)
-    generation_projection = {"generation_state": generation_status["generation_state"]}
+    configured_endpoint = config.embedding.endpoint if config is not None else None
 
     if not db_path.is_file():
-        payload = envelope_success(
-            {
-                "files_count": 0,
-                "chunks_count": 0,
-                "embeddings_count": 0,
-                "active_profile": "default",
-                "configured_model": config.embedding.model if config is not None else None,
-                "configured_dimensions": config.embedding.dimensions if config is not None else None,
-                "configured_endpoint": config.embedding.endpoint if config is not None else None,
-                "profile_model": None,
-                "profile_dimensions": None,
-                "profile_endpoint": None,
-                "schema_version": None,
-                **generation_projection,
-            },
-            command=cmd,
-        )
-        _output(ctx, payload)
-        return
+        return {
+            "generation_state": generation_status["generation_state"],
+            "files_count": 0,
+            "chunks_count": 0,
+            "embeddings_count": 0,
+            "active_profile": "default",
+            "profile_model": None,
+            "profile_dimensions": None,
+            "configured_model": config.embedding.model if config is not None else None,
+            "configured_dimensions": config.embedding.dimensions if config is not None else None,
+            "endpoint_configured": configured_endpoint is not None,
+            "endpoint_profile_recorded": False,
+            "endpoint_match": None,
+            "schema_version": None,
+        }
 
     from mdrack.diagnostics.integrity import get_store_status
     from mdrack.storage.sqlite.connection import get_connection
@@ -248,18 +285,25 @@ def status(ctx: click.Context) -> None:
     finally:
         conn.close()
 
-    status_data.update(generation_projection)
-
-    if config is not None:
-        status_data.update(
-            {
-                "configured_model": config.embedding.model,
-                "configured_dimensions": config.embedding.dimensions,
-                "configured_endpoint": config.embedding.endpoint,
-            }
-        )
-
-    _output(ctx, envelope_success(status_data, command=cmd))
+    profile_endpoint = status_data.pop("profile_endpoint", None)
+    endpoint_match = None
+    if configured_endpoint is not None and profile_endpoint is not None:
+        endpoint_match = configured_endpoint == profile_endpoint
+    return {
+        "generation_state": generation_status["generation_state"],
+        "files_count": status_data["files_count"],
+        "chunks_count": status_data["chunks_count"],
+        "embeddings_count": status_data["embeddings_count"],
+        "active_profile": status_data["active_profile"],
+        "profile_model": status_data["profile_model"],
+        "profile_dimensions": status_data["profile_dimensions"],
+        "configured_model": config.embedding.model if config is not None else None,
+        "configured_dimensions": config.embedding.dimensions if config is not None else None,
+        "endpoint_configured": configured_endpoint is not None,
+        "endpoint_profile_recorded": profile_endpoint is not None,
+        "endpoint_match": endpoint_match,
+        "schema_version": status_data["schema_version"],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +314,21 @@ def status(ctx: click.Context) -> None:
 def doctor(ctx: click.Context) -> None:
     """Run diagnostics on the knowledge store."""
     cmd = _command_name(ctx)
+    try:
+        report_data = _build_doctor_data(ctx)
+        _output(ctx, envelope_success(report_data, command=cmd))
+    except Exception:
+        _emit_fixed_command_error(
+            ctx,
+            code="DOCTOR_ERROR",
+            message="Diagnostics could not be completed",
+            event="cli.doctor.failed",
+            reason="diagnostics_unavailable",
+        )
+
+
+def _build_doctor_data(ctx: click.Context) -> dict[str, object]:
+    """Build the allowlisted doctor payload or raise to the command boundary."""
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
     db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
     store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
@@ -289,8 +348,7 @@ def doctor(ctx: click.Context) -> None:
             ],
             ok=False,
         )
-        _output(ctx, envelope_success(report_to_dict(report), command=cmd))
-        return
+        return report_to_dict(report)
 
     conn = get_connection(db_path)
     try:
@@ -305,7 +363,7 @@ def doctor(ctx: click.Context) -> None:
     finally:
         conn.close()
 
-    _output(ctx, envelope_success(report_to_dict(report), command=cmd))
+    return report_to_dict(report)
 
 
 # ---------------------------------------------------------------------------

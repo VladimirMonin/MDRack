@@ -339,7 +339,11 @@ def test_model_command_returns_json_error_on_control_failure(
     payload = json.loads(result.output)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "EMBEDDING_ERROR"
-    assert payload["error"]["message"] == "LM Studio is unavailable"
+    assert payload["error"] == {
+        "code": "EMBEDDING_ERROR",
+        "message": "LM Studio operation failed",
+        "details": {"reason_code": "operation_failed"},
+    }
     assert payload["meta"]["command"] == "model list"
     assert client.calls == [("list_models", ())]
 
@@ -408,7 +412,8 @@ def test_model_switch_persists_config_after_successful_rebuild(
         "total_chunks": 3,
         "profile": "default",
     }
-    assert Path(payload["data"]["config_path"]) == config_path.resolve()
+    assert "config_path" not in payload["data"]
+    assert str(config_path) not in result.output
     assert payload["data"]["load"] == {
         "key": MODEL_LARGE,
         "state": "loaded",
@@ -469,7 +474,7 @@ def test_model_switch_rolls_back_config_when_rebuild_fails(
     payload = json.loads(result.output)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "EMBEDDING_ERROR"
-    assert payload["error"]["message"] == "Embedding rebuild failed"
+    assert payload["error"]["message"] == "LM Studio operation failed"
     assert payload["meta"]["command"] == "model switch"
     assert client.calls == [
         ("list_models", ()),

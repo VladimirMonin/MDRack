@@ -9,7 +9,7 @@ from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.application.retrieval import RetrievalService
 from mdrack.config.models import MDRackConfig
 from mdrack.domain.indexing import SourceLocator
-from mdrack.embeddings.protocol import EmbeddingProvider
+from mdrack.ports.embeddings import EmbeddingProvider
 
 
 @dataclass

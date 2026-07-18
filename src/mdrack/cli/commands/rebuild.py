@@ -12,7 +12,6 @@ import click
 
 from mdrack.application.compatibility import create_active_generation_rebuild_storage
 from mdrack.domain.profiles import EmbeddingProfile
-from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import (
     close_async_resource,
     create_embedding_provider,
@@ -22,6 +21,7 @@ from mdrack.indexing.indexer import run_indexer
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
+from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.fts import rebuild_fts
 from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
@@ -350,4 +350,4 @@ def rebuild_embeddings_cmd(
         try:
             asyncio.run(close_async_resource(provider))
         except Exception:
-            logger.debug("Failed to close embedding provider", exc_info=True)
+            logger.warning("cli.rebuild.cleanup.failed reason=provider_close_failed")

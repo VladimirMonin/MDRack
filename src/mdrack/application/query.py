@@ -7,7 +7,7 @@ from typing import Any
 from mdrack.application.retrieval import RetrievalService
 from mdrack.domain.indexing import SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
-from mdrack.embeddings.protocol import EmbeddingProvider
+from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.ports.storage import ReadStorage, RetrievalStorage
 
 

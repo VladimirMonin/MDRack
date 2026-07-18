@@ -7,8 +7,8 @@ from typing import Any
 
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.embeddings.lmstudio import LMStudioControlClient, LMStudioProvider
-from mdrack.embeddings.protocol import EmbeddingProvider
+from mdrack.integrations.lmstudio import LMStudioControlClient, LMStudioProvider
+from mdrack.ports.embeddings import EmbeddingProvider
 
 
 def create_embedding_provider(provider_name: str, config: Any) -> EmbeddingProvider:

@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mdrack.config.models import MDRackConfig
-from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.eval.metrics import mrr, ndcg_at_k, precision_at_k, recall_at_k
 from mdrack.eval.queries import EvalQuery, EvalQuerySet
+from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.search.hybrid import hybrid_search
 from mdrack.search.semantic import semantic_search
 from mdrack.search.text import text_search
@@ -129,7 +129,7 @@ async def _run_single_query(
     try:
         expected_ids = _find_relevant_chunks(conn, query.expected)
     except Exception:
-        logger.exception("Failed to find relevant chunks for query %s", query.id)
+        logger.error("eval.expected_resolution.failed reason=storage_error")
         conditions_met = False
         error = "Failed to resolve expected clauses against the indexed store"
 
@@ -163,7 +163,7 @@ async def _run_single_query(
                 conditions_met = False
                 error = result.error
     except Exception:
-        logger.exception("Search failed for query %s", query.id)
+        logger.error("eval.search.failed reason=search_error mode=%s", query.mode)
         conditions_met = False
         error = "Search execution failed"
 

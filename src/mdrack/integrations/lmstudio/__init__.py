@@ -1,8 +1,6 @@
-"""Compatibility re-exports for the canonical LM Studio integration."""
+"""Canonical LM Studio integration boundary."""
 
-from mdrack.integrations.lmstudio import (
-    EmbeddingError,
-    EmbeddingHealth,
+from mdrack.integrations.lmstudio.client import (
     LMStudioControlClient,
     LMStudioControlError,
     LMStudioDownloadInfo,
@@ -12,6 +10,7 @@ from mdrack.integrations.lmstudio import (
     LMStudioModelInfo,
     LMStudioProvider,
 )
+from mdrack.ports.embeddings import EmbeddingError, EmbeddingHealth
 
 __all__ = [
     "EmbeddingError",

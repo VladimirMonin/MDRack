@@ -11,6 +11,55 @@ from mdrack.diagnostics.integrity import get_generation_status, get_store_status
 from mdrack.embeddings.hashing import hash_embedding_text
 from mdrack.storage.sqlite.migrations import get_applied_migrations, get_migrations_dir
 
+_FIXED_MESSAGES = {
+    "DATABASE_NOT_FOUND": "Knowledge store database was not found",
+    "GENERATION_POINTER_INVALID": "The active store generation pointer is invalid",
+    "GENERATION_POINTER_MISSING": "The active store generation pointer is missing",
+    "GENERATION_BUILDING": "A store generation rebuild is incomplete",
+    "GENERATION_FAILED": "A store generation rebuild failed",
+    "GENERATION_READY": "The active store generation is ready",
+    "GENERATION_LEGACY": "The active store uses the legacy contract",
+    "STATUS_ERROR": "Store status could not be read",
+    "PROFILE_METADATA_MISSING": "Embedding profile metadata is missing",
+    "PROFILE_METADATA_PRESENT": "Embedding profile metadata is present",
+    "PROFILE_CONFIG_MISMATCH": "Embedding profile metadata does not match the current configuration",
+    "PROFILE_CONFIG_MATCH": "Embedding profile metadata matches the current configuration",
+    "MISSING_FTS": "Chunks are missing from the FTS index",
+    "FTS_OK": "All chunks have FTS entries",
+    "MISSING_EMBEDDINGS": "Chunks are missing embedding vectors",
+    "EMBEDDINGS_OK": "All chunks with embedding text have vectors",
+    "STALE_EMBEDDINGS": "Embedding vectors do not match their source text",
+    "EMBEDDINGS_FRESH": "All embedding vectors match their source text",
+    "SCHEMA_BEHIND": "The database schema is behind the packaged schema",
+    "SCHEMA_MISSING": "Packaged migrations are missing from the applied ledger",
+    "SCHEMA_LATEST": "The database schema is up to date",
+    "SCHEMA_CHECK_ERROR": "Schema migrations could not be checked",
+}
+_SAFE_DETAIL_KEYS = frozenset(
+    {
+        "reason_code",
+        "generation_state",
+        "count",
+        "profile",
+        "configured_model",
+        "profile_model",
+        "configured_dimensions",
+        "profile_dimensions",
+        "endpoint_match",
+        "missing_fts_count",
+        "fts_count",
+        "chunk_count",
+        "missing_count",
+        "chunks_with_text",
+        "embeddings_found",
+        "stale_count",
+        "applied_versions",
+        "file_versions",
+        "missing_versions",
+        "future_versions",
+    }
+)
+
 
 @dataclasses.dataclass
 class DoctorFinding:
@@ -41,7 +90,19 @@ def report_to_dict(report: DoctorReport) -> dict[str, object]:
     return {
         "ok": report.ok,
         "summary": summary,
-        "findings": [dataclasses.asdict(finding) for finding in report.findings],
+        "findings": [
+            {
+                "severity": finding.severity,
+                "code": finding.code,
+                "message": _FIXED_MESSAGES.get(finding.code, "Diagnostic check completed"),
+                "details": {
+                    key: value
+                    for key, value in finding.details.items()
+                    if key in _SAFE_DETAIL_KEYS
+                },
+            }
+            for finding in report.findings
+        ],
     }
 
 
@@ -191,16 +252,15 @@ def run_doctor(
     mismatch_details: dict[str, object] = {"profile": active_profile}
     has_mismatch = False
     if expected_model is not None and profile_model != expected_model:
-        mismatch_details["expected_model"] = expected_model
-        mismatch_details["actual_model"] = profile_model
+        mismatch_details["configured_model"] = expected_model
+        mismatch_details["profile_model"] = profile_model
         has_mismatch = True
     if expected_dimensions is not None and profile_dimensions != expected_dimensions:
-        mismatch_details["expected_dimensions"] = expected_dimensions
-        mismatch_details["actual_dimensions"] = profile_dimensions
+        mismatch_details["configured_dimensions"] = expected_dimensions
+        mismatch_details["profile_dimensions"] = profile_dimensions
         has_mismatch = True
     if expected_endpoint is not None and profile_endpoint != expected_endpoint:
-        mismatch_details["expected_endpoint"] = expected_endpoint
-        mismatch_details["actual_endpoint"] = profile_endpoint
+        mismatch_details["endpoint_match"] = False
         has_mismatch = True
 
     if has_mismatch:

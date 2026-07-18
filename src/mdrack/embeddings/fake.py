@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 from typing import Sequence
 
-from mdrack.embeddings.protocol import EmbeddingHealth
+from mdrack.ports.embeddings import EmbeddingHealth
 
 
 class FakeEmbeddingProvider:

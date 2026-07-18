@@ -14,7 +14,6 @@ from mdrack.application.compatibility import (
     create_application_storage,
 )
 from mdrack.application.retrieval import InvalidTextSearchError, RetrievalService
-from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import (
     close_async_resource,
     create_embedding_provider,
@@ -24,6 +23,7 @@ from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import StorageError
 from mdrack.output.json_output import emit_json
+from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.storage.sqlite.fts import FTSQueryError
 
 logger = logging.getLogger(__name__)

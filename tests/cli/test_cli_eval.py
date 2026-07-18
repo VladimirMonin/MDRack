@@ -100,10 +100,10 @@ queries:
     payload = json.loads(result.output)
     assert payload["ok"] is True
     assert set(payload) == {"ok", "data", "meta"}
-    assert set(payload["data"]) == {"queries_path", "k", "results", "summary"}
+    assert set(payload["data"]) == {"query_set", "k", "results", "summary"}
+    assert payload["data"]["query_set"] == {"kind": "file", "query_count": 1}
     assert set(payload["data"]["results"][0]) == {
-        "query_id",
-        "query",
+        "case_ordinal",
         "mode",
         "k",
         "recall_at_k",
@@ -113,9 +113,14 @@ queries:
         "retrieved_count",
         "expected_count",
         "conditions_met",
-        "error",
+        "status",
+        "reason_code",
     }
-    assert payload["data"]["results"][0]["error"] == "provider offline"
+    assert payload["data"]["results"][0]["case_ordinal"] == 1
+    assert payload["data"]["results"][0]["reason_code"] == "provider_error"
     assert payload["data"]["results"][0]["conditions_met"] is False
     assert payload["data"]["results"][0]["ndcg_at_k"] == 0.0
     assert payload["data"]["summary"]["queries_failed"] == 1
+    assert str(queries_path) not in result.output
+    assert "Python" not in result.output
+    assert "provider offline" not in result.output
