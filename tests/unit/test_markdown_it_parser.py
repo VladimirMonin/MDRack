@@ -79,7 +79,7 @@ graph TD
     assert diagram.source_span.end_line == 14
 
 
-def test_lists_task_lists_blockquotes_callouts_tables_and_images() -> None:
+def test_lists_task_lists_blockquotes_callouts_tables_and_image_prose() -> None:
     content = """# Structures
 
 - parent
@@ -110,9 +110,13 @@ def test_lists_task_lists_blockquotes_callouts_tables_and_images() -> None:
     callout = next(block for block in document.blocks if block.block_type == BlockType.CALLOUT)
     assert callout.attributes["callout_kind"] == "NOTE"
     assert BlockType.TABLE in types
-    images = [block for block in document.blocks if block.block_type == BlockType.IMAGE_REFERENCE]
-    assert len(images) == 2
-    assert {block.attributes["syntax"] for block in images} == {"markdown", "obsidian"}
+    assert all(block.block_type.value != "image_reference" for block in document.blocks)
+    projected = [
+        block.plain_text
+        for block in document.blocks
+        if block.block_type == BlockType.PARAGRAPH and block.raw_markdown.startswith("!")
+    ]
+    assert projected == ["Diagram", None]
     assert all(block.heading_path == ("Structures",) for block in document.blocks[1:])
 
 
@@ -124,34 +128,21 @@ def test_empty_and_no_heading_documents() -> None:
     assert document.blocks[0].heading_path == ()
 
 
-def test_adjacent_mixed_image_references_have_individual_exact_spans() -> None:
+def test_adjacent_mixed_image_references_project_into_one_lossless_paragraph() -> None:
     content = "![One](images/one.png)\n![[two.png]]\nFollowing text."
     document = _parse(content)
 
-    assert [block.block_type for block in document.blocks] == [
-        BlockType.IMAGE_REFERENCE,
-        BlockType.PARAGRAPH,
-        BlockType.IMAGE_REFERENCE,
-        BlockType.PARAGRAPH,
-    ]
-    assert [
-        (block.source_span.start_line, block.source_span.end_line)
-        for block in document.blocks
-    ] == [(1, 1), (1, 1), (2, 2), (3, 3)]
-    assert document.blocks[1].raw_markdown == "\n"
-    assert document.blocks[1].plain_text is None
-    assert document.blocks[1].source_span.start_offset == len("![One](images/one.png)")
-    assert document.blocks[1].source_span.end_offset == len("![One](images/one.png)\n")
-    assert [block.attributes.get("syntax") for block in document.blocks[::2][:2]] == [
-        "markdown",
-        "obsidian",
-    ]
-    assert document.blocks[3].raw_markdown == "\nFollowing text."
-    assert document.blocks[3].plain_text == "Following text."
-    assert "".join(block.raw_markdown for block in document.blocks) == content
+    assert len(document.blocks) == 1
+    block = document.blocks[0]
+    assert block.block_type == BlockType.PARAGRAPH
+    assert block.raw_markdown == content
+    assert block.plain_text == "One\n\nFollowing text."
+    assert block.source_span.start_offset == 0
+    assert block.source_span.end_offset == len(content)
+    assert set(block.attributes) == {"projection_spans"}
 
 
-def test_commonmark_image_destinations_and_titles_keep_exact_provenance() -> None:
+def test_commonmark_image_destinations_and_titles_project_only_alt_text() -> None:
     content = (
         "![Balanced](images/foo(1).png)\n\n"
         '![Titled](images/foo.png "Optional title")'
@@ -159,20 +150,55 @@ def test_commonmark_image_destinations_and_titles_keep_exact_provenance() -> Non
     document = _parse(content)
 
     assert [block.block_type for block in document.blocks] == [
-        BlockType.IMAGE_REFERENCE,
-        BlockType.IMAGE_REFERENCE,
+        BlockType.PARAGRAPH,
+        BlockType.PARAGRAPH,
     ]
     assert [block.raw_markdown for block in document.blocks] == [
         "![Balanced](images/foo(1).png)",
         '![Titled](images/foo.png "Optional title")',
     ]
-    assert [block.attributes["reference"] for block in document.blocks] == [
-        "images/foo(1).png",
-        "images/foo.png",
-    ]
-    assert document.blocks[0].attributes.get("title") is None
-    assert document.blocks[1].attributes["title"] == "Optional title"
+    assert [block.plain_text for block in document.blocks] == ["Balanced", "Titled"]
+    assert all(set(block.attributes) == {"projection_spans"} for block in document.blocks)
     assert [
         content[block.source_span.start_offset : block.source_span.end_offset]
         for block in document.blocks
     ] == [block.raw_markdown for block in document.blocks]
+
+
+def test_image_projection_drops_non_prose_fields_and_keeps_text_once() -> None:
+    content = "\n\n".join(
+        (
+            "Before ![Архитектура](private/path.png \"Secret title\") after.",
+            "![[private/bare.png]]",
+            "![[private/empty.png|]]",
+            "![[private/numeric.png|640]]",
+            "![[private/dimensions.png|640x480]]",
+            "![[private/alias.png|Схема системы]]",
+            '<img src="private/html.png" alt="HTML diagram" width="640" height="480">',
+            '<img src="private/empty-html.png">',
+        )
+    )
+
+    first = _parse(content)
+    second = _parse(content)
+    projected = [block.plain_text for block in first.blocks]
+
+    assert projected == [
+        "Before Архитектура after.",
+        None,
+        None,
+        None,
+        None,
+        "Схема системы",
+        "HTML diagram",
+        None,
+    ]
+    joined = "\n".join(text for text in projected if text)
+    assert joined.count("Архитектура") == 1
+    assert joined.count("Схема системы") == 1
+    assert joined.count("HTML diagram") == 1
+    for forbidden in ("private/", "Secret title", "640", "480", "src="):
+        assert forbidden not in joined
+    assert first.source_hash == second.source_hash
+    assert [block.block_id for block in first.blocks] == [block.block_id for block in second.blocks]
+    assert all(block.block_type == BlockType.PARAGRAPH for block in first.blocks)

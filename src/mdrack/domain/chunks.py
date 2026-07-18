@@ -16,7 +16,6 @@ class RetrievalContentType(str, Enum):
     CODE = "code"
     TABLE = "table"
     MERMAID = "mermaid"
-    IMAGE_REFERENCE = "image_reference"
     UNKNOWN = "unknown"
     HEADING = "heading"
 

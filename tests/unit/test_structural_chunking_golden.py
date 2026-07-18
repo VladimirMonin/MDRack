@@ -10,7 +10,6 @@ import pytest
 from pydantic import ValidationError
 
 from mdrack.adapters.markdown_it import MarkdownItParser
-from mdrack.application.assets import build_asset_graph
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
 from mdrack.config.models import ChunkingConfig
 from mdrack.domain.blocks import BlockType, SourceBlock
@@ -169,11 +168,6 @@ def test_golden_fixtures_are_lossless_non_overlapping_and_deterministic(tmp_path
                 owned_start:owned_end
             ]
 
-        graph_first = build_asset_graph(document, first, root=tmp_path, root_id="fixture")
-        graph_second = build_asset_graph(document, second, root=tmp_path, root_id="fixture")
-        assert graph_first.references == graph_second.references
-
-
 def test_minimum_size_merges_only_adjacent_compatible_blocks() -> None:
     _, document = _parse("structures.md")
     chunks = StructuralChunker(_config(min_chars=80, target_chars=150)).build(document)
@@ -228,288 +222,52 @@ def test_python_uses_ast_boundaries_and_fallbacks_keep_complete_lines() -> None:
     ]
 
 
-def test_long_media_references_have_one_owner_and_stable_asset_link(tmp_path: Path) -> None:
-    source, document = _parse("adversarial_media.md")
-    image_blocks = [block for block in document.blocks if block.block_type == BlockType.IMAGE_REFERENCE]
-    chunker = StructuralChunker(
-        _config(min_chars=1, target_chars=60, hard_limit_chars=80, max_tokens=30)
-    )
-
-    first = chunker.build(document)
-    second = chunker.build(document)
-    assert _snapshot(first) == _snapshot(second)
-
-    image_chunks = [
-        chunk for chunk in first if chunk.content_type == RetrievalContentType.IMAGE_REFERENCE
-    ]
-    assert len(image_chunks) == len(image_blocks) == 2
-    for block, chunk in zip(image_blocks, image_chunks, strict=True):
-        assert chunk.parent_block_ids == (block.block_id,)
-        assert chunk.source_span == block.source_span
-        assert source[chunk.source_span.start_offset : chunk.source_span.end_offset] == block.raw_markdown
-
-    intervals: list[tuple[int, int]] = []
-    for chunk in image_chunks:
-        start = chunk.source_span.start_offset
-        end = chunk.source_span.end_offset
-        assert start is not None and end is not None
-        intervals.append((start, end))
-    assert all(left[1] <= right[0] for left, right in zip(intervals, intervals[1:], strict=False))
-
-    graph = build_asset_graph(document, first, root=tmp_path, root_id="fixture")
-    graph_again = build_asset_graph(document, second, root=tmp_path, root_id="fixture")
-    assert graph.references == graph_again.references
-    assert [reference.chunk_id for reference in graph.references] == [
-        chunk.chunk_id for chunk in image_chunks
-    ]
-
-
 @pytest.mark.parametrize(
-    "source",
+    ("newline", "source"),
     (
-        "Before ![Alt](images/a.png) after.",
-        "Before\n![[images/a.png]]\nafter.",
-        'Before\r\n<img src="images/a.png" alt="Alt">\r\nafter.',
+        ("LF", "Before ![Alt](images/a.png) after.\n![[b.png|Alias]]"),
+        ("CRLF", 'Before\r\n<img src="images/a.png" alt="HTML Alt">\r\nafter.'),
     ),
 )
-def test_inline_media_blocks_partition_separator_bytes_and_keep_one_asset_owner(
+def test_image_syntax_projects_as_text_chunks_with_lossless_stable_provenance(
+    newline: str,
     source: str,
     tmp_path: Path,
 ) -> None:
-    document = MarkdownItParser().parse(
-        tmp_path / "inline-media.md",
-        content=source,
-        document_id="doc_inline_media",
-        relative_path="inline-media.md",
-    )
-
-    assert [block.block_type for block in document.blocks] == [
-        BlockType.PARAGRAPH,
-        BlockType.IMAGE_REFERENCE,
-        BlockType.PARAGRAPH,
-    ]
-    intervals = [
-        (block.source_span.start_offset, block.source_span.end_offset)
-        for block in document.blocks
-    ]
-    assert all(start is not None and end is not None for start, end in intervals)
-    exact_intervals = [
-        (start, end) for start, end in intervals if start is not None and end is not None
-    ]
-    assert exact_intervals[0][0] == 0
-    assert exact_intervals[-1][1] == len(source)
-    assert all(
-        left_end == right_start
-        for (_, left_end), (right_start, _) in zip(
-            exact_intervals,
-            exact_intervals[1:],
-            strict=False,
-        )
-    )
-    assert "".join(source[start:end] for start, end in exact_intervals) == source
-    assert all(
-        source[start:end] == block.raw_markdown
-        for block, (start, end) in zip(document.blocks, exact_intervals, strict=True)
-    )
-
-    chunks = StructuralChunker(_config(min_chars=1)).build(document)
-    image_chunks = [
-        chunk for chunk in chunks if chunk.content_type == RetrievalContentType.IMAGE_REFERENCE
-    ]
-    graph = build_asset_graph(document, chunks, root=tmp_path, root_id="fixture")
-    assert len(image_chunks) == len(graph.references) == 1
-    assert graph.references[0].chunk_id == image_chunks[0].chunk_id
-
-
-@pytest.mark.parametrize("separator", ("  ", "\n", "\r\n"))
-@pytest.mark.parametrize(
-    ("first_reference", "second_reference"),
-    (
-        ("![A](images/a.png)", "![B](images/b.png)"),
-        ("![[images/a.png]]", "![[images/b.png]]"),
-        (
-            '<img src="images/a.png" alt="A">',
-            '<img src="images/b.png" alt="B">',
-        ),
-    ),
-)
-def test_adjacent_media_references_preserve_whitespace_separator_ownership(
-    separator: str,
-    first_reference: str,
-    second_reference: str,
-    tmp_path: Path,
-) -> None:
-    source = f"Before {first_reference}{separator}{second_reference} after."
-    document = MarkdownItParser().parse(
-        tmp_path / "adjacent-media.md",
-        content=source,
-        document_id="doc_adjacent_media",
-        relative_path="adjacent-media.md",
-    )
-
-    assert [block.block_type for block in document.blocks] == [
-        BlockType.PARAGRAPH,
-        BlockType.IMAGE_REFERENCE,
-        BlockType.PARAGRAPH,
-        BlockType.IMAGE_REFERENCE,
-        BlockType.PARAGRAPH,
-    ]
-    intervals = [
-        (block.source_span.start_offset, block.source_span.end_offset)
-        for block in document.blocks
-    ]
-    assert all(start is not None and end is not None for start, end in intervals)
-    exact_intervals = [
-        (start, end) for start, end in intervals if start is not None and end is not None
-    ]
-    assert exact_intervals[0][0] == 0
-    assert exact_intervals[-1][1] == len(source)
-    assert all(
-        left_end == right_start
-        for (_, left_end), (right_start, _) in zip(
-            exact_intervals,
-            exact_intervals[1:],
-            strict=False,
-        )
-    )
-    assert "".join(source[start:end] for start, end in exact_intervals) == source
-    assert document.blocks[2].raw_markdown == separator
-    assert document.blocks[2].plain_text is None
-
-    chunks = StructuralChunker(_config(min_chars=1)).build(document)
-    assert all(chunk.display_content.strip() for chunk in chunks)
-    assert document.blocks[2].block_id not in {
-        parent_id for chunk in chunks for parent_id in chunk.parent_block_ids
-    }
-    image_chunks = [
-        chunk for chunk in chunks if chunk.content_type == RetrievalContentType.IMAGE_REFERENCE
-    ]
-    image_blocks = [
-        block for block in document.blocks if block.block_type == BlockType.IMAGE_REFERENCE
-    ]
-    assert len(image_chunks) == len(image_blocks) == 2
-    assert all(
-        chunk.parent_block_ids == (block.block_id,)
-        and chunk.source_span == block.source_span
-        for block, chunk in zip(image_blocks, image_chunks, strict=True)
-    )
-    graph = build_asset_graph(document, chunks, root=tmp_path, root_id="fixture")
-    assert [reference.chunk_id for reference in graph.references] == [
-        chunk.chunk_id for chunk in image_chunks
-    ]
-
-
-@pytest.mark.parametrize(
-    "reference",
-    (
-        "![Same](images/same.png)",
-        "![[images/same.png]]",
-        '<img src="images/same.png" alt="Same">',
-    ),
-)
-def test_identical_same_line_media_references_have_occurrence_stable_identity(
-    reference: str,
-    tmp_path: Path,
-) -> None:
-    separator = "  "
-    source = f"Before {reference}{separator}{reference} after."
     parser = MarkdownItParser()
     first_document = parser.parse(
-        tmp_path / "identical-media.md",
+        tmp_path / "projection.md",
         content=source,
-        document_id="doc_identical_media",
-        relative_path="identical-media.md",
+        document_id="doc_projection",
+        relative_path="projection.md",
     )
     second_document = parser.parse(
-        tmp_path / "identical-media.md",
+        tmp_path / "projection.md",
         content=source,
-        document_id="doc_identical_media",
-        relative_path="identical-media.md",
+        document_id="doc_projection",
+        relative_path="projection.md",
     )
-
-    assert [block.block_type for block in first_document.blocks] == [
-        BlockType.PARAGRAPH,
-        BlockType.IMAGE_REFERENCE,
-        BlockType.PARAGRAPH,
-        BlockType.IMAGE_REFERENCE,
-        BlockType.PARAGRAPH,
-    ]
-    assert "".join(block.raw_markdown for block in first_document.blocks) == source
-    assert first_document.blocks[2].raw_markdown == separator
-    assert first_document.blocks[2].plain_text is None
-    intervals = [
-        (block.source_span.start_offset, block.source_span.end_offset)
-        for block in first_document.blocks
-    ]
-    assert intervals[0][0] == 0
-    assert intervals[-1][1] == len(source)
-    assert all(
-        left_end == right_start
-        for (_, left_end), (right_start, _) in zip(
-            intervals,
-            intervals[1:],
-            strict=False,
-        )
-    )
-
-    image_blocks = [
-        block
-        for block in first_document.blocks
-        if block.block_type == BlockType.IMAGE_REFERENCE
-    ]
-    repeated_image_blocks = [
-        block
-        for block in second_document.blocks
-        if block.block_type == BlockType.IMAGE_REFERENCE
-    ]
-    assert len(image_blocks) == 2
-    assert image_blocks[0].block_id != image_blocks[1].block_id
-    assert [block.block_id for block in image_blocks] == [
-        block.block_id for block in repeated_image_blocks
-    ]
-    assert [
-        source[block.source_span.start_offset : block.source_span.end_offset]
-        for block in image_blocks
-    ] == [reference, reference]
-
     chunker = StructuralChunker(_config(min_chars=1))
     first_chunks = chunker.build(first_document)
     second_chunks = chunker.build(second_document)
-    image_chunks = [
-        chunk
-        for chunk in first_chunks
-        if chunk.content_type == RetrievalContentType.IMAGE_REFERENCE
+    assert newline in {"LF", "CRLF"}
+    assert first_document.source_hash == hashlib.sha256(source.encode("utf-8")).hexdigest()
+    assert [block.raw_markdown for block in first_document.blocks] == [
+        block.raw_markdown for block in second_document.blocks
     ]
-    assert len(image_chunks) == 2
-    assert len({chunk.chunk_id for chunk in image_chunks}) == 2
-    assert [chunk.chunk_id for chunk in image_chunks] == [
-        chunk.chunk_id
-        for chunk in second_chunks
-        if chunk.content_type == RetrievalContentType.IMAGE_REFERENCE
+    assert [block.block_id for block in first_document.blocks] == [
+        block.block_id for block in second_document.blocks
     ]
-    assert [chunk.parent_block_ids for chunk in image_chunks] == [
-        (block.block_id,) for block in image_blocks
-    ]
-    assert first_document.blocks[2].block_id not in {
-        parent_id for chunk in first_chunks for parent_id in chunk.parent_block_ids
-    }
-
-    graph = build_asset_graph(first_document, first_chunks, root=tmp_path, root_id="fixture")
-    graph_again = build_asset_graph(
-        second_document,
-        second_chunks,
-        root=tmp_path,
-        root_id="fixture",
-    )
-    assert graph.references == graph_again.references
-    assert len(graph.references) == 2
-    assert len({item.reference_id for item in graph.references}) == 2
-    assert [item.block_id for item in graph.references] == [
-        block.block_id for block in image_blocks
-    ]
-    assert [item.chunk_id for item in graph.references] == [
-        chunk.chunk_id for chunk in image_chunks
-    ]
+    assert _snapshot(first_chunks) == _snapshot(second_chunks)
+    assert all(block.block_type.value != "image_reference" for block in first_document.blocks)
+    assert all(chunk.content_type.value != "image_reference" for chunk in first_chunks)
+    projected = "\n".join(chunk.display_content for chunk in first_chunks)
+    assert "images/" not in projected
+    assert "src=" not in projected
+    expected_alt = "HTML Alt" if newline == "CRLF" else "Alt"
+    assert projected.count(expected_alt) == 1
+    if "Alias" in source:
+        assert projected.count("Alias") == 1
 
 
 def test_oversized_code_and_mermaid_lines_remain_lossless_and_non_overlapping() -> None:

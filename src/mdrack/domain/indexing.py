@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Literal
 
-from mdrack.domain.assets import Asset, AssetReference
 from mdrack.domain.profiles import EmbeddingProfile
 
 IndexStatus = Literal["success", "partial_success", "failed"]
@@ -129,8 +128,6 @@ class PreparedFile:
     index_run_id: str
     sections: tuple[StoredSection, ...]
     chunks: tuple[StoredChunk, ...]
-    assets: tuple[Asset, ...] = ()
-    asset_references: tuple[AssetReference, ...] = ()
     vectors: tuple[tuple[float, ...], ...] = ()
     embedding_profile: EmbeddingProfile | None = None
     embedding_model: str | None = None

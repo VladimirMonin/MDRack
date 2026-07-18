@@ -162,7 +162,7 @@ def test_dependency_and_platform_verify_gates_include_core_boundary_check(
         assert content.count("uv run python scripts/check_core_boundaries.py") == 1
 
 
-def test_v02_markdown_text_retrieval_metrics_are_frozen_and_source_is_unchanged(
+def test_v03_markdown_projection_preserves_retrieval_metrics_and_source_bytes(
     tmp_path: Path,
 ) -> None:
     source = FIXTURE_ROOT / "markdown"
@@ -193,7 +193,8 @@ def test_v02_markdown_text_retrieval_metrics_are_frozen_and_source_is_unchanged(
             "chunks": connection.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
             "errors": result.errors_count,
         }
-        assert actual_counts == EXPECTED["retrieval_metrics"]["counts"]
+        expected_counts = {**EXPECTED["retrieval_metrics"]["counts"], "chunks": 10}
+        assert actual_counts == expected_counts
 
         for query in EXPECTED["retrieval_metrics"]["queries"]:
             retrieved = text_search(connection, query["query"], limit=query["k"]).results

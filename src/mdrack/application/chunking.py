@@ -128,32 +128,6 @@ class StructuralChunker:
         if block.block_type == BlockType.TABLE:
             return self._table_drafts(block)
 
-        if block.block_type == BlockType.IMAGE_REFERENCE:
-            alt_text = block.attributes.get("alt_text")
-            surrounding_text = block.attributes.get("surrounding_text")
-            searchable = "\n".join(
-                dict.fromkeys(
-                    value.strip()
-                    for value in (alt_text, surrounding_text)
-                    if isinstance(value, str) and value.strip()
-                )
-            )
-            if not searchable:
-                return []
-            max_chars, max_bytes = self._body_limits(block, RetrievalContentType.IMAGE_REFERENCE)
-            display = self._bounded_searchable_parts(
-                [
-                    value.strip()
-                    for value in (alt_text, surrounding_text)
-                    if isinstance(value, str) and value.strip()
-                ],
-                max_chars,
-                max_bytes,
-            )
-            return [
-                _Draft((block,), display, RetrievalContentType.IMAGE_REFERENCE, block.source_span)
-            ]
-
         content_type = {
             BlockType.PARAGRAPH: RetrievalContentType.TEXT,
             BlockType.LIST: RetrievalContentType.LIST,
@@ -161,7 +135,12 @@ class StructuralChunker:
             BlockType.CALLOUT: RetrievalContentType.CALLOUT,
             BlockType.UNKNOWN: RetrievalContentType.UNKNOWN,
         }.get(block.block_type, RetrievalContentType.UNKNOWN)
-        display = (block.plain_text if block.block_type == BlockType.PARAGRAPH else block.raw_markdown) or ""
+        has_projection = "projection_spans" in block.attributes
+        display = (
+            block.plain_text
+            if has_projection or block.block_type == BlockType.PARAGRAPH
+            else block.raw_markdown
+        ) or ""
         max_chars, max_bytes = self._body_limits(
             block,
             content_type,
@@ -302,40 +281,6 @@ class StructuralChunker:
     @staticmethod
     def _within_budget(text: str, max_chars: int, max_bytes: int) -> bool:
         return len(text) <= max_chars and len(text.encode("utf-8")) <= max_bytes
-
-    def _bounded_searchable_parts(
-        self,
-        parts: list[str],
-        max_chars: int,
-        max_bytes: int,
-    ) -> str:
-        unique = list(dict.fromkeys(parts))
-        searchable = "\n".join(unique)
-        if self._within_budget(searchable, max_chars, max_bytes):
-            return searchable
-
-        selected = ["" for _ in unique]
-        positions = [0 for _ in unique]
-        while True:
-            progressed = False
-            for index, part in enumerate(unique):
-                if positions[index] >= len(part):
-                    continue
-                candidate_parts = selected.copy()
-                candidate_parts[index] += part[positions[index]]
-                candidate = "\n".join(value for value in candidate_parts if value)
-                if not self._within_budget(candidate, max_chars, max_bytes):
-                    continue
-                selected = candidate_parts
-                positions[index] += 1
-                progressed = True
-            if not progressed:
-                break
-        bounded = "\n".join(value for value in selected if value)
-        if not bounded:
-            raise ValueError("chunk limits cannot represent searchable image text")
-        return bounded
-
 
     def _line_drafts(
         self,
@@ -678,7 +623,13 @@ class StructuralChunker:
         start: int,
         end: int,
     ) -> SourceSpan:
-        raw_start, raw_end = self._text_raw_bounds(block.raw_markdown, text, start, end)
+        projection_spans = block.attributes.get("projection_spans")
+        projected_bounds = self._projected_raw_bounds(projection_spans, start, end)
+        raw_start, raw_end = (
+            projected_bounds
+            if projected_bounds is not None
+            else self._text_raw_bounds(block.raw_markdown, text, start, end)
+        )
         start_line = block.source_span.start_line + block.raw_markdown.count("\n", 0, raw_start)
         end_probe = max(raw_start, raw_end - 1)
         end_line = block.source_span.start_line + block.raw_markdown.count("\n", 0, end_probe)
@@ -690,6 +641,31 @@ class StructuralChunker:
             block.source_span.start_offset + raw_start,
             block.source_span.start_offset + raw_end,
         )
+
+    @staticmethod
+    def _projected_raw_bounds(
+        value: object,
+        start: int,
+        end: int,
+    ) -> tuple[int, int] | None:
+        if not isinstance(value, list):
+            return None
+        rows = [
+            row
+            for row in value
+            if isinstance(row, list)
+            and len(row) == 6
+            and all(isinstance(item, int) and not isinstance(item, bool) for item in row)
+            and row[1] > start
+            and row[0] < end
+        ]
+        if not rows:
+            return None
+        first = rows[0]
+        last = rows[-1]
+        raw_start = first[2] if start <= first[0] else first[4] + start - first[0]
+        raw_end = last[3] if end >= last[1] else last[4] + end - last[0]
+        return raw_start, raw_end
 
     @staticmethod
     def _text_raw_bounds(raw: str, text: str, start: int, end: int) -> tuple[int, int]:

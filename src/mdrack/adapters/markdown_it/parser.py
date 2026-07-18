@@ -5,13 +5,13 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Mapping
-from dataclasses import replace
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
 import yaml
 from markdown_it import MarkdownIt
+from markdown_it.rules_inline.html_inline import html_inline as markdown_html_inline_rule
 from markdown_it.rules_inline.image import image as markdown_image_rule
 from markdown_it.rules_inline.state_inline import StateInline
 from markdown_it.token import Token
@@ -21,16 +21,14 @@ from mdrack.domain.documents import Document
 from mdrack.domain.identifiers import content_fingerprint, logical_id
 
 _OBSIDIAN_EMBED = re.compile(r"^!\[\[([^\]]+)\]\]$", re.DOTALL)
-_HTML_IMAGE = re.compile(r"^<img\b(?P<attributes>[^>]*)/?>$", re.IGNORECASE | re.DOTALL)
-_HTML_ATTRIBUTE = re.compile(
-    r"\b(?P<name>src|alt)\s*=\s*(?P<quote>['\"])(?P<value>.*?)(?P=quote)",
-    re.IGNORECASE,
-)
-_REFERENCE_FINDERS = (
-    re.compile(r"!\[\[[^\]]+\]\]", re.DOTALL),
-    re.compile(r"<img\b[^>]*?/?>", re.IGNORECASE | re.DOTALL),
-)
+_OBSIDIAN_EMBED_FINDER = re.compile(r"!\[\[[^\]]+\]\]", re.DOTALL)
+_NUMERIC_OR_DIMENSION_ALIAS = re.compile(r"^\d+(?:\s*[x×]\s*\d+)?$", re.IGNORECASE)
 _CALLOUT = re.compile(r"^>\s*\[!([A-Za-z0-9_-]+)\](?:[+-])?(?:\s+([^\n]+))?", re.MULTILINE)
+_HTML_RAW_TEXT_TAG = re.compile(
+    r"^<(?P<closing>/)?(?P<name>script|style|pre|textarea|title|xmp|iframe|noembed|noframes|plaintext)"
+    r"(?=[\s/>])",
+    re.IGNORECASE | re.ASCII,
+)
 
 
 def _json_value(value: Any) -> JSONValue:
@@ -122,42 +120,142 @@ def _markdown_image_with_source_map(state: StateInline, silent: bool) -> bool:
     return matched
 
 
-def _markdown_image_attributes(token: Token) -> dict[str, JSONValue] | None:
-    reference = token.attrGet("src")
-    if not reference:
+def _markdown_image_projection(token: Token) -> str:
+    return token.content.strip()
+
+
+def _html_inline_with_source_map(state: StateInline, silent: bool) -> bool:
+    """Delegate HTML parsing and retain the token's exact inline source range."""
+    start = state.pos
+    token_count = len(state.tokens)
+    matched = markdown_html_inline_rule(state, silent)
+    if matched and not silent and len(state.tokens) > token_count:
+        token = state.tokens[-1]
+        if token.type == "html_inline":
+            token.meta["source_start"] = start
+            token.meta["source_end"] = state.pos
+    return matched
+
+
+def _html_image_tags(raw: str) -> list[tuple[int, int, str]]:
+    """Return complete ``img`` tags, ignoring ``>`` inside quoted values."""
+    tags: list[tuple[int, int, str]] = []
+    search_from = 0
+    while (start := raw.find("<", search_from)) >= 0:
+        if start + 4 > len(raw) or not (
+            raw[start + 1] in "iI"
+            and raw[start + 2] in "mM"
+            and raw[start + 3] in "gG"
+        ):
+            search_from = start + 1
+            continue
+        boundary = start + 4
+        if boundary >= len(raw) or not (raw[boundary].isspace() or raw[boundary] in "/>"):
+            search_from = boundary
+            continue
+
+        quote: str | None = None
+        cursor = boundary
+        while cursor < len(raw):
+            char = raw[cursor]
+            if quote is not None:
+                if char == quote:
+                    quote = None
+            elif char in {'"', "'"}:
+                quote = char
+            elif char == ">":
+                end = cursor + 1
+                tags.append((start, end, raw[start:end]))
+                search_from = end
+                break
+            elif char == "<":
+                search_from = boundary
+                break
+            cursor += 1
+        else:
+            search_from = boundary
+    return tags
+
+
+def _html_image_alt(tag: str) -> str | None:
+    """Parse one complete ``img`` tag and return only its exact ``alt`` value."""
+    if not tag.casefold().startswith("<img") or not tag.endswith(">"):
         return None
-    attributes: dict[str, JSONValue] = {
-        "syntax": "markdown",
-        "alt_text": token.content,
-        "reference": reference,
-    }
-    title = token.attrGet("title")
-    if title is not None:
-        attributes["title"] = title
-    return attributes
+    attributes = tag[4:-1]
+
+    alt: str | None = None
+    cursor = 0
+    while cursor < len(attributes):
+        while cursor < len(attributes) and attributes[cursor].isspace():
+            cursor += 1
+        if cursor >= len(attributes):
+            break
+        if attributes[cursor] == "/" and not attributes[cursor + 1 :].strip():
+            break
+
+        name_start = cursor
+        while (
+            cursor < len(attributes)
+            and not attributes[cursor].isspace()
+            and attributes[cursor] not in {'"', "'", "=", "<", ">", "`", "/"}
+        ):
+            cursor += 1
+        if cursor == name_start:
+            return None
+        name = attributes[name_start:cursor].casefold()
+
+        while cursor < len(attributes) and attributes[cursor].isspace():
+            cursor += 1
+        if cursor >= len(attributes) or attributes[cursor] != "=":
+            continue
+        cursor += 1
+        while cursor < len(attributes) and attributes[cursor].isspace():
+            cursor += 1
+        if cursor >= len(attributes):
+            return None
+
+        if attributes[cursor] in {'"', "'"}:
+            quote = attributes[cursor]
+            value_start = cursor + 1
+            value_end = attributes.find(quote, value_start)
+            if value_end < 0:
+                return None
+            value = attributes[value_start:value_end]
+            cursor = value_end + 1
+            if cursor < len(attributes) and not attributes[cursor].isspace():
+                if attributes[cursor] == "/" and not attributes[cursor + 1 :].strip():
+                    cursor = len(attributes)
+                else:
+                    return None
+        else:
+            value_start = cursor
+            while cursor < len(attributes) and not attributes[cursor].isspace():
+                if attributes[cursor] in {'"', "'", "=", "<", ">", "`"}:
+                    return None
+                cursor += 1
+            if cursor == value_start:
+                return None
+            value = attributes[value_start:cursor]
+
+        if name == "alt" and alt is None:
+            alt = value
+    return (alt or "").strip()
 
 
-def _image_reference_attributes(raw: str) -> dict[str, JSONValue] | None:
-    obsidian_embed = _OBSIDIAN_EMBED.fullmatch(raw.strip())
+def _non_markdown_image_projection(raw: str) -> str | None:
+    stripped = raw.strip()
+    obsidian_embed = _OBSIDIAN_EMBED.fullmatch(stripped)
     if obsidian_embed:
-        return {
-            "syntax": "obsidian",
-            "reference": obsidian_embed.group(1),
-        }
-    html_image = _HTML_IMAGE.fullmatch(raw.strip())
-    if html_image:
-        values = {
-            match.group("name").casefold(): match.group("value")
-            for match in _HTML_ATTRIBUTE.finditer(html_image.group("attributes"))
-        }
-        if values.get("src"):
-            attributes: dict[str, JSONValue] = {
-                "syntax": "html",
-                "reference": values["src"],
-            }
-            if "alt" in values:
-                attributes["alt_text"] = values["alt"]
-            return attributes
+        parts = obsidian_embed.group(1).split("|")
+        if len(parts) < 2:
+            return ""
+        alias = parts[-1].strip()
+        if not alias or _NUMERIC_OR_DIMENSION_ALIAS.fullmatch(alias):
+            return ""
+        return alias
+    html_images = _html_image_tags(stripped)
+    if len(html_images) == 1 and html_images[0][:2] == (0, len(stripped)):
+        return _html_image_alt(html_images[0][2])
     return None
 
 
@@ -168,8 +266,53 @@ class MarkdownItParser:
     version = version("markdown-it-py")
 
     def __init__(self) -> None:
-        self._parser = MarkdownIt("commonmark", {"html": True}).enable("table")
+        self._parser = MarkdownIt(
+            "commonmark",
+            {"html": True, "store_labels": True},
+        ).enable("table")
         self._parser.inline.ruler.at("image", _markdown_image_with_source_map)
+        self._parser.inline.ruler.at("html_inline", _html_inline_with_source_map)
+
+    def projection_context(self, raw_markdown: str) -> tuple[dict[str, Any], frozenset[int]]:
+        """Parse document references once and return their zero-based source lines."""
+        environment: dict[str, Any] = {}
+        tokens = self._parser.parse(raw_markdown, environment)
+        image_labels = {
+            label
+            for token in tokens
+            for child in (token.children or [])
+            if child.type == "image"
+            if isinstance((label := child.meta.get("label")), str)
+        }
+        definition_lines: set[int] = set()
+        references = environment.get("references")
+        if isinstance(references, Mapping):
+            for label, reference in references.items():
+                if label not in image_labels:
+                    continue
+                if not isinstance(reference, Mapping):
+                    continue
+                source_map = reference.get("map")
+                if (
+                    isinstance(source_map, list)
+                    and len(source_map) == 2
+                    and all(isinstance(item, int) for item in source_map)
+                ):
+                    definition_lines.update(range(source_map[0], source_map[1]))
+        return environment, frozenset(definition_lines)
+
+    def project_text(
+        self,
+        raw_markdown: str,
+        *,
+        environment: dict[str, Any] | None = None,
+    ) -> str:
+        """Project image author text without exposing reference metadata."""
+        matched, projected, _ = self._project_image_syntax(
+            raw_markdown,
+            environment=environment,
+        )
+        return (projected or "") if matched else raw_markdown
 
     def parse(
         self,
@@ -187,7 +330,8 @@ class MarkdownItParser:
         body_start = frontmatter_end + 1 if frontmatter_end is not None else 0
         body = "\n".join(source_lines[body_start:])
         offsets = _line_offsets(content)
-        tokens = self._parser.parse(body)
+        environment: dict[str, Any] = {}
+        tokens = self._parser.parse(body, environment)
         blocks: list[SourceBlock] = []
         heading_stack: list[tuple[int, str]] = []
 
@@ -241,26 +385,32 @@ class MarkdownItParser:
                 if match:
                     block_type = BlockType.CALLOUT
                     attributes["callout_kind"] = match.group(1).upper()
-            elif token.type == "paragraph_open":
-                heading_path = tuple(title for _, title in heading_stack if title)
-                paragraph_blocks = self._split_reference_paragraph(
-                    content=content,
-                    offsets=offsets,
-                    start=start,
-                    end=end,
-                    document_id=document_id,
-                    heading_path=heading_path,
-                )
-                if paragraph_blocks is not None:
-                    blocks.extend(paragraph_blocks)
-                    continue
             elif token.type == "html_block":
-                image_attributes = _image_reference_attributes(raw)
-                if image_attributes is not None:
-                    block_type = BlockType.IMAGE_REFERENCE
-                    attributes = image_attributes
-                    alt_text = attributes.get("alt_text")
-                    plain_text = alt_text if isinstance(alt_text, str) and alt_text else None
+                image_projection = _non_markdown_image_projection(raw)
+                if image_projection is not None:
+                    block_type = BlockType.PARAGRAPH
+                    plain_text = image_projection or None
+                    if image_projection:
+                        text_start = raw.find(image_projection)
+                        attributes["projection_spans"] = [
+                            [0, len(image_projection), 0, len(raw), text_start, text_start + len(image_projection)]
+                        ]
+
+            if token.type != "html_block" and block_type in {
+                BlockType.PARAGRAPH,
+                BlockType.LIST,
+                BlockType.BLOCKQUOTE,
+                BlockType.CALLOUT,
+                BlockType.TABLE,
+                BlockType.UNKNOWN,
+            }:
+                has_projection, projected, projection_spans = self._project_image_syntax(
+                    raw,
+                    environment=environment,
+                )
+                if has_projection:
+                    plain_text = projected
+                    attributes["projection_spans"] = projection_spans
 
             heading_path = tuple(title for _, title in heading_stack if title)
             blocks.append(
@@ -293,162 +443,158 @@ class MarkdownItParser:
             relative_path=relative_path,
             title=title,
             frontmatter=metadata,
-            blocks=self._with_surrounding_text(blocks),
+            blocks=tuple(blocks),
             source_hash=source_hash,
             parser_name=self.name,
             parser_version=self.version,
         )
 
-    @staticmethod
-    def _with_surrounding_text(blocks: list[SourceBlock]) -> tuple[SourceBlock, ...]:
-        enriched: list[SourceBlock] = []
-        for index, block in enumerate(blocks):
-            if block.block_type != BlockType.IMAGE_REFERENCE:
-                enriched.append(block)
-                continue
-            context: list[str] = []
-            for neighbor_index in (index - 1, index + 1):
-                if 0 <= neighbor_index < len(blocks):
-                    neighbor = blocks[neighbor_index]
-                    if (
-                        neighbor.block_type not in {BlockType.IMAGE_REFERENCE, BlockType.FRONTMATTER}
-                        and neighbor.plain_text
-                    ):
-                        context.append(neighbor.plain_text.strip())
-            attributes = dict(block.attributes)
-            surrounding = "\n".join(part for part in context if part)
-            if surrounding:
-                attributes["surrounding_text"] = surrounding
-            enriched.append(replace(block, attributes=attributes))
-        return tuple(enriched)
-
-    def _split_reference_paragraph(
+    def _project_image_syntax(
         self,
+        raw_paragraph: str,
         *,
-        content: str,
-        offsets: list[int],
-        start: int,
-        end: int,
-        document_id: str,
-        heading_path: tuple[str, ...],
-    ) -> list[SourceBlock] | None:
-        paragraph_start = offsets[min(start, len(offsets) - 1)]
-        paragraph_end = offsets[min(end, len(offsets) - 1)] if end < len(offsets) else len(content)
-        raw_paragraph = content[paragraph_start:paragraph_end].rstrip("\r\n")
+        environment: dict[str, Any] | None = None,
+    ) -> tuple[bool, str | None, list[JSONValue]]:
         normalized_offsets = _normalized_offset_map(raw_paragraph)
-        references: list[tuple[int, int, dict[str, JSONValue]]] = []
-        for inline_token in self._parser.parseInline(raw_paragraph):
+        references: list[tuple[int, int, str]] = []
+
+        block_tokens = self._parser.parse(raw_paragraph, {})
+        if any(token.type in {"fence", "code_block"} for token in block_tokens):
+            return False, None, []
+        if any(token.type == "html_block" for token in block_tokens):
+            projection = _non_markdown_image_projection(raw_paragraph)
+            if projection is None:
+                return False, None, []
+
+        raw_text_tag: str | None = None
+        for inline_token in self._parser.parseInline(raw_paragraph, environment or {}):
             for child in inline_token.children or []:
-                if child.type != "image":
+                if child.type == "image":
+                    source_start = child.meta.get("source_start")
+                    source_end = child.meta.get("source_end")
+                    if isinstance(source_start, int) and isinstance(source_end, int):
+                        references.append(
+                            (
+                                normalized_offsets[source_start],
+                                normalized_offsets[source_end],
+                                _markdown_image_projection(child),
+                            )
+                        )
                     continue
+
+                if child.type != "html_inline":
+                    continue
+                raw_text_match = _HTML_RAW_TEXT_TAG.match(child.content)
+                if raw_text_tag is not None:
+                    if (
+                        raw_text_match is not None
+                        and raw_text_match.group("closing")
+                        and raw_text_match.group("name").casefold() == raw_text_tag
+                    ):
+                        raw_text_tag = None
+                    continue
+                if raw_text_match is not None and not raw_text_match.group("closing"):
+                    if not child.content.rstrip().endswith("/>"):
+                        raw_text_tag = raw_text_match.group("name").casefold()
+                    continue
+
                 source_start = child.meta.get("source_start")
                 source_end = child.meta.get("source_end")
-                attributes = _markdown_image_attributes(child)
-                if isinstance(source_start, int) and isinstance(source_end, int) and attributes is not None:
+                if not isinstance(source_start, int) or not isinstance(source_end, int):
+                    continue
+                html_images = _html_image_tags(child.content)
+                if len(html_images) != 1 or html_images[0][:2] != (0, len(child.content)):
+                    continue
+                projection = _html_image_alt(child.content)
+                if projection is not None:
                     references.append(
                         (
                             normalized_offsets[source_start],
                             normalized_offsets[source_end],
-                            attributes,
+                            projection,
                         )
                     )
-        for finder in _REFERENCE_FINDERS:
-            for match in finder.finditer(raw_paragraph):
-                attributes = _image_reference_attributes(match.group(0))
-                if attributes is not None:
-                    references.append((match.start(), match.end(), attributes))
+        for match in _OBSIDIAN_EMBED_FINDER.finditer(raw_paragraph):
+            projection = _non_markdown_image_projection(match.group(0))
+            if projection is not None:
+                references.append((match.start(), match.end(), projection))
         references.sort(key=lambda item: (item[0], -(item[1] - item[0])))
-        non_overlapping: list[tuple[int, int, dict[str, JSONValue]]] = []
+        non_overlapping: list[tuple[int, int, str]] = []
         cursor = 0
-        for source_start, source_end, attributes in references:
+        for source_start, source_end, projection in references:
             if source_start >= cursor:
-                non_overlapping.append((source_start, source_end, attributes))
+                non_overlapping.append((source_start, source_end, projection))
                 cursor = source_end
         if not non_overlapping:
-            return None
+            return False, None, []
 
-        result: list[SourceBlock] = []
+        result: list[str] = []
+        spans: list[tuple[int, int, int, int, int, int]] = []
+        projected_offset = 0
         cursor = 0
-        for source_start, source_end, attributes in non_overlapping:
+        for source_start, source_end, projection in non_overlapping:
             if source_start > cursor:
-                text_block = self._paragraph_offset_block(
-                    content=content,
-                    start_offset=paragraph_start + cursor,
-                    end_offset=paragraph_start + source_start,
-                    document_id=document_id,
-                    heading_path=heading_path,
+                literal = raw_paragraph[cursor:source_start]
+                result.append(literal)
+                spans.append(
+                    (
+                        projected_offset,
+                        projected_offset + len(literal),
+                        cursor,
+                        source_start,
+                        cursor,
+                        source_start,
+                    )
                 )
-                if text_block is not None:
-                    result.append(text_block)
-            raw = raw_paragraph[source_start:source_end]
-            alt_text = attributes.get("alt_text")
-            result.append(
-                self._make_block(
-                    document_id=document_id,
-                    block_type=BlockType.IMAGE_REFERENCE,
-                    raw=raw,
-                    plain_text=alt_text if isinstance(alt_text, str) and alt_text else None,
-                    language=None,
-                    heading_level=None,
-                    heading_path=heading_path,
-                    span=self._span_for_offsets(
-                        content,
-                        paragraph_start + source_start,
-                        paragraph_start + source_end,
-                    ),
-                    attributes=attributes,
+                projected_offset += len(literal)
+            if projection:
+                projection_source = raw_paragraph.find(projection, source_start, source_end)
+                if projection_source < 0:
+                    projection_source = source_start
+                result.append(projection)
+                spans.append(
+                    (
+                        projected_offset,
+                        projected_offset + len(projection),
+                        source_start,
+                        source_end,
+                        projection_source,
+                        min(source_end, projection_source + len(projection)),
+                    )
                 )
-            )
+                projected_offset += len(projection)
             cursor = source_end
         if cursor < len(raw_paragraph):
-            text_block = self._paragraph_offset_block(
-                content=content,
-                start_offset=paragraph_start + cursor,
-                end_offset=paragraph_start + len(raw_paragraph),
-                document_id=document_id,
-                heading_path=heading_path,
+            literal = raw_paragraph[cursor:]
+            result.append(literal)
+            spans.append(
+                (
+                    projected_offset,
+                    projected_offset + len(literal),
+                    cursor,
+                    len(raw_paragraph),
+                    cursor,
+                    len(raw_paragraph),
+                )
             )
-            if text_block is not None:
-                result.append(text_block)
-        return result
-
-    def _paragraph_offset_block(
-        self,
-        *,
-        content: str,
-        start_offset: int,
-        end_offset: int,
-        document_id: str,
-        heading_path: tuple[str, ...],
-    ) -> SourceBlock | None:
-        raw = content[start_offset:end_offset]
-        if raw.strip():
-            leading = len(raw) - len(raw.lstrip())
-            trailing = len(raw) - len(raw.rstrip())
-            content_span = self._span_for_offsets(
-                content,
-                start_offset + leading,
-                end_offset - trailing,
-            )
-            span = SourceSpan(
-                content_span.start_line,
-                content_span.end_line,
-                start_offset,
-                end_offset,
-            )
-        else:
-            span = self._span_for_offsets(content, start_offset, end_offset)
-        return self._make_block(
-            document_id=document_id,
-            block_type=BlockType.PARAGRAPH,
-            raw=raw,
-            plain_text=raw.strip() or None,
-            language=None,
-            heading_level=None,
-            heading_path=heading_path,
-            span=span,
-            attributes={},
-        )
+        untrimmed = "".join(result)
+        leading = len(untrimmed) - len(untrimmed.lstrip())
+        trailing = len(untrimmed) - len(untrimmed.rstrip())
+        projected = untrimmed.strip()
+        projected_end = len(untrimmed) - trailing
+        adjusted: list[JSONValue] = [
+            [
+                max(projected_start, leading) - leading,
+                min(projected_stop, projected_end) - leading,
+                raw_start,
+                raw_end,
+                text_start,
+                text_end,
+            ]
+            for projected_start, projected_stop, raw_start, raw_end, text_start, text_end in spans
+            if projected_stop > leading and projected_start < projected_end
+        ]
+        return True, projected or None, adjusted
 
     @staticmethod
     def _span_for_offsets(content: str, start_offset: int, end_offset: int) -> SourceSpan:
@@ -484,18 +630,12 @@ class MarkdownItParser:
         span: SourceSpan,
         attributes: Mapping[str, JSONValue],
     ) -> SourceBlock:
-        occurrence = (
-            (span.start_offset, span.end_offset)
-            if block_type == BlockType.IMAGE_REFERENCE
-            else ()
-        )
         block_id = logical_id(
             "block",
             document_id,
             block_type.value,
             span.start_line,
             span.end_line,
-            *occurrence,
             content_fingerprint(raw),
         )
         return SourceBlock(

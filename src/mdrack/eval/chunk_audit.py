@@ -167,7 +167,7 @@ def _audit_structural_files(
         "code_count": sum(block.block_type == SourceBlockType.CODE for block in all_blocks),
         "table_count": sum(block.block_type == SourceBlockType.TABLE for block in all_blocks),
         "diagram_count": sum(block.block_type == SourceBlockType.MERMAID for block in all_blocks),
-        "image_count": sum(block.block_type == SourceBlockType.IMAGE_REFERENCE for block in all_blocks),
+        "image_count": 0,
         "orphan_block_count": orphan_blocks,
         "duplicate_block_count": len(block_ids) - len(set(block_ids)),
         "source_span_missing_count": 0,

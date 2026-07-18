@@ -23,7 +23,6 @@ class BlockType(str, Enum):
     CODE = "code"
     MERMAID = "mermaid"
     TABLE = "table"
-    IMAGE_REFERENCE = "image_reference"
     THEMATIC_BREAK = "thematic_break"
     UNKNOWN = "unknown"
 

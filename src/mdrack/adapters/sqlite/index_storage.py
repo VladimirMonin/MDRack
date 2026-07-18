@@ -170,8 +170,6 @@ class SQLiteIndexStorage:
                         raise ValueError("embedding profile is required when vectors are present")
                     self._write_vector(chunk.record_id, prepared.embedding_profile, prepared.vectors[index])
 
-            self._write_assets(prepared)
-
             self._validate_file_counts(prepared)
             self.connection.execute(f"RELEASE SAVEPOINT {savepoint}")
             self.connection.commit()
@@ -275,34 +273,6 @@ class SQLiteIndexStorage:
             block_kind=row["block_kind"],
             chunk_kind=row["chunk_kind"],
         )
-
-    def list_assets_for_file(self, relative_path: str) -> list[dict[str, Any]]:
-        rows = self.connection.execute(
-            """
-            SELECT DISTINCT a.asset_id, a.root_id, a.relative_path, a.content_hash,
-                            a.mime_type, a.size_bytes, a.width, a.height, a.exists_on_disk
-            FROM assets a
-            JOIN asset_references ar ON ar.asset_id = a.asset_id
-            JOIN files f ON f.id = ar.file_id
-            WHERE f.relative_path = ?
-            ORDER BY a.asset_id
-            """,
-            (relative_path,),
-        ).fetchall()
-        return [dict(row) for row in rows]
-
-    def list_asset_references(self, relative_path: str) -> list[dict[str, Any]]:
-        rows = self.connection.execute(
-            """
-            SELECT ar.*
-            FROM asset_references ar
-            JOIN files f ON f.id = ar.file_id
-            WHERE f.relative_path = ?
-            ORDER BY ar.start_line, ar.start_offset, ar.reference_id
-            """,
-            (relative_path,),
-        ).fetchall()
-        return [dict(row) for row in rows]
 
     def search_text(self, query: str, *, limit: int, offset: int = 0) -> TextSearchResult:
         return text_search(self.connection, query, limit=limit, offset=offset)
@@ -423,11 +393,6 @@ class SQLiteIndexStorage:
         return (str(decoded),)
 
     def _delete_derived_rows(self, file_id: str) -> None:
-        self.connection.execute("DELETE FROM asset_references WHERE file_id = ?", (file_id,))
-        self.connection.execute(
-            "DELETE FROM assets WHERE NOT EXISTS "
-            "(SELECT 1 FROM asset_references ar WHERE ar.asset_id = assets.asset_id)"
-        )
         chunk_rows = self.connection.execute(
             "SELECT id FROM chunks WHERE file_id = ?",
             (file_id,),
@@ -436,64 +401,6 @@ class SQLiteIndexStorage:
             self.connection.execute("DELETE FROM chunks_fts WHERE chunk_id = ?", (row["id"],))
         self.connection.execute("DELETE FROM chunks WHERE file_id = ?", (file_id,))
         self.connection.execute("DELETE FROM sections WHERE file_id = ?", (file_id,))
-
-    def _write_assets(self, prepared: PreparedFile) -> None:
-        for asset in prepared.assets:
-            self.connection.execute(
-                """
-                INSERT INTO assets (
-                    asset_id, root_id, relative_path, content_hash, mime_type,
-                    size_bytes, width, height, exists_on_disk
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(asset_id) DO UPDATE SET
-                    content_hash = excluded.content_hash,
-                    mime_type = excluded.mime_type,
-                    size_bytes = excluded.size_bytes,
-                    width = excluded.width,
-                    height = excluded.height,
-                    exists_on_disk = excluded.exists_on_disk
-                """,
-                (
-                    asset.asset_id,
-                    asset.root_id,
-                    asset.relative_path,
-                    asset.content_hash,
-                    asset.mime_type,
-                    asset.size_bytes,
-                    asset.width,
-                    asset.height,
-                    int(asset.exists),
-                ),
-            )
-        for reference in prepared.asset_references:
-            self.connection.execute(
-                """
-                INSERT INTO asset_references (
-                    reference_id, asset_id, file_id, document_logical_id,
-                    document_relative_path, block_logical_id, chunk_logical_id,
-                    raw_reference, syntax, start_line, end_line, start_offset,
-                    end_offset, alt_text, surrounding_text, resolution_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    reference.reference_id,
-                    reference.asset_id,
-                    prepared.record_id,
-                    reference.document_id,
-                    reference.document_relative_path,
-                    reference.block_id,
-                    reference.chunk_id,
-                    reference.raw_reference,
-                    reference.syntax,
-                    reference.source_span.start_line,
-                    reference.source_span.end_line,
-                    reference.source_span.start_offset,
-                    reference.source_span.end_offset,
-                    reference.alt_text,
-                    reference.surrounding_text,
-                    reference.resolution_status,
-                ),
-            )
 
     def _write_file(self, prepared: PreparedFile) -> None:
         self.connection.execute(

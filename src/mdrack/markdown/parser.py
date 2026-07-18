@@ -9,6 +9,7 @@ import hashlib
 import re
 from pathlib import Path
 
+from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.markdown.frontmatter import parse_frontmatter
 from mdrack.markdown.ir import BlockType, MarkdownBlock, ParsedDocument
 
@@ -192,6 +193,8 @@ def parse_markdown(file_path: Path, content: str | None = None) -> ParsedDocumen
 
     lines = body.split("\n")
     blocks: list[MarkdownBlock] = []
+    projection_parser = MarkdownItParser()
+    projection_environment, reference_definition_lines = projection_parser.projection_context(body)
     idx = 0
 
     while idx < len(lines):
@@ -200,6 +203,11 @@ def parse_markdown(file_path: Path, content: str | None = None) -> ParsedDocumen
 
         # --- blank line ---
         if not stripped:
+            idx += 1
+            continue
+
+        # Reference definitions feed CommonMark image parsing but are not searchable prose.
+        if idx in reference_definition_lines:
             idx += 1
             continue
 
@@ -254,7 +262,10 @@ def parse_markdown(file_path: Path, content: str | None = None) -> ParsedDocumen
             blocks.append(
                 MarkdownBlock(
                     type=BlockType.TABLE,
-                    content=table_content,
+                    content=projection_parser.project_text(
+                        table_content,
+                        environment=projection_environment,
+                    ),
                     start_line=idx + 1,
                     end_line=end + 1,
                     language=None,
@@ -269,7 +280,10 @@ def parse_markdown(file_path: Path, content: str | None = None) -> ParsedDocumen
             blocks.append(
                 MarkdownBlock(
                     type=BlockType.BLOCKQUOTE,
-                    content=bq_content,
+                    content=projection_parser.project_text(
+                        bq_content,
+                        environment=projection_environment,
+                    ),
                     start_line=idx + 1,
                     end_line=end + 1,
                     language=None,
@@ -284,7 +298,10 @@ def parse_markdown(file_path: Path, content: str | None = None) -> ParsedDocumen
             blocks.append(
                 MarkdownBlock(
                     type=BlockType.LIST,
-                    content=list_content,
+                    content=projection_parser.project_text(
+                        list_content,
+                        environment=projection_environment,
+                    ),
                     start_line=idx + 1,
                     end_line=end + 1,
                     language=None,
@@ -299,7 +316,10 @@ def parse_markdown(file_path: Path, content: str | None = None) -> ParsedDocumen
             blocks.append(
                 MarkdownBlock(
                     type=BlockType.PARAGRAPH,
-                    content=para_content,
+                    content=projection_parser.project_text(
+                        para_content,
+                        environment=projection_environment,
+                    ),
                     start_line=idx + 1,
                     end_line=end + 1,
                     language=None,

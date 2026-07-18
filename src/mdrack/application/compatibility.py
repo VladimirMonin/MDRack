@@ -478,12 +478,6 @@ class CoreCompatibilityStorage:
     def get_chunk_by_logical_id(self, logical_id_value: str) -> dict[str, Any] | None:
         return self.legacy.get_chunk_by_logical_id(logical_id_value)
 
-    def list_assets_for_file(self, relative_path: str) -> list[dict[str, Any]]:
-        return self.legacy.list_assets_for_file(relative_path)
-
-    def list_asset_references(self, relative_path: str) -> list[dict[str, Any]]:
-        return self.legacy.list_asset_references(relative_path)
-
     def close(self) -> None:
         if not self._closed:
             self.connection.close()

@@ -133,7 +133,9 @@ def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(t
         assert connection.execute("SELECT COUNT(*) FROM core_search_units").fetchone()[0] == scan.chunks_created
         assert connection.execute("SELECT COUNT(*) FROM core_unit_embeddings").fetchone()[0] == scan.chunks_created
         assert connection.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
-        assert connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM asset_references").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM asset_descriptions").fetchone()[0] == 0
         metadata = json.loads(
             connection.execute("SELECT metadata_json FROM core_resources").fetchone()[0]
         )

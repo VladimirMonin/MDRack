@@ -89,12 +89,6 @@ class _FakeStorage:
     def search_text(self, query: str, *, limit: int, offset: int = 0):
         raise AssertionError("legacy search path must not be used")
 
-    def list_assets_for_file(self, relative_path: str):
-        return []
-
-    def list_asset_references(self, relative_path: str):
-        return []
-
     def get_chunk_source_locator(self, chunk_id: str) -> SourceLocator:
         return SourceLocator("default", "injected.md", 1, 1, (), "block_fake", "chunk_fake")
 

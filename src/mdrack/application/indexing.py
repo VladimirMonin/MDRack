@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from mdrack.adapters.markdown_it import MarkdownItParser
-from mdrack.application.assets import build_asset_graph
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
 from mdrack.domain.blocks import BlockType
 from mdrack.domain.chunks import RetrievalChunk
@@ -417,7 +416,6 @@ class IndexingService:
             },
         )
         chunks = self._stable_chunk_identities(parsed, self.chunker.build(parsed))
-        asset_graph = build_asset_graph(parsed, chunks, root=self.root, root_id=self.root_id)
         logger.info(
             "chunk.build.finished",
             extra={
@@ -556,8 +554,6 @@ class IndexingService:
             index_run_id=run_id,
             sections=tuple(stored_sections),
             chunks=stored_chunks,
-            assets=asset_graph.assets,
-            asset_references=asset_graph.references,
             vectors=vectors,
             embedding_profile=self._embedding_profile() if vectors else None,
             embedding_model=self._provider_attr("model_name", "_model_name", default="default") if vectors else None,
