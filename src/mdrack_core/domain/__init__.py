@@ -54,8 +54,11 @@ from .results import (
 from .search import (
     TARGET_RESOURCE,
     TARGET_UNIT,
+    BranchScopeOverride,
     LexicalBranch,
     RankedCandidate,
+    RankKind,
+    ScoreKind,
     SearchRequest,
     SearchScope,
     VectorBranch,
@@ -70,6 +73,7 @@ from .vectors import (
 
 __all__ = (
     "BranchExecutionError",
+    "BranchScopeOverride",
     "CatalogExecutionError",
     "CoreError",
     "Degradation",
@@ -93,6 +97,7 @@ __all__ = (
     "MODALITY_TEXT",
     "MODALITY_VIDEO",
     "PreparedResourceBatch",
+    "RankKind",
     "REPRESENTATION_AUDIO_TRANSCRIPT",
     "REPRESENTATION_CAPTION_TEXT",
     "REPRESENTATION_FRAME_CAPTION",
@@ -113,6 +118,7 @@ __all__ = (
     "SearchResultItem",
     "SearchScope",
     "SearchUnitRecord",
+    "ScoreKind",
     "SimilarityRequest",
     "SimilarityResult",
     "TARGET_RESOURCE",

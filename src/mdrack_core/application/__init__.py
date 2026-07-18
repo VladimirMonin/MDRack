@@ -6,12 +6,15 @@ from .fusion import (
     FusionCandidate,
     weighted_rrf,
 )
-from .retrieval import RetrievalService
+from .indexing import CoreIndexingService
+from .retrieval import ResourceDiscoveryService, RetrievalService
 
 __all__ = (
+    "CoreIndexingService",
     "FusedCandidate",
     "FusionBranch",
     "FusionCandidate",
+    "ResourceDiscoveryService",
     "RetrievalService",
     "weighted_rrf",
 )

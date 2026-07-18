@@ -8,6 +8,7 @@ import pytest
 from mdrack_core.application import RetrievalService
 from mdrack_core.domain import (
     BranchExecutionError,
+    BranchScopeOverride,
     DegradationCategory,
     ErrorCategory,
     Facet,
@@ -15,6 +16,7 @@ from mdrack_core.domain import (
     LexicalBranch,
     Locator,
     RankedCandidate,
+    ScoreKind,
     SearchRequest,
     SearchScope,
     VectorBranch,
@@ -134,6 +136,97 @@ def test_forwards_the_exact_scope_to_every_arbitrary_branch() -> None:
     assert all(call_scope is scope for _, _, call_scope in port.calls)
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    (
+        "resource_kinds",
+        "media_types",
+        "source_namespaces",
+        "representation_kinds",
+        "modalities",
+        "unit_kinds",
+    ),
+)
+def test_branch_scope_override_only_narrows_categorical_scope_and_preserves_facets(
+    field_name: str,
+) -> None:
+    required = Facet("topic", "python")
+    forbidden = Facet("visibility", "private")
+    global_scope = SearchScope(
+        **{field_name: ("shared", "global-only")},
+        facets_any=(required,),
+        facets_all=(required,),
+        facets_none=(forbidden,),
+    )
+    override = BranchScopeOverride(**{field_name: ("branch-only", "shared")})
+    branch = LexicalBranch("lexical", "query", scope_override=override)
+    port = SearchPortSpy({"lexical": []})
+
+    result = RetrievalService(port).search(_request(lexical=(branch,), scope=global_scope))
+
+    assert result.items == ()
+    assert len(port.calls) == 1
+    effective = port.calls[0][2]
+    assert getattr(effective, field_name) == ("shared",)
+    assert effective.facets_any == global_scope.facets_any
+    assert effective.facets_all == global_scope.facets_all
+    assert effective.facets_none == global_scope.facets_none
+
+
+def test_empty_branch_categorical_intersection_skips_adapter_without_degradation() -> None:
+    branch = LexicalBranch(
+        "lexical",
+        "query",
+        scope_override=BranchScopeOverride(modalities=("image",)),
+    )
+    port = SearchPortSpy({"lexical": RuntimeError("must not execute")})
+
+    result = RetrievalService(port).search(
+        _request(
+            lexical=(branch,),
+            scope=SearchScope(modalities=("text",)),
+        )
+    )
+
+    assert result.items == ()
+    assert result.degradations == ()
+    assert port.calls == []
+
+
+def test_vector_branch_uses_narrowed_scope_and_skips_disjoint_override() -> None:
+    matching = VectorBranch(
+        "matching",
+        "space",
+        (1.0,),
+        scope_override=BranchScopeOverride(representation_kinds=("transcript",)),
+    )
+    disjoint = VectorBranch(
+        "disjoint",
+        "space",
+        (1.0,),
+        scope_override=BranchScopeOverride(modalities=("image",)),
+    )
+    port = SearchPortSpy({"matching": [], "disjoint": RuntimeError("must not execute")})
+    global_scope = SearchScope(
+        representation_kinds=("transcript", "frame_caption"),
+        modalities=("text",),
+        facets_all=(Facet("project", "mdrack"),),
+    )
+
+    result = RetrievalService(port).search(
+        _request(vectors=(matching, disjoint), scope=global_scope)
+    )
+
+    assert result.items == ()
+    assert len(port.calls) == 1
+    kind, called_branch, effective = port.calls[0]
+    assert kind == "vector"
+    assert called_branch is matching
+    assert effective.representation_kinds == ("transcript",)
+    assert effective.modalities == ("text",)
+    assert effective.facets_all == global_scope.facets_all
+
+
 def test_unit_fusion_combines_branch_evidence_and_applies_weights() -> None:
     lexical = LexicalBranch("lexical", "query", weight=1.0)
     vector = VectorBranch("vector", "space", (1.0,), weight=3.0)
@@ -153,6 +246,7 @@ def test_unit_fusion_combines_branch_evidence_and_applies_weights() -> None:
 
     assert [item.logical_id for item in result.items] == ["shared", "vector-only"]
     assert result.items[0].score == pytest.approx(1 / 11 + 3 / 11)
+    assert result.items[0].score_kind is ScoreKind.RRF
     assert result.items[0].unit_id == "shared"
     assert result.items[0].evidence == (lexical_shared, vector_shared)
 

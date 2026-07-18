@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from .common import (
     JSONValue,
@@ -20,6 +21,20 @@ from .vectors import _freeze_sequence, freeze_vector
 TARGET_UNIT = "unit"
 TARGET_RESOURCE = "resource"
 TARGETS = frozenset({TARGET_UNIT, TARGET_RESOURCE})
+
+
+class ScoreKind(StrEnum):
+    """Semantic origin of a candidate or result score."""
+
+    ADAPTER_RAW = "adapter_raw"
+    RRF = "rrf"
+
+
+class RankKind(StrEnum):
+    """Population in which a rank is dense and one-based."""
+
+    ADAPTER_CANDIDATE = "adapter_candidate"
+    RESULT = "result"
 
 
 def _empty_mapping() -> dict[str, JSONValue]:
@@ -67,11 +82,35 @@ class SearchScope:
 
 
 @dataclass(frozen=True)
+class BranchScopeOverride:
+    """Categorical-only branch narrowing; facet clauses remain request-global."""
+
+    resource_kinds: tuple[str, ...] = ()
+    media_types: tuple[str, ...] = ()
+    source_namespaces: tuple[str, ...] = ()
+    representation_kinds: tuple[str, ...] = ()
+    modalities: tuple[str, ...] = ()
+    unit_kinds: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "resource_kinds",
+            "media_types",
+            "source_namespaces",
+            "representation_kinds",
+            "modalities",
+            "unit_kinds",
+        ):
+            object.__setattr__(self, field_name, _freeze_strings(getattr(self, field_name), field_name))
+
+
+@dataclass(frozen=True)
 class LexicalBranch:
     branch_id: str
     query: str
     weight: float = 1.0
     candidate_limit: int = 100
+    scope_override: BranchScopeOverride | None = None
 
     def __post_init__(self) -> None:
         require_non_empty(self.branch_id, "branch_id")
@@ -81,6 +120,11 @@ class LexicalBranch:
             raise ValueError("weight must be positive")
         object.__setattr__(self, "weight", weight)
         require_integer(self.candidate_limit, "candidate_limit", minimum=1)
+        if self.scope_override is not None and not isinstance(
+            self.scope_override,
+            BranchScopeOverride,
+        ):
+            raise ValueError("scope_override must be a BranchScopeOverride")
 
 
 @dataclass(frozen=True)
@@ -91,6 +135,7 @@ class VectorBranch:
     weight: float = 1.0
     candidate_limit: int = 100
     expected_fingerprint: str | None = None
+    scope_override: BranchScopeOverride | None = None
 
     def __post_init__(self) -> None:
         require_non_empty(self.branch_id, "branch_id")
@@ -102,6 +147,11 @@ class VectorBranch:
         object.__setattr__(self, "weight", weight)
         require_integer(self.candidate_limit, "candidate_limit", minimum=1)
         require_optional_non_empty(self.expected_fingerprint, "expected_fingerprint")
+        if self.scope_override is not None and not isinstance(
+            self.scope_override,
+            BranchScopeOverride,
+        ):
+            raise ValueError("scope_override must be a BranchScopeOverride")
 
 
 @dataclass(frozen=True)
@@ -168,6 +218,8 @@ class RankedCandidate:
     branch_id: str
     evidence_locator: Locator
     metadata: Mapping[str, JSONValue] = field(default_factory=_empty_mapping)
+    score_kind: ScoreKind = ScoreKind.ADAPTER_RAW
+    rank_kind: RankKind = RankKind.ADAPTER_CANDIDATE
 
     def __post_init__(self) -> None:
         require_non_empty(self.unit_id, "unit_id")
@@ -179,3 +231,7 @@ class RankedCandidate:
         if not isinstance(self.evidence_locator, Locator):
             raise ValueError("evidence_locator must be a Locator")
         object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata, "metadata"))
+        if self.score_kind is not ScoreKind.ADAPTER_RAW:
+            raise ValueError("RankedCandidate score_kind must be adapter_raw")
+        if self.rank_kind is not RankKind.ADAPTER_CANDIDATE:
+            raise ValueError("RankedCandidate rank_kind must be adapter_candidate")

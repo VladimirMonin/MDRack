@@ -1,5 +1,6 @@
 """Standalone provider- and persistence-neutral MDRack core contracts."""
 
+from .contract import CORE_CONTRACT_VERSION
 from .domain import (
     FACET_ORIGIN_CLASSIFIER,
     FACET_ORIGIN_EXTRACTOR,
@@ -34,6 +35,7 @@ from .domain import (
     UNIT_TIME_SEGMENT,
     UNIT_WHOLE_RESOURCE,
     BranchExecutionError,
+    BranchScopeOverride,
     CatalogExecutionError,
     CoreError,
     Degradation,
@@ -47,9 +49,11 @@ from .domain import (
     Locator,
     PreparedResourceBatch,
     RankedCandidate,
+    RankKind,
     RepresentationRecord,
     ResourceFacet,
     ResourceRecord,
+    ScoreKind,
     SearchRequest,
     SearchResult,
     SearchResultItem,
@@ -81,7 +85,9 @@ from .ports import (
 
 __all__ = (
     "BranchExecutionError",
+    "BranchScopeOverride",
     "CORE_EVENT_NAMES",
+    "CORE_CONTRACT_VERSION",
     "CatalogExecutionError",
     "CatalogPort",
     "CoreError",
@@ -108,6 +114,7 @@ __all__ = (
     "MODALITY_TEXT",
     "MODALITY_VIDEO",
     "PreparedResourceBatch",
+    "RankKind",
     "REPRESENTATION_AUDIO_TRANSCRIPT",
     "REPRESENTATION_CAPTION_TEXT",
     "REPRESENTATION_FRAME_CAPTION",
@@ -134,6 +141,7 @@ __all__ = (
     "SearchResultItem",
     "SearchScope",
     "SearchUnitRecord",
+    "ScoreKind",
     "SimilarityRequest",
     "SimilarityResult",
     "TARGET_RESOURCE",

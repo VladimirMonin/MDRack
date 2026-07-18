@@ -108,6 +108,12 @@ applies every filter before branch limits. Resource-target search groups units
 within each branch before RRF so a long document does not gain rank merely by
 having more chunks. Exact duplicate lookup uses `content_hash`; semantic resource
 similarity uses an already persisted whole-resource vector and explicit space.
+`BranchScopeOverride` may additionally narrow only the six categorical fields for
+one lexical or vector branch. Global facet clauses are preserved verbatim; a
+disjoint categorical intersection skips the adapter call. Core similarity also
+requires an explicit opaque `similarity_basis` and returns it unchanged. The
+existing app resource façade preserves its published key set through a documented
+`legacy_unspecified` compatibility bridge until the later public similarity slice.
 Core validates returned candidates for exact one-based positional ranks and
 unique unit IDs after the existing candidate-limit slice. Malformed adapter
 output becomes a privacy-safe adapter degradation; tolerant overproduction
@@ -130,6 +136,12 @@ hybrid `score` equals `rrf_score`.
 Direct-image search uses the same mode distinction without widening its public
 key set: text and semantic `score` expose the representative raw adapter score,
 while hybrid `score` exposes the fused RRF score.
+
+Core records make these meanings explicit: adapter candidates use
+`score_kind=adapter_raw` and `rank_kind=adapter_candidate`; ordinary retrieval
+items use `score_kind=rrf` and `rank_kind=result`; similarity items use
+`score_kind=adapter_raw` and `rank_kind=result`. See
+[ADR-0003](../decisions/0003-core-1.0-rc-contract.md).
 
 ## Reranking boundary
 

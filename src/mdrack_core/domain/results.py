@@ -15,7 +15,7 @@ from .common import (
     require_optional_non_empty,
 )
 from .errors import DegradationCategory
-from .search import TARGETS, RankedCandidate, SearchScope
+from .search import TARGETS, RankedCandidate, RankKind, ScoreKind, SearchScope
 from .vectors import _freeze_sequence
 
 
@@ -50,6 +50,8 @@ class SearchResultItem:
     rank: int
     evidence: tuple[RankedCandidate, ...] = ()
     metadata: Mapping[str, JSONValue] = field(default_factory=_empty_mapping)
+    score_kind: ScoreKind = ScoreKind.RRF
+    rank_kind: RankKind = RankKind.RESULT
 
     def __post_init__(self) -> None:
         require_non_empty(self.logical_id, "logical_id")
@@ -57,6 +59,10 @@ class SearchResultItem:
         require_optional_non_empty(self.unit_id, "unit_id")
         object.__setattr__(self, "score", require_finite_number(self.score, "score"))
         require_integer(self.rank, "rank", minimum=1)
+        if not isinstance(self.score_kind, ScoreKind):
+            raise ValueError("score_kind must be a ScoreKind")
+        if self.rank_kind is not RankKind.RESULT:
+            raise ValueError("SearchResultItem rank_kind must be result")
         object.__setattr__(
             self,
             "evidence",
@@ -89,6 +95,7 @@ class SearchResult:
 class SimilarityRequest:
     query_unit_id: str
     space_id: str
+    similarity_basis: str
     scope: SearchScope
     limit: int
     exclude_same_resource: bool = True
@@ -96,6 +103,7 @@ class SimilarityRequest:
     def __post_init__(self) -> None:
         require_non_empty(self.query_unit_id, "query_unit_id")
         require_non_empty(self.space_id, "space_id")
+        require_non_empty(self.similarity_basis, "similarity_basis")
         if not isinstance(self.scope, SearchScope):
             raise ValueError("scope must be a SearchScope")
         require_integer(self.limit, "limit", minimum=1)
@@ -107,12 +115,14 @@ class SimilarityRequest:
 class SimilarityResult:
     query_unit_id: str
     space_id: str
+    similarity_basis: str
     items: tuple[SearchResultItem, ...]
     degradations: tuple[Degradation, ...] = ()
 
     def __post_init__(self) -> None:
         require_non_empty(self.query_unit_id, "query_unit_id")
         require_non_empty(self.space_id, "space_id")
+        require_non_empty(self.similarity_basis, "similarity_basis")
         object.__setattr__(self, "items", _freeze_typed(self.items, "items", SearchResultItem))
         object.__setattr__(
             self,

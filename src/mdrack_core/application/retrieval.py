@@ -24,8 +24,11 @@ from ..domain.results import (
 )
 from ..domain.search import (
     TARGET_RESOURCE,
+    BranchScopeOverride,
     LexicalBranch,
     RankedCandidate,
+    RankKind,
+    ScoreKind,
     SearchRequest,
     SearchScope,
     VectorBranch,
@@ -209,6 +212,8 @@ class ResourceDiscoveryService:
                 rank=rank,
                 evidence=(candidate,),
                 metadata={},
+                score_kind=ScoreKind.ADAPTER_RAW,
+                rank_kind=RankKind.RESULT,
             )
             for rank, candidate in enumerate(selected, start=1)
         )
@@ -256,6 +261,7 @@ class ResourceDiscoveryService:
         return SimilarityResult(
             request.query_unit_id,
             request.space_id,
+            request.similarity_basis,
             items,
             degradations,
         )
@@ -330,14 +336,19 @@ class RetrievalService:
         failures: list[BranchExecutionError] = []
 
         for lexical_branch in request.lexical_branches:
-            result = self._execute_branch(
-                request,
-                lexical_branch,
-                lambda: self._search_port.search_lexical(
+            scope = self._effective_scope(request.scope, lexical_branch.scope_override)
+            if scope is None:
+                result: tuple[RankedCandidate, ...] | BranchExecutionError = ()
+            else:
+                effective_scope = scope
+                result = self._execute_branch(
+                    request,
                     lexical_branch,
-                    scope=request.scope,
-                ),
-            )
+                    lambda: self._search_port.search_lexical(
+                        lexical_branch,
+                        scope=effective_scope,
+                    ),
+                )
             self._collect_result(
                 request,
                 lexical_branch,
@@ -351,14 +362,19 @@ class RetrievalService:
                 raise failures[0]
 
         for vector_branch in request.vector_branches:
-            result = self._execute_branch(
-                request,
-                vector_branch,
-                lambda: self._search_port.search_vector(
+            scope = self._effective_scope(request.scope, vector_branch.scope_override)
+            if scope is None:
+                result = ()
+            else:
+                effective_scope = scope
+                result = self._execute_branch(
+                    request,
                     vector_branch,
-                    scope=request.scope,
-                ),
-            )
+                    lambda: self._search_port.search_vector(
+                        vector_branch,
+                        scope=effective_scope,
+                    ),
+                )
             self._collect_result(
                 request,
                 vector_branch,
@@ -400,6 +416,8 @@ class RetrievalService:
                 rank=rank,
                 evidence=item.evidence,
                 metadata=item.representative.metadata,
+                score_kind=ScoreKind.RRF,
+                rank_kind=RankKind.RESULT,
             )
             for rank, item in enumerate(selected, start=1)
         )
@@ -438,6 +456,43 @@ class RetrievalService:
             items=items,
             degradations=tuple(degradations),
             request_id=request.request_id,
+        )
+
+    @staticmethod
+    def _effective_scope(
+        global_scope: SearchScope,
+        override: BranchScopeOverride | None,
+    ) -> SearchScope | None:
+        """Intersect categorical filters while retaining request-global facets verbatim."""
+        if override is None:
+            return global_scope
+        narrowed: dict[str, tuple[str, ...]] = {}
+        for field_name in (
+            "resource_kinds",
+            "media_types",
+            "source_namespaces",
+            "representation_kinds",
+            "modalities",
+            "unit_kinds",
+        ):
+            global_values = getattr(global_scope, field_name)
+            branch_values = getattr(override, field_name)
+            if not branch_values:
+                narrowed[field_name] = global_values
+                continue
+            if not global_values:
+                narrowed[field_name] = branch_values
+                continue
+            branch_set = set(branch_values)
+            intersection = tuple(value for value in global_values if value in branch_set)
+            if not intersection:
+                return None
+            narrowed[field_name] = intersection
+        return SearchScope(
+            **narrowed,
+            facets_any=global_scope.facets_any,
+            facets_all=global_scope.facets_all,
+            facets_none=global_scope.facets_none,
         )
 
     def _execute_branch(

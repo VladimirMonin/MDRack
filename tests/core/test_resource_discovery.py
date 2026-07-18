@@ -25,6 +25,7 @@ from mdrack_core.domain import (
     RepresentationRecord,
     ResourceFacet,
     ResourceRecord,
+    ScoreKind,
     SearchScope,
     SearchUnitRecord,
     SimilarityRequest,
@@ -193,16 +194,18 @@ def test_duplicates_and_similarity_are_provider_free_scoped_and_deterministic(
     duplicates = service.find_duplicates("query", scope=scope, limit=1)
     assert [item.resource_id for item in duplicates] == ["duplicate"]
 
-    request = SimilarityRequest("unit-query", "shared-space", scope, 2)
+    request = SimilarityRequest("unit-query", "shared-space", "retrieval_text", scope, 2)
     first = service.similar(request)
     second = service.similar(request)
     assert first == second
+    assert first.similarity_basis == "retrieval_text"
     assert [(item.resource_id, item.unit_id, item.rank) for item in first.items] == [
         ("duplicate", "unit-duplicate", 1),
         ("similar-image", "unit-similar-image", 2),
     ]
     assert first.items[0].score > first.items[1].score
     assert all(item.score == item.evidence[0].raw_score for item in first.items)
+    assert all(item.score_kind is ScoreKind.ADAPTER_RAW for item in first.items)
     assert "query" not in {item.resource_id for item in first.items}
     assert "excluded-high" not in {item.resource_id for item in first.items}
 
@@ -212,7 +215,7 @@ def test_similarity_missing_unit_or_vector_returns_safe_degradation(
 ) -> None:
     service = ResourceDiscoveryService(discovery_store)  # type: ignore[arg-type]
     missing_unit = service.similar(
-        SimilarityRequest("missing-unit", "shared-space", SearchScope(), 5)
+        SimilarityRequest("missing-unit", "shared-space", "retrieval_text", SearchScope(), 5)
     )
     assert missing_unit.items == ()
     assert [item.category for item in missing_unit.degradations] == [
@@ -222,7 +225,7 @@ def test_similarity_missing_unit_or_vector_returns_safe_degradation(
     without_requested_space = _batch("query", space_id="other-space")
     discovery_store.replace_resource(without_requested_space)
     missing_vector = service.similar(
-        SimilarityRequest("unit-query", "shared-space", SearchScope(), 5)
+        SimilarityRequest("unit-query", "shared-space", "retrieval_text", SearchScope(), 5)
     )
     assert missing_vector.items == ()
     assert [item.category for item in missing_vector.degradations] == [
@@ -274,7 +277,7 @@ def test_similarity_catalog_reads_map_to_safe_degradation(
 
     with caplog.at_level(logging.INFO, logger="mdrack_core.application.retrieval"):
         result = ResourceDiscoveryService(catalog).similar(
-            SimilarityRequest("unit-query", "shared-space", SearchScope(), 5)
+            SimilarityRequest("unit-query", "shared-space", "retrieval_text", SearchScope(), 5)
         )
 
     assert result.items == ()
@@ -341,7 +344,7 @@ def test_similarity_dimension_mismatch_degrades_without_exposing_vectors() -> No
     catalog.replace_resource(_batch("candidate", vector=(0.8, 0.2)))
 
     result = ResourceDiscoveryService(catalog).similar(
-        SimilarityRequest("unit-query", "shared-space", SearchScope(), 5)
+        SimilarityRequest("unit-query", "shared-space", "retrieval_text", SearchScope(), 5)
     )
 
     assert result.items == ()

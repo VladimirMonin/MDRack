@@ -31,8 +31,11 @@ from mdrack_core.domain.resources import (
     SearchUnitRecord,
 )
 from mdrack_core.domain.search import (
+    BranchScopeOverride,
     LexicalBranch,
     RankedCandidate,
+    RankKind,
+    ScoreKind,
     SearchRequest,
     SearchScope,
     VectorBranch,
@@ -340,6 +343,23 @@ def test_search_scope_freezes_open_vocabulary_and_facets() -> None:
         SearchScope(facets_any=["not-a-facet"])  # type: ignore[list-item]
 
 
+def test_branch_scope_override_is_categorical_only_and_validates_branch_attachment() -> None:
+    override = BranchScopeOverride(
+        resource_kinds=["document"],  # type: ignore[arg-type]
+        representation_kinds=("retrieval_text",),
+        modalities=("text",),
+    )
+    assert override.resource_kinds == ("document",)
+    assert LexicalBranch("lexical", "query", scope_override=override).scope_override is override
+    assert VectorBranch("vector", "space", (1.0,), scope_override=override).scope_override is override
+    assert not hasattr(override, "facets_any")
+
+    with pytest.raises(ValueError, match="scope_override"):
+        LexicalBranch("lexical", "query", scope_override=SearchScope())  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="resource_kinds"):
+        BranchScopeOverride(resource_kinds=("",))
+
+
 @pytest.mark.parametrize(
     "field_name",
     [
@@ -556,6 +576,8 @@ def test_ranked_candidate_validates_ids_rank_score_locator_and_metadata() -> Non
         {"safe": ["result"]},
     )
     assert candidate.raw_score == 0.25
+    assert candidate.score_kind is ScoreKind.ADAPTER_RAW
+    assert candidate.rank_kind is RankKind.ADAPTER_CANDIDATE
     assert candidate.metadata["safe"] == ("result",)
 
     for changes in (
@@ -563,6 +585,8 @@ def test_ranked_candidate_validates_ids_rank_score_locator_and_metadata() -> Non
         {"rank": True},
         {"raw_score": float("inf")},
         {"branch_id": ""},
+        {"score_kind": ScoreKind.RRF},
+        {"rank_kind": RankKind.RESULT},
     ):
         with pytest.raises(ValueError):
             replace(candidate, **changes)

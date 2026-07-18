@@ -20,6 +20,7 @@ _CATALOG_ERROR_TO_DEGRADED_REASON = {
     ErrorCategory.CATALOG_ERROR: "adapter_error",
     ErrorCategory.ADAPTER_TIMEOUT: "adapter_timeout",
 }
+_LEGACY_SIMILARITY_BASIS = "legacy_unspecified"
 
 
 @dataclass(frozen=True)
@@ -199,6 +200,7 @@ class ResourceQueryService:
             SimilarityRequest(
                 query_unit_id,
                 space_id,
+                _LEGACY_SIMILARITY_BASIS,
                 (scope or ResourceQueryScope()).core(),
                 limit,
                 exclude_same_resource,

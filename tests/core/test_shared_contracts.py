@@ -20,9 +20,11 @@ from mdrack_core.domain import (
     Locator,
     PreparedResourceBatch,
     RankedCandidate,
+    RankKind,
     RepresentationRecord,
     ResourceFacet,
     ResourceRecord,
+    ScoreKind,
     SearchResult,
     SearchResultItem,
     SearchScope,
@@ -182,11 +184,20 @@ def test_result_records_are_frozen_typed_and_json_safe() -> None:
         [degradation],  # type: ignore[arg-type]
         "123e4567-e89b-12d3-a456-426614174000",
     )
-    similarity = SimilarityResult("unit-query", "space-1", [item], [degradation])  # type: ignore[arg-type]
+    similarity = SimilarityResult(
+        "unit-query",
+        "space-1",
+        "retrieval_text",
+        [item],  # type: ignore[arg-type]
+        [degradation],  # type: ignore[arg-type]
+    )
 
     assert result.items == (item,)
     assert result.degradations == (degradation,)
     assert similarity.items == (item,)
+    assert similarity.similarity_basis == "retrieval_text"
+    assert item.score_kind is ScoreKind.RRF
+    assert item.rank_kind is RankKind.RESULT
     assert item.evidence == (candidate(),)
     assert item.metadata["safe"] == (1,)
     with pytest.raises(TypeError):
@@ -231,16 +242,20 @@ def test_search_result_item_and_similarity_request_validation_matrix() -> None:
         {"score": True},
         {"rank": 0},
         {"rank": True},
+        {"score_kind": "rrf"},
+        {"rank_kind": "result"},
+        {"rank_kind": RankKind.ADAPTER_CANDIDATE},
         {"evidence": [object()]},
     ):
         with pytest.raises(ValueError):
             result_item(**changes)
 
-    request = SimilarityRequest("unit-1", "space-1", SearchScope(), 10)
+    request = SimilarityRequest("unit-1", "space-1", "retrieval_text", SearchScope(), 10)
     assert request.exclude_same_resource is True
     for changes in (
         {"query_unit_id": ""},
         {"space_id": ""},
+        {"similarity_basis": ""},
         {"scope": object()},
         {"limit": 0},
         {"limit": True},
@@ -302,6 +317,8 @@ def test_protocol_composites_and_public_export_inventory_are_frozen() -> None:
 
     expected = {
         "BranchExecutionError",
+        "BranchScopeOverride",
+        "CORE_CONTRACT_VERSION",
         "CORE_EVENT_NAMES",
         "CatalogExecutionError",
         "CatalogPort",
@@ -316,6 +333,7 @@ def test_protocol_composites_and_public_export_inventory_are_frozen() -> None:
         "LifecycleStatus",
         "Locator",
         "PreparedResourceBatch",
+        "RankKind",
         "REDACTED",
         "RankedCandidate",
         "RepresentationRecord",
@@ -331,6 +349,7 @@ def test_protocol_composites_and_public_export_inventory_are_frozen() -> None:
         "SearchResultItem",
         "SearchScope",
         "SearchUnitRecord",
+        "ScoreKind",
         "SimilarityRequest",
         "SimilarityResult",
         "VectorBranch",
