@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import runpy
+import subprocess
 from pathlib import Path
 
 from mdrack.eval.privacy import scan_privacy
@@ -53,6 +55,27 @@ FORBIDDEN_RELEASE_KEYS = {
     "exception",
     "sqlite_id",
 }
+V031_IMPLEMENTATION_DIFF_PATHS = (
+    "src/mdrack/adapters/sqlite/resource_store.py",
+    "src/mdrack/application/retrieval.py",
+    "src/mdrack/cli/commands/search.py",
+    "src/mdrack/config/models.py",
+    "src/mdrack/ingestion/images.py",
+    "src/mdrack/public_api/engine.py",
+    "src/mdrack/search/hybrid.py",
+    "src/mdrack_core/application/indexing.py",
+    "src/mdrack_core/application/retrieval.py",
+    "tests/cli/test_cli_images.py",
+    "tests/cli/test_cli_search_semantic_fake.py",
+    "tests/core/fakes/memory_store.py",
+    "tests/core/test_indexing.py",
+    "tests/core/test_retrieval.py",
+    "tests/integration/test_hybrid_search.py",
+    "tests/integration/test_image_ingestion.py",
+    "tests/integration/test_resource_core_sqlite.py",
+    "tests/integration/test_s6_core_app_integration.py",
+    "tests/unit/test_config.py",
+)
 
 
 def _slug(heading: str) -> str:
@@ -221,3 +244,100 @@ def test_release_json_uses_closed_safe_diagnostic_schema() -> None:
 
     collect(payload)
     assert keys.isdisjoint(FORBIDDEN_RELEASE_KEYS)
+
+
+def test_v031_revision_evidence_has_consistent_provenance_and_counts() -> None:
+    payload = json.loads(
+        (REPO_ROOT / "docs" / "evidence" / "v0.3.1-release-gate.json").read_text(encoding="utf-8")
+    )
+    assert set(payload) == {
+        "schema_version",
+        "generated_for",
+        "status",
+        "provenance",
+        "findings",
+        "performance",
+        "checks",
+        "non_claims",
+        "future_live_gate",
+    }
+    assert payload["schema_version"] == 1
+    assert payload["generated_for"] == "v0.3.1-offline-revision"
+    assert payload["status"] == "ok"
+
+    provenance = payload["provenance"]
+    assert set(provenance) == {
+        "artifact_revision",
+        "implementation_diff_sha256",
+        "implementation_diff_files",
+        "diff_scope",
+        "python",
+        "platform",
+    }
+    artifact_revision = provenance["artifact_revision"]
+    assert isinstance(artifact_revision, str)
+    assert len(artifact_revision) == 40
+    subprocess.run(
+        ["git", "cat-file", "-e", f"{artifact_revision}^{{commit}}"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    )
+    diff = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--binary",
+            f"{artifact_revision}^",
+            artifact_revision,
+            "--",
+            *V031_IMPLEMENTATION_DIFF_PATHS,
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert provenance["implementation_diff_files"] == len(V031_IMPLEMENTATION_DIFF_PATHS)
+    assert provenance["implementation_diff_sha256"] == f"sha256:{hashlib.sha256(diff).hexdigest()}"
+
+    findings = {item["id"]: item for item in payload["findings"]}
+    assert set(findings) == {"SYN-OFF-001", "SYN-EVID-002"}
+    assert all(item["status"] == "closed_offline" for item in findings.values())
+
+    cells = {(item["vectors"], item["dimensions"]): item for item in payload["performance"]}
+    assert set(cells) == {
+        (10_000, 384),
+        (50_000, 384),
+        (10_000, 768),
+        (10_000, 1024),
+        (50_000, 768),
+        (50_000, 1024),
+        (100_000, 384),
+        (100_000, 768),
+        (100_000, 1024),
+    }
+    observed = [item for item in cells.values() if item["status"] == "ok"]
+    unrun = [item for item in cells.values() if item["status"] == "not_run"]
+    assert len(observed) == 4
+    assert len(unrun) == 5
+    assert all(item["network_attempts"] == 0 for item in observed)
+    assert all(item["median_seconds"] > 0 and item["peak_rss_kib"] > 0 for item in observed)
+    assert all("median_seconds" not in item and "peak_rss_kib" not in item for item in unrun)
+
+    checks = {item["code"]: item for item in payload["checks"]}
+    assert set(checks) == {
+        "focused_publication",
+        "unit_offline",
+        "ruff",
+        "forbidden_dependencies",
+        "diff_check",
+        "installed_package",
+        "privacy",
+        "unexpected_network",
+        "mermaid",
+    }
+    assert checks["unit_offline"]["counts"]["passed"] == 1290
+    assert checks["unexpected_network"]["counts"]["attempted"] == 0
+    assert checks["mermaid"]["status"] == "ok"
+    assert checks["mermaid"]["counts"]["rendered"] == 5
+    assert scan_privacy(payload).safe

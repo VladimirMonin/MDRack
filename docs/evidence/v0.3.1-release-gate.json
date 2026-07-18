@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "generated_for": "v0.3.1-offline-revision",
+  "status": "ok",
+  "provenance": {
+    "artifact_revision": "088d7029dcf4d9fa1658b43c71384b5e375c461c",
+    "implementation_diff_sha256": "sha256:c9e914a176abc9b3a52fab42dc29007e2270cc9984ce0fb20a933a47d5291240",
+    "implementation_diff_files": 19,
+    "diff_scope": "authorized implementation and regression paths in artifact_revision; evidence publication files excluded to avoid self-reference",
+    "python": "3.11.15",
+    "platform": "Linux 6.17.0-35-generic x86_64; Intel Core i3-4150; 7.7 GiB RAM"
+  },
+  "findings": [
+    {
+      "id": "SYN-OFF-001",
+      "status": "closed_offline",
+      "evidence": "bounded disposable SQLite vector-scan matrix with latency, peak RSS, database bytes, and zero network attempts"
+    },
+    {
+      "id": "SYN-EVID-002",
+      "status": "closed_offline",
+      "evidence": "exact artifact revision plus canonical implementation diff digest and explicit evidence boundaries"
+    }
+  ],
+  "performance": [
+    {
+      "vectors": 10000,
+      "dimensions": 384,
+      "status": "ok",
+      "median_seconds": 2.7170959979994223,
+      "peak_rss_kib": 51920,
+      "database_bytes": 24649728,
+      "network_attempts": 0
+    },
+    {
+      "vectors": 50000,
+      "dimensions": 384,
+      "status": "ok",
+      "median_seconds": 13.776925223006401,
+      "peak_rss_kib": 157256,
+      "database_bytes": 122150912,
+      "network_attempts": 0
+    },
+    {
+      "vectors": 10000,
+      "dimensions": 768,
+      "status": "ok",
+      "median_seconds": 5.265131446009036,
+      "peak_rss_kib": 66984,
+      "database_bytes": 45174784,
+      "network_attempts": 0
+    },
+    {
+      "vectors": 10000,
+      "dimensions": 1024,
+      "status": "ok",
+      "median_seconds": 7.091147502011154,
+      "peak_rss_kib": 76884,
+      "database_bytes": 50216960,
+      "network_attempts": 0
+    },
+    {"vectors": 50000, "dimensions": 768, "status": "not_run", "reason": "bounded task runtime"},
+    {"vectors": 50000, "dimensions": 1024, "status": "not_run", "reason": "bounded task runtime"},
+    {"vectors": 100000, "dimensions": 384, "status": "not_run", "reason": "bounded task runtime"},
+    {"vectors": 100000, "dimensions": 768, "status": "not_run", "reason": "bounded task runtime"},
+    {"vectors": 100000, "dimensions": 1024, "status": "not_run", "reason": "bounded task runtime"}
+  ],
+  "checks": [
+    {"code": "focused_publication", "status": "ok", "counts": {"passed": 8}},
+    {"code": "unit_offline", "status": "ok", "counts": {"passed": 1290}},
+    {"code": "ruff", "status": "ok"},
+    {"code": "forbidden_dependencies", "status": "ok"},
+    {"code": "diff_check", "status": "ok"},
+    {"code": "installed_package", "status": "ok", "counts": {"built": 2, "installed_smokes": 1, "network_attempts": 0}, "initial_attempt": "failed_before_smoke because a no-dependencies install omitted required PyYAML; repeated offline with cached declared dependencies"},
+    {"code": "privacy", "status": "ok"},
+    {"code": "unexpected_network", "status": "ok", "counts": {"attempted": 0}},
+    {"code": "mermaid", "status": "ok", "counts": {"rendered": 5}}
+  ],
+  "non_claims": [
+    "no real or private source corpus",
+    "no live LM Studio, model load, inference, download, or external provider",
+    "no Windows execution",
+    "no portable latency or memory support SLA",
+    "no ANN or alternate database backend",
+    "no active generation, user database migration, cleanup, or destructive store action",
+    "no push or remote publication at evidence-generation time"
+  ],
+  "future_live_gate": {
+    "status": "not_authorized_not_run",
+    "approval_required": ["LM Studio model execution", "runtime time and call budget", "approved non-private corpus"],
+    "inputs": ["immutable corpus manifest", "immutable relevance judgments", "pinned model profile and fingerprint", "baseline configuration"],
+    "success_criteria": ["Recall@5 and Recall@10", "MRR@10", "nDCG@10", "latency p50 and p95", "privacy-safe evidence", "final runtime unloaded"],
+    "procedure": ["create a disposable database", "verify runtime starts empty", "run lexical, semantic, equal-weight, and configured-weight baselines once", "record sanitized metrics and immutable digests", "unload and verify runtime empty", "delete only the disposable database"],
+    "forbidden_without_new_approval": ["active user stores", "private corpus", "paid API", "retry after failed live call", "destructive cleanup"]
+  }
+}
