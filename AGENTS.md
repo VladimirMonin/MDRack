@@ -26,7 +26,11 @@ through an LM Studio HTTP endpoint, and returning stable JSON retrieval results.
 uv sync --all-extras
 uv run pytest
 uv run ruff check src/ tests/
+uv run ruff check packages/mdrack-core/src/ packages/mdrack-sqlite/src/
+uv run mypy packages/mdrack-core/src/mdrack_core packages/mdrack-sqlite/src/mdrack_sqlite
 uv run python scripts/check_no_forbidden_deps.py
+uv run python scripts/check_core_boundaries.py
+uv run python scripts/check_sqlite_boundaries.py
 git diff --check
 ```
 
@@ -61,6 +65,8 @@ the stale instruction in the same documentation slice when allowed.
   concrete dependency; changing it requires a scoped architecture task.
 - Click must not leak into `MDRackEngine` or application/domain code.
 - SQLite is the only persistent database. Do not add a vector database.
+- `packages/mdrack-sqlite/` is the single generic resource catalog/search adapter
+  owner; app compatibility paths delegate/re-export and package code never imports `mdrack`.
 - Embeddings use LM Studio over HTTP. Do not add `torch`, `transformers`,
   `sentence-transformers`, or direct model loading.
 - Indexing must not modify source Markdown or fetch external assets.

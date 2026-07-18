@@ -1,10 +1,11 @@
 # System overview
 
-MDRack 0.3 is one distribution with two import roots. `mdrack_core` is a
-stdlib-only provider- and persistence-neutral kernel for typed resource graphs,
-ports, filtered branch retrieval, grouping, weighted RRF, and safe events.
-`mdrack` owns Click/engine composition, Markdown and explicit image ingestion,
-SQLite generations, and LM Studio HTTP integration.
+MDRack now has standalone `mdrack-core` and `mdrack-sqlite` distributions beside
+the `mdrack` app. `mdrack_core` is the stdlib-only provider- and
+persistence-neutral kernel. `mdrack_sqlite` depends only on core and stdlib and is
+the single generic resource catalog/search adapter owner. `mdrack` owns
+Click/engine composition, Markdown and explicit image ingestion, app migration
+generations, and LM Studio HTTP integration.
 
 ## Dependency direction
 
@@ -29,7 +30,8 @@ graph TD
 
     subgraph Adapters ["Adapters"]
         Markdown["markdown-it parser"]
-        SQLiteAdapter["SQLite legacy and resource adapters"]
+        SQLiteAdapter["mdrack_sqlite resource adapter"]
+        SQLiteLegacy["mdrack legacy adapter + migrations"]
         LMStudio["LM Studio HTTP provider"]
     end
 
@@ -47,6 +49,7 @@ graph TD
     SQLiteAdapter -->|"implements storage ports"| Ports
     LMStudio -->|"implements embedding ports"| Ports
     SQLiteAdapter --> SQLite
+    SQLiteLegacy --> SQLite
 
     classDef entry fill:#fff5ad,stroke:#d4c46a,color:#333
     classDef service fill:#4ecdc4,stroke:#0a9396,color:#fff
@@ -55,13 +58,14 @@ graph TD
     class CLI,Engine entry
     class Indexing,Retrieval,Read,CoreServices service
     class Domain,Ports contract
-    class Markdown,SQLiteAdapter,LMStudio,SQLite adapter
+    class Markdown,SQLiteAdapter,SQLiteLegacy,LMStudio,SQLite adapter
 ```
 
 Unlabelled arrows show runtime dependencies, not inheritance; labelled
 adapter-to-port arrows show implementation direction. `mdrack_core` never imports
-`mdrack`, Click, SQLite, HTTP, Markdown, filesystem, or provider code. The app
-prepares caller-owned IDs, text and vectors before invoking core.
+`mdrack`, Click, SQLite, HTTP, Markdown, filesystem, or provider code.
+`mdrack_sqlite` imports `mdrack_core` but never `mdrack`. The app prepares
+caller-owned IDs, text and vectors before invoking core.
 The current bounded exception is `IndexingService`: it imports and constructs
 `MarkdownItParser` when no parser is injected. Callers can still inject the
 `MarkdownParser` port; this concrete default is not an edge-only composition.
@@ -73,15 +77,17 @@ The current bounded exception is `IndexingService`: it imports and constructs
 | `domain/` | Parser-independent documents and blocks, chunks, logical identities, source locators, profiles, and retrieval DTOs. |
 | `ports/` | Storage, parser, embedding, model-catalog, lifecycle, and reranker contracts. |
 | `application/` | Canonical Markdown indexing, chunking, reads, and text/semantic/hybrid orchestration. |
-| `adapters/` | markdown-it parsing, SQLite storage, and LM Studio-specific adapters. |
-| `storage/sqlite/` | Connections, linear migrations, repositories, FTS5 operations, and JSON-vector search. |
+| `adapters/` | markdown-it parsing, app SQLite compatibility/composition, and LM Studio-specific adapters. |
+| `storage/sqlite/` | App-owned connections, immutable migration history, repositories, and legacy FTS/vector operations. |
+| `packages/mdrack-sqlite/` | Generic `core_*` catalog/search adapter, FTS fallback, context-managed bridge lifecycle, and safe verification. |
 | `cli/` | Click argument handling, service composition, error mapping, and JSON envelopes. |
 | `public_api/` | `MDRackEngine` and public DTO access without a Click dependency. |
 | `mdrack_core/domain/` | Immutable generic resource, locator, vector, facet, request/result, error, and degradation records. |
 | `mdrack_core/ports/` | Logical-ID-only catalog and lexical/vector search protocols. |
 | `mdrack_core/application/` | Complete-graph validation, provider-free indexing, grouping, weighted RRF, and discovery. |
 | `application/store_generations.py` | Durable generation state and active-pointer records. |
-| `adapters/sqlite/resource_store.py` | Atomic `0007` resource graph and pre-limit scoped search implementation. |
+| `packages/mdrack-sqlite/src/mdrack_sqlite/resource_store.py` | Atomic `core_*` resource graph and pre-limit scoped search implementation. |
+| `src/mdrack/adapters/sqlite/resource_store.py` | Compatibility re-export of the standalone owner. |
 
 The canonical service path is `IndexingService`, `RetrievalService`, and
 `ReadService`. `SearchService`, the old `markdown/` parser/chunker, the
@@ -112,9 +118,11 @@ surfaces rather than the preferred home for new behavior.
 - Entry points: `src/mdrack/cli/__init__.py`, `src/mdrack/public_api/engine.py`
 - Pure core distribution/source: `packages/mdrack-core/`,
   `packages/mdrack-core/src/mdrack_core/`
+- SQLite distribution/source: `packages/mdrack-sqlite/`,
+  `packages/mdrack-sqlite/src/mdrack_sqlite/`
 - Store generations: `src/mdrack/application/generation_manager.py`,
   `src/mdrack/application/store_generations.py`
-- Resource adapter: `src/mdrack/adapters/sqlite/resource_store.py`
+- Resource adapter compatibility import: `src/mdrack/adapters/sqlite/resource_store.py`
 - Services: `src/mdrack/application/indexing.py`,
   `src/mdrack/application/retrieval.py`, `src/mdrack/application/query.py`
 - Ports: `src/mdrack/ports/storage.py`, `src/mdrack/ports/embeddings.py`

@@ -190,8 +190,8 @@ diagnostics commit separately, so a multi-file run can be `partial_success`
 without leaving a half-written file. Markdown replacement neither writes nor
 deletes the dormant historical `0005` asset tables.
 
-Resource replacement is a separate serialized transaction owned by
-`SQLiteResourceStore`. Core preflight and all provider/filesystem work finish first.
+Resource replacement is a separate serialized transaction owned by the standalone
+`mdrack_sqlite.SQLiteResourceStore`. Core preflight and all provider/filesystem work finish first.
 Resource children, manual FTS, vectors, facets, counts, and integrity commit together;
 failure preserves the previous complete graph. Delete is atomic and idempotent.
 
@@ -227,7 +227,10 @@ lossless whole-document archive.
 - Runner: `src/mdrack/storage/sqlite/migrations.py`
 - Connection: `src/mdrack/storage/sqlite/connection.py`
 - Atomic adapter: `src/mdrack/adapters/sqlite/index_storage.py`
-- Resource adapter: `src/mdrack/adapters/sqlite/resource_store.py`
+- Resource adapter owner and lifecycle API:
+  `packages/mdrack-sqlite/src/mdrack_sqlite/resource_store.py`,
+  `packages/mdrack-sqlite/src/mdrack_sqlite/catalog.py`
+- App compatibility re-export: `src/mdrack/adapters/sqlite/resource_store.py`
 - Generation manager/runtime: `src/mdrack/application/generation_manager.py`,
   `src/mdrack/adapters/sqlite/generation_runtime.py`
 - FTS: `src/mdrack/storage/sqlite/fts.py`

@@ -34,7 +34,10 @@ def test_app_depends_on_workspace_core_without_packaging_a_second_copy() -> None
 
     assert "mdrack-core==1.0.0rc1" in root["project"]["dependencies"]
     assert root["tool"]["uv"]["sources"]["mdrack-core"] == {"workspace": True}
-    assert root["tool"]["uv"]["workspace"]["members"] == ["packages/mdrack-core"]
+    assert root["tool"]["uv"]["workspace"]["members"] == [
+        "packages/mdrack-core",
+        "packages/mdrack-sqlite",
+    ]
     assert root["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         "src/mdrack"
     ]

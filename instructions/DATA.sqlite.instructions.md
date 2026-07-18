@@ -1,5 +1,5 @@
 ---
-applyTo: "src/mdrack/**/*.py"
+applyTo: "{src/mdrack,packages/mdrack-sqlite/src}/**/*.py"
 name: "DATA.SQLite"
 description: "When to use: SQLite migrations, schema, repositories, FTS5, vector storage, assets, transactions, logical IDs, or persistence integrity."
 ---
@@ -25,6 +25,12 @@ cross-table integrity. SQLite is MDRack's only persistent database.
   contiguity alone is not package identity.
 
 ## Current persistence responsibilities
+
+- `packages/mdrack-sqlite/src/mdrack_sqlite/` owns the generic `core_*` resource
+  catalog/search adapter, FTS query fallback, lifecycle API, safe errors, and bridge
+  verification. It must not import `mdrack`.
+- App migration history and generation switching remain under `src/mdrack`; the
+  standalone package must not copy or rewrite migrations `0000`–`0007`.
 
 - `0000`: migration ledger.
 - `0001`: files, sections, chunks, embedding profiles/vectors, runs, diagnostics.
@@ -60,7 +66,7 @@ current schema advances.
   same-resource graph constraints, explicit delete actions, ordinal/range/type
   checks, NULL-safe facet deduplication, orphan policy, vector codec/finite values/
   dimensions/metrics/fingerprint behavior, and indexes for pre-limit filters.
-- `replace_resource()` initially owns one serialized SQLite transaction and rejects
+- `mdrack_sqlite.SQLiteResourceStore.replace_resource()` owns one serialized SQLite transaction and rejects
   an active caller transaction. Validation, provider calls, and filesystem work
   finish before it opens; graph/FTS/vector/facet checks commit together; any failure
   preserves the prior complete graph.

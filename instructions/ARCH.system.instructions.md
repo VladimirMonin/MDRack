@@ -19,8 +19,12 @@ indexing and retrieval system.
   explicit direct-image ingestion primarily
   through ports. The current bounded exception is `IndexingService`: it imports and
   constructs the concrete `MarkdownItParser` default when no parser is injected.
-- `adapters/` implements ports, including the canonical SQLite composition.
-- `storage/sqlite/` owns connection, migrations, repositories, FTS, and vector persistence.
+- `adapters/` implements app-specific ports and retains compatibility delegates.
+- `packages/mdrack-sqlite/` is the single owner of the generic resource catalog/search
+  adapter and its FTS query helper; it depends only on `mdrack-core` and stdlib.
+- `storage/sqlite/` retains app-owned legacy connection, migrations, repositories,
+  legacy FTS, and vector persistence. The old resource-adapter import path re-exports
+  the standalone owner.
 - `cli/` is a Click presentation adapter. It may compose services but must not become business logic.
 - `public_api/` exposes `MDRackEngine` and DTOs without importing Click.
 
@@ -53,6 +57,9 @@ explicitly changes that architecture.
   `packages/mdrack-core/`, with its sole import source under
   `packages/mdrack-core/src/mdrack_core/`. The `mdrack` app distribution depends on
   it and remains the compatibility/application owner around the reusable core.
+- The approved SQLite boundary is the standalone `mdrack-sqlite` distribution at
+  `packages/mdrack-sqlite/`. Its Stage-3A API opens and verifies existing bridge
+  databases only; clean standalone migrations and app cutover remain later gates.
 - `mdrack_core` is stdlib-only and must not import `mdrack`, Click, HTTP, SQLite,
   Markdown/parser, provider/model, filesystem, or network code.
 - Current Markdown IR, `PreparedFile`, `SourceLocator`, `EmbeddingProfile`, and

@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mdrack-core==1.0.0rc1",
+    "mdrack-sqlite==1.0.0rc1",
     "click>=8.1",
     "pydantic>=2.0",
     "toml>=0.10",
@@ -38,7 +39,7 @@ line-length = 120
 select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["mdrack", "mdrack_core"]
+known-first-party = ["mdrack", "mdrack_core", "mdrack_sqlite"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -56,6 +57,7 @@ exclude = ["/docs/evidence/*.json", "/docs/evidence/*.md", "/packages"]
 
 [tool.uv.sources]
 mdrack-core = { workspace = true }
+mdrack-sqlite = { workspace = true }
 
 [tool.uv.workspace]
-members = ["packages/mdrack-core"]
+members = ["packages/mdrack-core", "packages/mdrack-sqlite"]

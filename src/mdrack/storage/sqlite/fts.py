@@ -3,32 +3,14 @@
 from __future__ import annotations
 
 import logging
-import re
 import sqlite3
+
+from mdrack_sqlite.fts import plain_query_fallback
 
 logger = logging.getLogger(__name__)
 
-_FTS_OPERATOR_PATTERN = re.compile(r'"|\(|\)|\*|\b(?:AND|OR|NOT|NEAR)\b|\w+:', re.IGNORECASE)
-
-
 class FTSQueryError(Exception):
     """Raised when an FTS5 query is invalid."""
-
-
-def _supports_raw_fts_syntax(query: str) -> bool:
-    return bool(_FTS_OPERATOR_PATTERN.search(query))
-
-
-def _quote_as_fts_phrase(query: str) -> str:
-    escaped = query.replace('"', '""')
-    return f'"{escaped}"'
-
-
-def plain_query_fallback(query: str) -> str | None:
-    """Return the legacy quoted-phrase retry for non-operator input."""
-    if _supports_raw_fts_syntax(query):
-        return None
-    return _quote_as_fts_phrase(query)
 
 
 def upsert_fts(

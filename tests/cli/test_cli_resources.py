@@ -409,8 +409,10 @@ def test_offline_installed_wheel_resource_cli_and_engine_behavior(tmp_path: Path
     )
     wheels = tuple(wheel_dir.glob("mdrack-*.whl"))
     core_wheels = tuple(wheel_dir.glob("mdrack_core-*.whl"))
+    sqlite_wheels = tuple(wheel_dir.glob("mdrack_sqlite-*.whl"))
     assert len(wheels) == 1
     assert len(core_wheels) == 1
+    assert len(sqlite_wheels) == 1
     virtualenv = tmp_path / "venv"
     subprocess.run(
         [uv, "venv", "--python", sys.executable, str(virtualenv)],
@@ -429,6 +431,7 @@ def test_offline_installed_wheel_resource_cli_and_engine_behavior(tmp_path: Path
             str(python),
             "--offline",
             str(core_wheels[0]),
+            str(sqlite_wheels[0]),
             str(wheels[0]),
         ],
         env=environment,
