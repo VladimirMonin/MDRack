@@ -11,6 +11,7 @@ import click
 from mdrack import __version__
 from mdrack.cli.commands.eval import retrieval as eval_retrieval
 from mdrack.cli.commands.files import files as files_group
+from mdrack.cli.commands.images import image as image_group
 from mdrack.cli.commands.model import model as model_group
 from mdrack.cli.commands.read import read
 from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
@@ -201,6 +202,9 @@ main.add_command(cli_scan, name="scan")
 # Command: search (imported from cli.commands.search)
 # ---------------------------------------------------------------------------
 main.add_command(cli_search, name="search")
+
+# Explicit direct-image lifecycle is separate from Markdown scan.
+main.add_command(image_group)
 
 
 # ---------------------------------------------------------------------------

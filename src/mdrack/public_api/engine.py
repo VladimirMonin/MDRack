@@ -5,12 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mdrack.application.compatibility import create_application_storage
+from mdrack.application.compatibility import create_application_storage, embedding_space_id
 from mdrack.application.indexing import IndexingService
 from mdrack.application.query import ReadService, SearchService
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.runtime import embedding_profile_from_config
+from mdrack.ingestion.images import (
+    ImageEmbeddingSpace,
+    ImageExtractor,
+    ImageIngestionResult,
+    ImageIngestionService,
+    ImageSearchResult,
+    VisualEmbeddingProvider,
+)
 from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
 
@@ -29,6 +37,9 @@ class MDRackEngine:
         storage: KnowledgeStorage | None = None,
         search_index: RetrievalStorage | None = None,
         read_storage: ReadStorage | None = None,
+        image_extractor: ImageExtractor | None = None,
+        visual_embedding_provider: VisualEmbeddingProvider | None = None,
+        visual_embedding_space: ImageEmbeddingSpace | None = None,
     ) -> None:
         self.root = root.resolve()
         self.config = config
@@ -40,6 +51,10 @@ class MDRackEngine:
         self.storage = storage
         self.search_index = search_index or storage
         self.read_storage = read_storage or storage
+        self.image_extractor = image_extractor
+        self.visual_embedding_provider = visual_embedding_provider
+        self.visual_embedding_space = visual_embedding_space
+        self._images: ImageIngestionService | None = None
         self.search_service = SearchService(
             self.search_index,
             embedding_provider=self.embedding_provider,
@@ -78,6 +93,37 @@ class MDRackEngine:
     ) -> RetrievalResult:
         return await self.search_service.search_hybrid(query, limit=limit, reranker=reranker)
 
+    async def ingest_image(
+        self,
+        path: Path,
+        *,
+        resource_id: str,
+        source_namespace: str,
+        source_ref: str,
+        title: str | None = None,
+        media_type: str | None = None,
+    ) -> ImageIngestionResult:
+        return await self._image_service().ingest(
+            path,
+            resource_id=resource_id,
+            source_namespace=source_namespace,
+            source_ref=source_ref,
+            title=title,
+            media_type=media_type,
+        )
+
+    def delete_image(self, resource_id: str) -> None:
+        self._image_service().delete(resource_id)
+
+    def search_images_text(self, query: str, *, limit: int = 20) -> ImageSearchResult:
+        return self._image_service().search_text(query, limit=limit)
+
+    async def search_images_semantic(self, query: str, *, limit: int = 20) -> ImageSearchResult:
+        return await self._image_service().search_semantic(query, limit=limit)
+
+    async def search_images_hybrid(self, query: str, *, limit: int = 20) -> ImageSearchResult:
+        return await self._image_service().search_hybrid(query, limit=limit)
+
     def get_file_by_path(self, relative_path: str) -> dict[str, Any] | None:
         public_reader = getattr(self.read_storage, "get_public_file_by_path", None)
         if callable(public_reader):
@@ -95,6 +141,36 @@ class MDRackEngine:
 
     def get_chunk_source_locator(self, chunk_id: str) -> SourceLocator:
         return ReadService(self.read_storage).get_chunk_source_locator(chunk_id)
+
+    def _image_service(self) -> ImageIngestionService:
+        if self._images is not None:
+            return self._images
+        catalog = getattr(self.storage, "resource_store", None)
+        if catalog is None:
+            raise RuntimeError("active resource-core generation is required for image operations")
+        text_space = None
+        if self.embedding_provider is not None:
+            profile = embedding_profile_from_config(
+                self.config,
+                self.embedding_provider,
+                self.profile,
+            )
+            text_space = ImageEmbeddingSpace(
+                embedding_space_id(profile.name, profile.fingerprint),
+                profile.output_dimensions,
+                profile.fingerprint,
+                profile_name=profile.name,
+            )
+        self._images = ImageIngestionService(
+            catalog,
+            extractor=self.image_extractor,
+            text_embedding_provider=self.embedding_provider,
+            text_space=text_space,
+            visual_embedding_provider=self.visual_embedding_provider,
+            visual_space=self.visual_embedding_space,
+            profile=self.profile,
+        )
+        return self._images
 
     def close(self) -> None:
         self.storage.close()

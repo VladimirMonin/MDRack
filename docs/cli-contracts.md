@@ -1306,6 +1306,115 @@ Run retrieval evaluation queries against the indexed store.
 
 ---
 
+## 16. `mdrack image`
+
+Direct-image commands operate only on an explicitly selected local file and a ready
+resource-core store generation. They are never invoked by `mdrack scan`.
+
+### 16a. `mdrack image ingest`
+
+```
+mdrack image ingest <path> --resource-id <id> --source-namespace <namespace>
+  --source-ref <portable-ref> [--caption <text>] [--ocr <text>] [--title <text>]
+  [--provider fake|lmstudio]
+```
+
+At least one complete `--caption` or `--ocr` value is required. `--provider` defaults
+to `fake`; `lmstudio` is an explicit live-provider opt-in. The caller owns
+`resource-id`, `source-namespace`, and the portable public `source-ref`.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "resource_id": "image-logical-1",
+    "content_hash": "sha256:...",
+    "media_type": "image/png",
+    "byte_size": 1234,
+    "representation_ids": ["image-representation_..."],
+    "unit_ids": ["image-unit_..."],
+    "text_space_id": "embedding-space_...",
+    "visual_space_id": null
+  },
+  "meta": {"command": "image ingest"}
+}
+```
+
+The source bytes remain in the caller's file and are not stored in SQLite. Reusing
+the same `resource_id` atomically replaces its complete derived graph. Generated text
+is retained in full within the configured bounded-representation limit, with one
+`whole_resource` unit per caption/OCR representation.
+
+### 16b. `mdrack image search`
+
+```
+mdrack image search <query> [--mode text|semantic|hybrid] [--limit N]
+  [--provider fake|lmstudio]
+```
+
+The default mode is `hybrid`, the default limit is `20`, and the provider defaults to
+`fake`. Image resource scope is applied before branch candidate limits and final
+top-k. Document resources cannot appear in this result.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "mode": "hybrid",
+    "results": [
+      {
+        "resource_id": "image-logical-1",
+        "score": 0.032,
+        "rank": 1,
+        "source_ref": "portable-image-ref",
+        "evidence": [
+          {
+            "branch": "text",
+            "rank": 1,
+            "score": -1.0,
+            "unit_id": "image-unit_...",
+            "representation_id": "image-representation_...",
+            "representation_kind": "caption_text"
+          }
+        ]
+      }
+    ],
+    "total_count": 1,
+    "degraded": false,
+    "degraded_reason": null
+  },
+  "meta": {"command": "image search"}
+}
+```
+
+Semantic-provider failure returns an empty degraded semantic result or a lexical-only
+degraded hybrid result with `degraded_reason: "embedding_provider_error"`. Public
+results contain logical IDs only; SQLite row IDs, caption/OCR text, vectors, and local
+paths are not emitted.
+
+### 16c. `mdrack image delete`
+
+```
+mdrack image delete <resource-id>
+```
+
+Deletion is idempotent and removes the complete derived image graph without touching
+the source file.
+
+```json
+{
+  "ok": true,
+  "data": {"resource_id": "image-logical-1", "status": "deleted"},
+  "meta": {"command": "image delete"}
+}
+```
+
+Image command failures use fixed public messages and one of `IMAGE_INPUT_ERROR`,
+`IMAGE_INGEST_ERROR`, `IMAGE_SEARCH_ERROR`, or `IMAGE_DELETE_ERROR`. Raw paths,
+queries, generated text, provider bodies, and exception strings are not emitted.
+
+---
+
 ## Error Code Reference
 
 | Code | Typical cause |
@@ -1318,6 +1427,10 @@ Run retrieval evaluation queries against the indexed store.
 | `NOT_FOUND` | Requested ID does not exist in the store. |
 | `FTS_ERROR` | Invalid FTS5 query syntax. |
 | `SEARCH_ERROR` | Embedding or vector search failed (returned in data, not as top-level error). |
+| `IMAGE_INPUT_ERROR` | Direct image ingest omitted both caption and OCR text. |
+| `IMAGE_INGEST_ERROR` | Direct image validation, provider, generation, or storage operation failed. |
+| `IMAGE_SEARCH_ERROR` | Direct image search could not complete. |
+| `IMAGE_DELETE_ERROR` | Direct image graph deletion could not complete. |
 | `VALIDATION_ERROR` | Invalid argument value (e.g. negative page number). |
 | `INTERNAL_ERROR` | Unhandled exception during command execution. |
 
@@ -1343,6 +1456,7 @@ All commands read and write the same database file:
 | `rebuild embeddings` | `<store>/knowledge.db` |
 | `eval retrieval` | `<store>/knowledge.db` |
 | `doctor` | `<store>/knowledge.db` |
+| `image ingest/search/delete` | Ready resource-core generation selected by `<store>/active-generation.json` |
 
 Relative store paths are resolved against the selected `--root`.
 
