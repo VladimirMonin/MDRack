@@ -158,6 +158,8 @@ class CoreIndexingService:
                 for value in vector.vector
             ):
                 raise ValueError("vector values must be finite numbers")
+            if space.metric == "cosine" and math.hypot(*vector.vector) == 0.0:
+                raise ValueError("cosine vector norm must be non-zero")
             vector_units.add(vector.unit_id)
 
         represented = {unit.representation_id for unit in batch.units}

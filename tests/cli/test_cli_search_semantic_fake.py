@@ -127,6 +127,43 @@ def _setup_db(tmp_path: Path, with_data: bool = True) -> Path:
     return db_path
 
 
+def test_hybrid_zero_semantic_weight_does_not_create_provider(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _setup_db(tmp_path)
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "[search]\ntext_weight = 1.0\nsemantic_weight = 0.0\n",
+        encoding="utf-8",
+    )
+
+    def forbidden_provider(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("semantic provider must not be created")
+
+    monkeypatch.setattr(
+        "mdrack.cli.commands.search.create_embedding_provider",
+        forbidden_provider,
+    )
+    result = CliRunner().invoke(
+        main,
+        [
+            "--root",
+            str(tmp_path),
+            "--config-file",
+            str(config_path),
+            "search",
+            "Python",
+            "--mode",
+            "hybrid",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["ok"] is True
+
+
 def test_semantic_search_returns_valid_json(tmp_path: Path) -> None:
     _setup_db(tmp_path)
     runner = CliRunner()

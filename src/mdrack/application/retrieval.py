@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 from mdrack.application.compatibility import CoreCompatibilityMapper
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
@@ -58,25 +59,31 @@ class _CandidateSearchPort:
         branch_id: str,
         mapper: CoreCompatibilityMapper,
     ) -> list[RankedCandidate]:
-        return [
-            RankedCandidate(
-                unit_id=candidate.logical_id,
-                resource_id=str(candidate.metadata.get("resource_id") or candidate.logical_id),
-                representation_id=str(
-                    candidate.metadata.get("representation_id") or candidate.logical_id
-                ),
-                rank=rank,
-                raw_score=candidate.score,
-                branch_id=branch_id,
-                evidence_locator=mapper.core_locator(candidate.source_locator),
-                metadata={
-                    "content_preview": candidate.content_preview,
-                    "heading_path": candidate.source_locator.heading_path,
-                    "section_title": candidate.metadata.get("section_title"),
-                },
+        ranked: list[RankedCandidate] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            if candidate.logical_id in seen:
+                continue
+            seen.add(candidate.logical_id)
+            ranked.append(
+                RankedCandidate(
+                    unit_id=candidate.logical_id,
+                    resource_id=str(candidate.metadata.get("resource_id") or candidate.logical_id),
+                    representation_id=str(
+                        candidate.metadata.get("representation_id") or candidate.logical_id
+                    ),
+                    rank=len(ranked) + 1,
+                    raw_score=candidate.score,
+                    branch_id=branch_id,
+                    evidence_locator=mapper.core_locator(candidate.source_locator),
+                    metadata={
+                        "content_preview": candidate.content_preview,
+                        "heading_path": candidate.source_locator.heading_path,
+                        "section_title": candidate.metadata.get("section_title"),
+                    },
+                )
             )
-            for rank, candidate in enumerate(candidates, start=1)
-        ]
+        return ranked
 
 
 def _fuse_with_core(
@@ -87,24 +94,42 @@ def _fuse_with_core(
     limit: int,
     rrf_k: int,
     mapper: CoreCompatibilityMapper,
+    text_weight: float = 1.0,
+    semantic_weight: float = 1.0,
     degraded_reason: str | None = None,
 ) -> RetrievalResult:
     candidate_limit = max(limit * 2, len(text_candidates), len(semantic_candidates), 1)
+    lexical_branches = (
+        (
+            LexicalBranch(
+                "text",
+                query or "compatibility-query",
+                weight=text_weight,
+                candidate_limit=candidate_limit,
+            ),
+        )
+        if text_weight > 0.0
+        else ()
+    )
+    vector_branches = (
+        (
+            VectorBranch(
+                "semantic",
+                "compatibility-space",
+                (0.0,),
+                weight=semantic_weight,
+                candidate_limit=candidate_limit,
+            ),
+        )
+        if semantic_weight > 0.0
+        else ()
+    )
     core = CoreRetrievalService(
         _CandidateSearchPort(text_candidates, semantic_candidates, mapper)
     ).search(
         SearchRequest(
-            lexical_branches=(
-                LexicalBranch("text", query or "compatibility-query", candidate_limit=candidate_limit),
-            ),
-            vector_branches=(
-                VectorBranch(
-                    "semantic",
-                    "compatibility-space",
-                    (0.0,),
-                    candidate_limit=candidate_limit,
-                ),
-            ),
+            lexical_branches=lexical_branches,
+            vector_branches=vector_branches,
             scope=SearchScope(),
             target=TARGET_UNIT,
             limit=limit,
@@ -131,14 +156,25 @@ class RetrievalService:
         profile: str = "default",
         profile_fingerprint: str | None = None,
         rrf_k: int = 60,
+        text_weight: float = 1.0,
+        semantic_weight: float = 1.0,
     ) -> None:
         if rrf_k < 1:
             raise ValueError("rrf_k must be positive")
+        for value in (text_weight, semantic_weight):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("search weights must be finite non-negative numbers")
+            if not math.isfinite(float(value)) or value < 0.0:
+                raise ValueError("search weights must be finite non-negative numbers")
+        if text_weight == 0.0 and semantic_weight == 0.0:
+            raise ValueError("at least one search weight must be positive")
         self.storage = storage
         self.embedding_provider = embedding_provider
         self.profile = profile
         self.profile_fingerprint = profile_fingerprint
         self.rrf_k = rrf_k
+        self.text_weight = float(text_weight)
+        self.semantic_weight = float(semantic_weight)
         self.compatibility_mapper = CoreCompatibilityMapper()
 
     def search_text(self, query: str, *, limit: int = 20, offset: int = 0) -> RetrievalResult:
@@ -235,7 +271,10 @@ class RetrievalService:
         if callable(getattr(self.storage, "search_core", None)):
             if not query.strip():
                 raise InvalidTextSearchError("invalid_text_query")
-            vector, degraded_reason = await self._prepare_query_vector(query)
+            vector: tuple[float, ...] | None = None
+            degraded_reason: str | None = None
+            if self.semantic_weight > 0.0:
+                vector, degraded_reason = await self._prepare_query_vector(query)
             vector_branches: tuple[VectorBranch, ...] = ()
             if vector is not None:
                 space_id = self._resolve_embedding_space()
@@ -247,12 +286,22 @@ class RetrievalService:
                             "semantic",
                             space_id,
                             vector,
+                            weight=self.semantic_weight,
                             candidate_limit=limit * 2,
                         ),
                     )
             request = SearchRequest(
                 lexical_branches=(
-                    LexicalBranch("text", query, candidate_limit=limit * 2),
+                    (
+                        LexicalBranch(
+                            "text",
+                            query,
+                            weight=self.text_weight,
+                            candidate_limit=limit * 2,
+                        ),
+                    )
+                    if self.text_weight > 0.0
+                    else ()
                 ),
                 vector_branches=vector_branches,
                 scope=SearchScope(),
@@ -267,6 +316,8 @@ class RetrievalService:
                 if not isinstance(error, BranchExecutionError) or error.branch_id == "text":
                     raise InvalidTextSearchError("invalid_text_query") from None
                 degraded_reason = error.category.value
+                if not request.lexical_branches:
+                    return self._empty_degraded(query, "hybrid", degraded_reason)
                 core = self.storage.search_core(
                     SearchRequest(
                         lexical_branches=request.lexical_branches,
@@ -285,8 +336,18 @@ class RetrievalService:
                 degraded_reason=degraded_reason,
             )
         candidate_limit = limit * 2
-        text_candidates = self.storage.retrieve_text_candidates(query, limit=candidate_limit, offset=0)
-        semantic_candidates, degraded_reason = await self._semantic_candidates(query, limit=candidate_limit)
+        text_candidates = (
+            self.storage.retrieve_text_candidates(query, limit=candidate_limit, offset=0)
+            if self.text_weight > 0.0
+            else []
+        )
+        if self.semantic_weight > 0.0:
+            semantic_candidates, degraded_reason = await self._semantic_candidates(
+                query,
+                limit=candidate_limit,
+            )
+        else:
+            semantic_candidates, degraded_reason = [], None
         return _fuse_with_core(
             query=query,
             text_candidates=text_candidates,
@@ -294,6 +355,8 @@ class RetrievalService:
             limit=limit,
             rrf_k=self.rrf_k,
             mapper=self.compatibility_mapper,
+            text_weight=self.text_weight,
+            semantic_weight=self.semantic_weight,
             degraded_reason=degraded_reason,
         )
 

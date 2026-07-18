@@ -484,11 +484,20 @@ class RetrievalService:
         if not isinstance(candidates, list):
             raise TypeError("search ports must return a list")
         validated: list[RankedCandidate] = []
-        for candidate in candidates[: branch.candidate_limit]:
+        seen_unit_ids: set[str] = set()
+        for expected_rank, candidate in enumerate(
+            candidates[: branch.candidate_limit],
+            start=1,
+        ):
             if not isinstance(candidate, RankedCandidate):
                 raise TypeError("search ports must return RankedCandidate values")
             if candidate.branch_id != branch.branch_id:
                 raise ValueError("candidate branch_id does not match the executed branch")
+            if candidate.rank != expected_rank:
+                raise ValueError("candidate ranks must match their 1-based positions")
+            if candidate.unit_id in seen_unit_ids:
+                raise ValueError("candidate unit_id values must be unique")
+            seen_unit_ids.add(candidate.unit_id)
             validated.append(candidate)
         return tuple(validated)
 

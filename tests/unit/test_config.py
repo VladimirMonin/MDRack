@@ -6,10 +6,16 @@ import logging
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from mdrack.config.defaults import get_defaults
 from mdrack.config.loader import load_config
-from mdrack.config.models import MDRackConfig
+from mdrack.config.models import MDRackConfig, SearchConfig
+
+
+def test_search_config_rejects_disabling_both_retrieval_branches() -> None:
+    with pytest.raises(ValidationError, match="at least one search weight must be positive"):
+        SearchConfig(text_weight=0.0, semantic_weight=0.0)
 
 
 class TestDefaultConfig:

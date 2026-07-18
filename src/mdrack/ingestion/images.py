@@ -506,7 +506,8 @@ class ImageIngestionService:
             source_ref = representative.evidence_locator.payload.get("source_ref")
             if not isinstance(source_ref, str) or not source_ref:
                 raise ValueError("image result source_ref is invalid")
-            items.append(ImageSearchItem(item.resource_id, item.score, item.rank, source_ref, evidence))
+            score = item.score if mode == "hybrid" else representative.raw_score
+            items.append(ImageSearchItem(item.resource_id, score, item.rank, source_ref, evidence))
         return ImageSearchResult(mode, tuple(items))
 
     def _read_bounded(self, path: Path) -> bytes:

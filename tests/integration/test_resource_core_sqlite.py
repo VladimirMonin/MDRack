@@ -539,7 +539,10 @@ def test_manual_fts_scope_before_limit_update_and_delete(store: SQLiteResourceSt
     ) == []
 
 
-def test_vector_metrics_scope_facets_and_cosine_zero_boundary(store: SQLiteResourceStore) -> None:
+def test_vector_metrics_scope_facets_and_cosine_zero_boundary(
+    store: SQLiteResourceStore,
+    connection: sqlite3.Connection,
+) -> None:
     store.replace_resource(_batch("excluded", namespace="other", vector=(100.0, 0.0)))
     store.replace_resource(_batch("included", namespace="vault", vector=(1.0, 0.0)))
     results = store.search_vector(
@@ -548,18 +551,58 @@ def test_vector_metrics_scope_facets_and_cosine_zero_boundary(store: SQLiteResou
     )
     assert [item.unit_id for item in results] == ["unit-included"]
 
-    cosine_connection = store.connection
-    cosine_store = SQLiteResourceStore(cosine_connection)
+    cosine_store = SQLiteResourceStore(connection)
     cosine_store.delete_resource("excluded")
     cosine_store.delete_resource("included")
     cosine_store.replace_resource(
-        _batch(metric="cosine", vector=(0.0, -0.0), space_id="cosine-space")
+        _batch("valid", metric="cosine", vector=(1.0, 0.0), space_id="cosine-space")
     )
+    cosine_store.replace_resource(
+        _batch("corrupt", metric="cosine", vector=(1.0, 0.0), space_id="cosine-space")
+    )
+    connection.execute(
+        "UPDATE core_unit_embeddings SET embedding=? WHERE unit_id='unit-corrupt'",
+        (b"[0.0,-0.0]",),
+    )
+    connection.commit()
+
+    mixed = cosine_store.search_vector(
+        VectorBranch("cosine", "cosine-space", (1.0, 0.0)), scope=SearchScope()
+    )
+    assert [(item.unit_id, item.rank) for item in mixed] == [("unit-valid", 1)]
+
+    connection.execute(
+        "UPDATE core_unit_embeddings SET embedding=? WHERE unit_id='unit-valid'",
+        (b"[0.0,0.0]",),
+    )
+    connection.commit()
     with pytest.raises(BranchExecutionError) as error:
         cosine_store.search_vector(
             VectorBranch("cosine", "cosine-space", (1.0, 0.0)), scope=SearchScope()
         )
     assert error.value.category is ErrorCategory.INCOMPATIBLE_VECTOR_SPACE
+
+    with pytest.raises(BranchExecutionError) as zero_query:
+        cosine_store.search_vector(
+            VectorBranch("cosine", "cosine-space", (0.0, -0.0)), scope=SearchScope()
+        )
+    assert zero_query.value.category is ErrorCategory.INCOMPATIBLE_VECTOR_SPACE
+
+
+@pytest.mark.parametrize("metric", ["dot", "l2"])
+def test_sqlite_accepts_and_searches_zero_vectors_for_non_cosine_metrics(
+    store: SQLiteResourceStore,
+    metric: str,
+) -> None:
+    batch = _batch(metric=metric, vector=(0.0, -0.0))
+
+    CoreIndexingService(store).index(batch)
+    results = store.search_vector(
+        VectorBranch("semantic", "space", (0.0, 0.0)),
+        scope=SearchScope(),
+    )
+
+    assert [(item.unit_id, item.rank) for item in results] == [("unit-resource-1", 1)]
 
 
 @pytest.mark.parametrize(
@@ -621,3 +664,21 @@ def test_core_service_and_direct_adapter_preflight_fail_before_mutation(
     assert str(direct.value) == "catalog_error"
     assert store.transaction_open_count == 0
     assert connection.execute("SELECT COUNT(*) FROM core_resources").fetchone()[0] == 0
+
+
+def test_zero_cosine_replacement_fails_before_transaction_and_preserves_prior_graph(
+    store: SQLiteResourceStore,
+) -> None:
+    original = _batch(metric="cosine", vector=(1.0, 0.0))
+    store.replace_resource(original)
+    transaction_count = store.transaction_open_count
+    invalid = _batch(metric="cosine", vector=(0.0, -0.0), text="replacement")
+
+    with pytest.raises(CatalogExecutionError) as direct:
+        store.replace_resource(invalid)
+
+    assert direct.value.category is ErrorCategory.CATALOG_ERROR
+    assert store.transaction_open_count == transaction_count
+    assert store.read_resource("resource-1") == original.resource
+    assert store.read_unit("unit-resource-1") == original.units[0]
+    assert store.read_vector("unit-resource-1", "space") == original.vectors[0]

@@ -66,6 +66,13 @@ class FakeVisualProvider:
         return (1.0, 0.0, 0.0, 0.0)
 
 
+class ZeroVectorEmbeddingProvider(CountingFakeEmbeddingProvider):
+    async def embed(self, texts, profile: str = "default"):
+        del profile
+        self.document_calls += 1
+        return [[0.0] * self.dimensions for _text in texts]
+
+
 def _document_trap(store: SQLiteResourceStore, text: str) -> None:
     store.replace_resource(
         PreparedResourceBatch(
@@ -201,6 +208,9 @@ async def test_explicit_image_create_search_replace_delete_and_source_immutabili
         assert result.results[0].source_ref == "image-ref-1"
         assert "document-trap" not in repr(result.to_dict())
         assert "sqlite" not in repr(result.to_dict()).lower()
+    assert text.results[0].score == text.results[0].evidence[0]["score"]
+    assert semantic.results[0].score == semantic.results[0].evidence[0]["score"]
+    assert hybrid.results[0].score == pytest.approx(2.0 / 61)
 
     replacement = ImageIngestionService(
         store,
@@ -412,6 +422,69 @@ async def test_image_provider_failure_degrades_search_and_preserves_graph_before
         str(image),
     ):
         assert sentinel not in caplog.text
+
+
+async def test_image_zero_cosine_projection_fails_before_replace_and_preserves_graph(
+    tmp_path: Path,
+    sqlite_store,
+) -> None:
+    _database_path, connection, store = sqlite_store
+    image = tmp_path / "PRIVATE_PATH_SENTINEL.png"
+    image.write_bytes(b"source bytes")
+    space = ImageEmbeddingSpace("image-text-space", 8, "image-text-fingerprint")
+    original_service = ImageIngestionService(
+        store,
+        extractor=StaticImageExtractor(
+            (ExtractedImageText("caption_text", "prior caption", "caption-fake-v1"),)
+        ),
+        text_embedding_provider=CountingFakeEmbeddingProvider(),
+        text_space=space,
+    )
+    await original_service.ingest(
+        image,
+        resource_id="image-logical-1",
+        source_namespace="PRIVATE_ROOT_SENTINEL",
+        source_ref="public-ref",
+    )
+    prior = list(
+        map(
+            tuple,
+            connection.execute(
+                "SELECT unit_id,text_content FROM core_search_units "
+                "WHERE resource_id='image-logical-1'"
+            ).fetchall(),
+        )
+    )
+    zero_provider = ZeroVectorEmbeddingProvider()
+    replacement = ImageIngestionService(
+        store,
+        extractor=StaticImageExtractor(
+            (ExtractedImageText("caption_text", "replacement caption", "caption-fake-v1"),)
+        ),
+        text_embedding_provider=zero_provider,
+        text_space=space,
+    )
+
+    with pytest.raises(Exception) as caught:
+        await replacement.ingest(
+            image,
+            resource_id="image-logical-1",
+            source_namespace="PRIVATE_ROOT_SENTINEL",
+            source_ref="public-ref",
+        )
+
+    assert str(caught.value) == "validation"
+    assert list(
+        map(
+            tuple,
+            connection.execute(
+                "SELECT unit_id,text_content FROM core_search_units "
+                "WHERE resource_id='image-logical-1'"
+            ).fetchall(),
+        )
+    ) == prior
+    assert zero_provider.document_calls == 1
+    assert zero_provider.network_requests == 0
 
 
 def test_markdown_scan_never_calls_explicit_image_ingestion(

@@ -365,10 +365,18 @@ class SQLiteResourceStore:
                 (branch.space_id, *params),
             ).fetchall()
             scored: list[tuple[float, sqlite3.Row]] = []
+            skipped_zero_cosine = False
             for row in rows:
                 candidate = _decode_vector(row["embedding"], space["dimensions"])
+                if space["metric"] == "cosine" and self._norm(candidate) == 0.0:
+                    skipped_zero_cosine = True
+                    continue
                 score = self._score(query, candidate, space["metric"], branch.branch_id)
                 scored.append((score, row))
+            if skipped_zero_cosine and not scored:
+                raise BranchExecutionError(
+                    ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id
+                )
             scored.sort(key=lambda item: (-item[0], item[1]["unit_id"]))
             return [
                 self._candidate(row, rank=index, score=score, branch_id=branch.branch_id)
@@ -555,13 +563,16 @@ class SQLiteResourceStore:
             key = (item.unit_id, item.space_id)
             if key in vector_keys or item.unit_id not in unit_ids or item.space_id not in spaces:
                 raise ValueError("invalid vector ownership or identity")
+            encoded = _encode_vector(item.vector, spaces[item.space_id].dimensions)
+            if spaces[item.space_id].metric == "cosine" and self._norm(item.vector) == 0.0:
+                raise ValueError("cosine vector norm must be non-zero")
             vector_keys.add(key)
             vector_units.add(item.unit_id)
             vector_values.append(
                 (
                     item.unit_id,
                     item.space_id,
-                    _encode_vector(item.vector, spaces[item.space_id].dimensions),
+                    encoded,
                     _now(),
                 )
             )
@@ -838,7 +849,7 @@ class SQLiteResourceStore:
 
     @staticmethod
     def _norm(vector: Sequence[float]) -> float:
-        return math.sqrt(sum(value * value for value in vector))
+        return math.hypot(*vector)
 
     @classmethod
     def _score(

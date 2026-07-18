@@ -96,7 +96,7 @@ def cli_search(
         limit_value,
     )
     try:
-        if mode != "text":
+        if mode == "semantic" or (mode == "hybrid" and config.search.semantic_weight > 0.0):
             provider_name: str = embedding_provider or config.embedding.provider
             provider = create_embedding_provider(provider_name, config)
         service = RetrievalService(
@@ -109,6 +109,8 @@ def cli_search(
                 else None
             ),
             rrf_k=config.search.rrf_k,
+            text_weight=config.search.text_weight,
+            semantic_weight=config.search.semantic_weight,
         )
         if mode == "text":
             _run_text_search(service, query, limit_value, ctx, command)

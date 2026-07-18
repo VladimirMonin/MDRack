@@ -7,13 +7,14 @@ from typing import Any
 
 from mdrack.application.compatibility import create_application_storage, embedding_space_id
 from mdrack.application.indexing import IndexingService
-from mdrack.application.query import ReadService, SearchService
+from mdrack.application.query import ReadService
 from mdrack.application.resources import (
     DuplicateResourceResult,
     ResourceQueryScope,
     ResourceQueryService,
     SimilarResourceResult,
 )
+from mdrack.application.retrieval import RetrievalService
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.runtime import embedding_profile_from_config
@@ -61,7 +62,7 @@ class MDRackEngine:
         self.visual_embedding_provider = visual_embedding_provider
         self.visual_embedding_space = visual_embedding_space
         self._images: ImageIngestionService | None = None
-        self.search_service = SearchService(
+        self.search_service = RetrievalService(
             self.search_index,
             embedding_provider=self.embedding_provider,
             profile=self.profile,
@@ -71,6 +72,8 @@ class MDRackEngine:
                 else None
             ),
             rrf_k=self.config.search.rrf_k,
+            text_weight=self.config.search.text_weight,
+            semantic_weight=self.config.search.semantic_weight,
         )
 
     def scan(self, *, force_reindex: bool = False) -> IndexingResult:

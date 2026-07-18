@@ -112,8 +112,11 @@ live runtime support.
 
 ### Performance
 
-- Memory: ~150MB for 10k × 768-dim vectors
-- Time: O(n) linear scan; ~50k vectors feasible (<1s)
+- Time and memory scale with an O(n) Python scan of JSON-encoded vectors.
+- The former `~150MB` and `<1s` estimates were not tied to reproducible evidence
+  and are withdrawn. See the maintained
+  [v0.3.1 offline evidence](evidence/v0.3.1-release-gate.md) for bounded observed
+  cells and explicit unrun cells; it is not a portable support SLA.
 - Future: pre-normalize, cache norms, or ANN index (HNSW) for larger sets
 
 ### Use Cases
@@ -133,10 +136,12 @@ Combine complementary signals from text and semantic modes to improve both preci
 Given ranked lists L1 (text) and L2 (semantic), for each document `d`:
 
 ```
-RRF_score(d) = Σ_{list} 1 / (k + rank(d, list))
+RRF_score(d) = Σ_{list} weight(list) / (k + rank(d, list))
 ```
 
 where `k` = damping parameter (default 60). If `d` not in a list, that term = 0.
+Configured standard paths apply `text_weight` and `semantic_weight`; direct
+low-level consumers without configuration retain equal weights.
 
 **Example:**
 ```

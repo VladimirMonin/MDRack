@@ -59,6 +59,38 @@ def _generation(store_dir: Path, *, state: GenerationState) -> Path:
     return database_path
 
 
+def _assert_public_results_equivalent(
+    actual: tuple[dict[str, object], ...],
+    expected: tuple[dict[str, object], ...],
+) -> None:
+    assert len(actual) == len(expected)
+    score_keys = ("score", "text_score", "semantic_score", "rrf_score", "rerank_score")
+    for actual_result, expected_result in zip(actual, expected, strict=True):
+        actual_envelope = dict(actual_result)
+        expected_envelope = dict(expected_result)
+        actual_items = actual_envelope.pop("results")
+        expected_items = expected_envelope.pop("results")
+        assert actual_envelope == expected_envelope
+        assert isinstance(actual_items, list)
+        assert isinstance(expected_items, list)
+        assert len(actual_items) == len(expected_items)
+        for actual_item, expected_item in zip(actual_items, expected_items, strict=True):
+            assert isinstance(actual_item, dict)
+            assert isinstance(expected_item, dict)
+            actual_fields = dict(actual_item)
+            expected_fields = dict(expected_item)
+            for key in score_keys:
+                actual_score = actual_fields.pop(key)
+                expected_score = expected_fields.pop(key)
+                if expected_score is None:
+                    assert actual_score is None
+                else:
+                    assert isinstance(actual_score, (int, float))
+                    assert isinstance(expected_score, (int, float))
+                    assert actual_score == pytest.approx(expected_score, abs=1e-12)
+            assert actual_fields == expected_fields
+
+
 def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(tmp_path: Path) -> None:
     root = tmp_path / "vault"
     root.mkdir()
@@ -293,7 +325,7 @@ def test_ready_core_text_semantic_and_hybrid_match_legacy_values(tmp_path: Path)
             storage.close()
 
     legacy, ready = asyncio.run(results(legacy_config)), asyncio.run(results(core_config))
-    assert ready == legacy
+    _assert_public_results_equivalent(ready, legacy)
     text_item = ready[0]["results"][0]  # type: ignore[index]
     assert text_item["score"] < 0
     assert "<b>Alpha</b>" in text_item["content_preview"]
@@ -337,7 +369,7 @@ def test_ready_core_preserves_legacy_lexical_ties_and_plain_punctuation(
     for query in ("Alpha", "Alpha - retrieval", "Alpha/retrieval", "Alpha.retrieval"):
         legacy = asyncio.run(results(legacy_config, query))
         ready = asyncio.run(results(core_config, query))
-        assert ready == legacy
+        _assert_public_results_equivalent(ready, legacy)
 
     config_path = root / "mdrack.toml"
     config_path.write_text(f'[paths]\nstore = "{core_store}"\n', encoding="utf-8")

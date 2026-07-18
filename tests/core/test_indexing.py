@@ -9,6 +9,7 @@ from fakes.memory_store import MemoryCatalog
 
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.domain import (
+    BranchExecutionError,
     CatalogExecutionError,
     CoreError,
     EmbeddingSpaceRecord,
@@ -21,6 +22,7 @@ from mdrack_core.domain import (
     ResourceRecord,
     SearchScope,
     SearchUnitRecord,
+    VectorBranch,
     VectorRecord,
 )
 from mdrack_core.domain.common import canonical_json
@@ -99,11 +101,12 @@ def _space(
     space_id: str = "space-caller-supplied",
     *,
     dimensions: int = 2,
+    metric: str = "cosine",
 ) -> EmbeddingSpaceRecord:
     return EmbeddingSpaceRecord(
         space_id=space_id,
         dimensions=dimensions,
-        metric="cosine",
+        metric=metric,
         fingerprint="PRIVATE_PROVIDER_FINGERPRINT_SENTINEL",
     )
 
@@ -462,9 +465,13 @@ def test_forged_non_utf8_persisted_strings_fail_before_catalog(
     assert catalog.replace_calls == []
 
 
-def test_memory_catalog_preserves_vector_signed_zero_exactly() -> None:
+@pytest.mark.parametrize("metric", ["dot", "l2"])
+def test_memory_catalog_preserves_non_cosine_vector_signed_zero_exactly(metric: str) -> None:
     catalog = MemoryCatalog()
-    batch = _batch(vectors=(_vector(vector=(0.0, -0.0)),))
+    batch = _batch(
+        spaces=(_space(metric=metric),),
+        vectors=(_vector(vector=(0.0, -0.0)),),
+    )
 
     CoreIndexingService(catalog).index(batch)
 
@@ -472,6 +479,76 @@ def test_memory_catalog_preserves_vector_signed_zero_exactly() -> None:
     assert stored is not None
     assert [math.copysign(1.0, value) for value in stored.vector] == [1.0, -1.0]
     assert canonical_json(stored.vector) == "[0.0,-0.0]"
+
+
+def test_zero_cosine_vector_fails_before_catalog_and_preserves_previous_graph() -> None:
+    catalog = MemoryCatalog()
+    service = CoreIndexingService(catalog)
+    original = _batch(vectors=(_vector(vector=(1.0, 0.0)),))
+    service.index(original)
+    invalid = _batch(vectors=(_vector(vector=(0.0, -0.0)),))
+
+    with pytest.raises(CoreError) as caught:
+        service.index(invalid)
+
+    assert caught.value.category is ErrorCategory.VALIDATION
+    assert catalog.replace_calls == [original]
+    assert catalog.batch(original.resource.resource_id) is original
+
+
+def test_memory_vector_search_skips_corrupt_zero_cosine_candidates() -> None:
+    catalog = MemoryCatalog()
+    valid = _batch(vectors=(_vector(vector=(1.0, 0.0)),))
+    corrupt = _batch(
+        resource=_resource("resource-corrupt"),
+        representations=(
+            _representation("representation-corrupt", resource_id="resource-corrupt"),
+        ),
+        units=(
+            _unit(
+                "unit-corrupt",
+                resource_id="resource-corrupt",
+                representation_id="representation-corrupt",
+            ),
+        ),
+        vectors=(_vector("unit-corrupt", vector=(0.0, -0.0)),),
+        facets=(_facet(resource_id="resource-corrupt"),),
+    )
+    service = CoreIndexingService(catalog)
+    service.index(valid)
+    catalog.replace_resource(corrupt)  # Simulate one legacy/corrupt persisted graph.
+
+    results = catalog.search_vector(
+        VectorBranch("semantic", "space-caller-supplied", (1.0, 0.0)),
+        scope=SearchScope(),
+    )
+
+    assert [(item.unit_id, item.rank) for item in results] == [("unit-caller-supplied", 1)]
+
+    catalog.delete_resource(valid.resource.resource_id)
+    with pytest.raises(BranchExecutionError) as caught:
+        catalog.search_vector(
+            VectorBranch("semantic", "space-caller-supplied", (1.0, 0.0)),
+            scope=SearchScope(),
+        )
+    assert caught.value.category is ErrorCategory.INCOMPATIBLE_VECTOR_SPACE
+
+
+@pytest.mark.parametrize("metric", ["dot", "l2"])
+def test_memory_vector_search_keeps_zero_candidates_for_non_cosine_metrics(metric: str) -> None:
+    catalog = MemoryCatalog()
+    batch = _batch(
+        spaces=(_space(metric=metric),),
+        vectors=(_vector(vector=(0.0, -0.0)),),
+    )
+    CoreIndexingService(catalog).index(batch)
+
+    results = catalog.search_vector(
+        VectorBranch("semantic", "space-caller-supplied", (0.0, 0.0)),
+        scope=SearchScope(),
+    )
+
+    assert [(item.unit_id, item.rank) for item in results] == [("unit-caller-supplied", 1)]
 
 
 def test_delete_is_idempotent_and_uses_only_the_logical_resource_id() -> None:

@@ -95,6 +95,12 @@ class SearchConfig(BaseModel):
     top_k: int = Field(default=20, ge=1)
     rrf_k: int = Field(default=60, ge=1)
 
+    @model_validator(mode="after")
+    def validate_weights(self) -> "SearchConfig":
+        if self.text_weight == 0.0 and self.semantic_weight == 0.0:
+            raise ValueError("at least one search weight must be positive")
+        return self
+
     model_config = {"frozen": True}
 
 

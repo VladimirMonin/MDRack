@@ -401,6 +401,59 @@ def test_offline_installed_wheel_missing_and_unavailable_paths_are_privacy_safe(
             ),
         )
 
+    image = root / "installed-score.png"
+    image.write_bytes(b"installed image score fixture")
+    ingested = subprocess.run(
+        [
+            *common,
+            "image",
+            "ingest",
+            str(image),
+            "--resource-id",
+            "installed-image-score",
+            "--source-namespace",
+            "fixture",
+            "--source-ref",
+            "installed-public-ref",
+            "--caption",
+            "installed searchable caption",
+            "--provider",
+            "fake",
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert ingested.returncode == 0, ingested.stdout + ingested.stderr
+    for mode in ("text", "semantic", "hybrid"):
+        searched = subprocess.run(
+            [
+                *common,
+                "image",
+                "search",
+                "searchable",
+                "--mode",
+                mode,
+                "--provider",
+                "fake",
+                "--limit",
+                "1",
+            ],
+            cwd=tmp_path,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert searched.returncode == 0, searched.stdout + searched.stderr
+        item = json.loads(searched.stdout)["data"]["results"][0]
+        if mode == "hybrid":
+            assert item["score"] == pytest.approx(2.0 / 61)
+        else:
+            assert item["score"] == item["evidence"][0]["score"]
+
 
 def test_image_cli_cleanup_failure_is_privacy_safe(
     tmp_path: Path,

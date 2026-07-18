@@ -153,12 +153,18 @@ class MemoryCatalog:
         scope: SearchScope,
     ) -> list[RankedCandidate]:
         scored: list[tuple[float, SearchUnitRecord]] = []
+        skipped_zero_cosine = False
         for batch in self._ordered_batches():
             spaces = {space.space_id: space for space in batch.spaces}
             space = spaces.get(branch.space_id)
             if space is None:
                 continue
             if len(branch.vector) != space.dimensions:
+                raise BranchExecutionError(
+                    ErrorCategory.INCOMPATIBLE_VECTOR_SPACE,
+                    branch_id=branch.branch_id,
+                )
+            if space.metric == "cosine" and math.hypot(*branch.vector) == 0.0:
                 raise BranchExecutionError(
                     ErrorCategory.INCOMPATIBLE_VECTOR_SPACE,
                     branch_id=branch.branch_id,
@@ -170,6 +176,9 @@ class MemoryCatalog:
                 unit = units[vector.unit_id]
                 if not self._matches_unit_scope(batch, unit, scope):
                     continue
+                if space.metric == "cosine" and math.hypot(*vector.vector) == 0.0:
+                    skipped_zero_cosine = True
+                    continue
                 score = self._vector_score(
                     branch.vector,
                     vector.vector,
@@ -177,6 +186,11 @@ class MemoryCatalog:
                     branch.branch_id,
                 )
                 scored.append((score, unit))
+        if skipped_zero_cosine and not scored:
+            raise BranchExecutionError(
+                ErrorCategory.INCOMPATIBLE_VECTOR_SPACE,
+                branch_id=branch.branch_id,
+            )
         scored.sort(key=lambda item: (-item[0], item[1].unit_id))
         return [
             RankedCandidate(

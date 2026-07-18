@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from mdrack.application.retrieval import RetrievalService
 from mdrack.config.models import MDRackConfig, SearchConfig
+from mdrack.domain.indexing import SourceLocator
+from mdrack.domain.retrieval import RetrievalCandidate
 from mdrack.embeddings.fake import FakeEmbeddingProvider
 from mdrack.embeddings.protocol import EmbeddingError, EmbeddingHealth
 from mdrack.search.hybrid import HybridSearchResult, hybrid_search
@@ -109,6 +112,98 @@ def _make_config(
             rrf_k=rrf_k,
         )
     )
+
+
+def _candidate(logical_id: str, score: float) -> RetrievalCandidate:
+    return RetrievalCandidate(
+        logical_id,
+        score,
+        logical_id,
+        SourceLocator("root", f"docs/{logical_id}.md", 1, 1, (), "paragraph", logical_id),
+        {"resource_id": logical_id, "representation_id": logical_id},
+    )
+
+
+class _WeightedLegacyStorage:
+    def __init__(self) -> None:
+        self.text_calls = 0
+        self.semantic_calls = 0
+
+    def retrieve_text_candidates(self, query: str, *, limit: int, offset: int = 0):
+        del query, limit, offset
+        self.text_calls += 1
+        return [_candidate("text-first", 0.9), _candidate("semantic-first", 0.8)]
+
+    def retrieve_semantic_candidates(
+        self,
+        query_vector: list[float],
+        *,
+        profile: str,
+        profile_fingerprint: str | None,
+        limit: int,
+    ):
+        del query_vector, profile, profile_fingerprint, limit
+        self.semantic_calls += 1
+        return [_candidate("semantic-first", 0.95), _candidate("text-first", 0.7)]
+
+
+class _CountingQueryProvider(FakeEmbeddingProvider):
+    def __init__(self) -> None:
+        super().__init__(dimensions=2)
+        self.query_calls = 0
+
+    async def embed_query(self, text: str, profile: str = "default"):
+        self.query_calls += 1
+        return await super().embed_query(text, profile=profile)
+
+
+@pytest.mark.asyncio
+async def test_retrieval_service_applies_configured_weights_deterministically() -> None:
+    low_text = await RetrievalService(
+        _WeightedLegacyStorage(),
+        embedding_provider=_CountingQueryProvider(),
+        text_weight=0.1,
+        semantic_weight=0.9,
+    ).search_hybrid("query", limit=2)
+    high_text = await RetrievalService(
+        _WeightedLegacyStorage(),
+        embedding_provider=_CountingQueryProvider(),
+        text_weight=0.9,
+        semantic_weight=0.1,
+    ).search_hybrid("query", limit=2)
+
+    assert [item.logical_id for item in low_text.results] == ["semantic-first", "text-first"]
+    assert [item.logical_id for item in high_text.results] == ["text-first", "semantic-first"]
+    assert low_text.results[0].score == pytest.approx((0.9 / 61) + (0.1 / 62))
+    assert high_text.results[0].score == pytest.approx((0.9 / 61) + (0.1 / 62))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text_weight", "semantic_weight", "text_calls", "semantic_calls", "provider_calls"),
+    [(1.0, 0.0, 1, 0, 0), (0.0, 1.0, 0, 1, 1)],
+)
+async def test_zero_weight_omits_branch_before_provider_and_storage_calls(
+    text_weight: float,
+    semantic_weight: float,
+    text_calls: int,
+    semantic_calls: int,
+    provider_calls: int,
+) -> None:
+    storage = _WeightedLegacyStorage()
+    provider = _CountingQueryProvider()
+
+    result = await RetrievalService(
+        storage,
+        embedding_provider=provider,
+        text_weight=text_weight,
+        semantic_weight=semantic_weight,
+    ).search_hybrid("query", limit=2)
+
+    assert result.degraded is False
+    assert storage.text_calls == text_calls
+    assert storage.semantic_calls == semantic_calls
+    assert provider.query_calls == provider_calls
 
 
 @pytest.mark.asyncio()
@@ -222,12 +317,10 @@ async def test_hybrid_search_with_different_weights(seeded_hybrid_db: tuple) -> 
     ids_low = [r.chunk_id for r in result_text_low.results]
     ids_high = [r.chunk_id for r in result_text_high.results]
 
-    # At least one ordering should differ if there is variation in modal ranks
-    # (This test may fail if data is too uniform; it's probabilistic)
-    # We'll only assert if the lists are different
-    if ids_low != ids_high:
-        pass  # expected
-    # If they happen to be same, that's not an error; just means weighting didn't change order
+    assert ids_low != ids_high
+    assert [item.combined_score for item in result_text_low.results] != [
+        item.combined_score for item in result_text_high.results
+    ]
 
 
 @pytest.mark.asyncio()

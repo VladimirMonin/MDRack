@@ -134,16 +134,15 @@ def test_forwards_the_exact_scope_to_every_arbitrary_branch() -> None:
     assert all(call_scope is scope for _, _, call_scope in port.calls)
 
 
-def test_unit_fusion_suppresses_branch_duplicates_and_applies_weights() -> None:
+def test_unit_fusion_combines_branch_evidence_and_applies_weights() -> None:
     lexical = LexicalBranch("lexical", "query", weight=1.0)
     vector = VectorBranch("vector", "space", (1.0,), weight=3.0)
-    first = _candidate("shared", branch_id="lexical", rank=5)
-    duplicate = _candidate("shared", branch_id="lexical", rank=1)
+    lexical_shared = _candidate("shared", branch_id="lexical", rank=1)
     vector_shared = _candidate("shared", branch_id="vector", rank=1)
     vector_only = _candidate("vector-only", branch_id="vector", rank=2)
     port = SearchPortSpy(
         {
-            "lexical": [first, duplicate],
+            "lexical": [lexical_shared],
             "vector": [vector_shared, vector_only],
         }
     )
@@ -153,9 +152,9 @@ def test_unit_fusion_suppresses_branch_duplicates_and_applies_weights() -> None:
     )
 
     assert [item.logical_id for item in result.items] == ["shared", "vector-only"]
-    assert result.items[0].score == pytest.approx(1 / 15 + 3 / 11)
+    assert result.items[0].score == pytest.approx(1 / 11 + 3 / 11)
     assert result.items[0].unit_id == "shared"
-    assert result.items[0].evidence == (vector_shared, first)
+    assert result.items[0].evidence == (lexical_shared, vector_shared)
 
 
 def test_resource_grouping_happens_per_branch_before_fusion() -> None:
@@ -163,7 +162,7 @@ def test_resource_grouping_happens_per_branch_before_fusion() -> None:
     vector = VectorBranch("vector", "space", (1.0,))
     long_units = [
         _candidate(f"long-{rank}", branch_id="lexical", rank=rank, resource_id="long")
-        for rank in (3, 1, 2)
+        for rank in (1, 2, 3)
     ]
     short_lexical = _candidate("short-lexical", branch_id="lexical", rank=4, resource_id="short")
     short_vector = _candidate("short-vector", branch_id="vector", rank=1, resource_id="short")
@@ -209,6 +208,43 @@ def test_backend_overproduction_is_bounded_by_branch_candidate_limit() -> None:
     result = RetrievalService(port).search(_request(lexical=(branch,)))
 
     assert [item.logical_id for item in result.items] == ["first"]
+
+
+@pytest.mark.parametrize(
+    "bad_outcome",
+    [
+        [_candidate("unit", branch_id="lexical", rank=2)],
+        [
+            _candidate("second", branch_id="lexical", rank=2),
+            _candidate("first", branch_id="lexical", rank=1),
+        ],
+        [
+            _candidate("first", branch_id="lexical", rank=1),
+            _candidate("third", branch_id="lexical", rank=3),
+        ],
+        [
+            _candidate("first", branch_id="lexical", rank=1),
+            _candidate("second", branch_id="lexical", rank=1),
+        ],
+        [
+            _candidate("duplicate", branch_id="lexical", rank=1),
+            _candidate("duplicate", branch_id="lexical", rank=2),
+        ],
+    ],
+    ids=("missing-first", "shuffled", "gap", "duplicate-rank", "duplicate-unit"),
+)
+def test_malformed_adapter_rank_contract_becomes_safe_adapter_error(
+    bad_outcome: list[RankedCandidate],
+) -> None:
+    branch = LexicalBranch("lexical", "query")
+    port = SearchPortSpy({"lexical": bad_outcome})
+
+    with pytest.raises(BranchExecutionError) as captured:
+        RetrievalService(port).search(_request(lexical=(branch,)))
+
+    assert captured.value.category is ErrorCategory.ADAPTER_ERROR
+    assert captured.value.branch_id == branch.branch_id
+    assert str(captured.value) == "adapter_error"
 
 
 @pytest.mark.parametrize(
@@ -317,10 +353,11 @@ def test_all_successful_empty_branches_return_successful_empty_result() -> None:
     [
         [_candidate("unit", branch_id="wrong", rank=1)],
         [object()],
+        (_candidate("unit", branch_id="lexical", rank=1),),
     ],
 )
 def test_invalid_adapter_results_become_safe_adapter_errors(
-    bad_outcome: list[object],
+    bad_outcome: object,
 ) -> None:
     branch = LexicalBranch("lexical", "query")
     port = SearchPortSpy({"lexical": bad_outcome})  # type: ignore[arg-type]
@@ -330,6 +367,54 @@ def test_invalid_adapter_results_become_safe_adapter_errors(
 
     assert captured.value.category is ErrorCategory.ADAPTER_ERROR
     assert str(captured.value) == "adapter_error"
+
+
+def test_malformed_adapter_output_degrades_partially_without_private_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    malformed = LexicalBranch("malformed", "PRIVATE_QUERY_SENTINEL")
+    healthy = VectorBranch("healthy", "space", (1.0,))
+    private_unit = "PRIVATE_UNIT_SENTINEL"
+    port = SearchPortSpy(
+        {
+            "malformed": [_candidate(private_unit, branch_id="malformed", rank=2)],
+            "healthy": [_candidate("healthy-unit", branch_id="healthy", rank=1)],
+        }
+    )
+    logger = logging.getLogger("tests.core.retrieval.malformed.partial")
+
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        result = RetrievalService(port, logger=logger).search(
+            _request(lexical=(malformed,), vectors=(healthy,), allow_partial=True),
+        )
+
+    assert [item.logical_id for item in result.items] == ["healthy-unit"]
+    assert result.degradations[0].branch_id == malformed.branch_id
+    assert result.degradations[0].category is DegradationCategory.ADAPTER_ERROR
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert private_unit not in messages
+    assert malformed.query not in messages
+
+
+def test_malformed_adapter_output_fails_safely_without_private_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    branch = LexicalBranch("malformed", "PRIVATE_QUERY_SENTINEL")
+    private_unit = "PRIVATE_UNIT_SENTINEL"
+    port = SearchPortSpy(
+        {"malformed": [_candidate(private_unit, branch_id="malformed", rank=2)]}
+    )
+    logger = logging.getLogger("tests.core.retrieval.malformed.failed")
+
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        with pytest.raises(BranchExecutionError) as captured:
+            RetrievalService(port, logger=logger).search(_request(lexical=(branch,)))
+
+    assert captured.value.category is ErrorCategory.ADAPTER_ERROR
+    assert str(captured.value) == "adapter_error"
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert private_unit not in messages
+    assert branch.query not in messages
 
 
 def test_events_expose_only_frozen_safe_fields_and_no_private_values(

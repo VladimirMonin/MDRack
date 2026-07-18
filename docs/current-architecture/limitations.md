@@ -10,10 +10,15 @@ This page is a current-state boundary, not a roadmap promise.
   package does not load embedding model weights itself.
 - Production reranking is unsupported. Non-null reranker injection and rerank
   requests fail closed; rerank result fields remain null.
-- Hybrid retrieval uses unweighted RRF. Configured `text_weight` and
-  `semantic_weight` values are currently unused.
+- Standard Markdown hybrid retrieval applies configured `text_weight` and
+  `semantic_weight`; a zero-weight branch is omitted before provider/storage
+  execution. Low-level services without configuration retain equal defaults.
 - Semantic search does not short-circuit an empty string before invoking the
   provider.
+- The bounded synthetic measurements in
+  [v0.3.1 offline evidence](../evidence/v0.3.1-release-gate.md) are observations
+  from one Linux host, not a portable latency/RSS support SLA. Larger matrix
+  cells remain unrun.
 
 ## Parsing and chunking
 

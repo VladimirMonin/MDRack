@@ -55,6 +55,8 @@ async def hybrid_search(
         embedding_provider=provider,
         profile="default",
         rrf_k=config.search.rrf_k,
+        text_weight=config.search.text_weight,
+        semantic_weight=config.search.semantic_weight,
     ).search_hybrid(query, limit=limit, reranker=None)
     items = [
         HybridSearchResultItem(

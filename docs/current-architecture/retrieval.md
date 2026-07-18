@@ -64,21 +64,29 @@ the active embedding profile fingerprint and dimensions, loads all matching
 vectors, computes cosine similarity in Python, sorts descending, and enriches
 the selected rows with source locators. This path is O(n) in stored vectors.
 
+New zero-norm vectors are rejected for cosine spaces before catalog mutation.
+During a scan, a legacy or corrupt zero-norm cosine candidate is skipped instead
+of failing the complete branch. If every scoped candidate is invalid, retrieval
+uses the existing privacy-safe incompatible-space degradation. Zero vectors
+remain valid for dot and L2 spaces.
+
 A semantic query is sent to the provider even when its text is empty; there is no
 current empty-query short circuit at the service boundary.
 
-## Legacy document hybrid mode and RRF
+## Legacy document hybrid mode and weighted RRF
 
 Hybrid mode asks each branch for `2 * limit` candidates. Candidates are
 identified by public logical chunk ID. Only the first occurrence in each branch
-contributes a rank. The application layer computes unweighted Reciprocal Rank
-Fusion:
+contributes a rank. Configured standard Markdown paths compute weighted
+Reciprocal Rank Fusion:
 
-`score = 1 / (rrf_k + text_rank) + 1 / (rrf_k + semantic_rank)`
+`score = text_weight / (rrf_k + text_rank) + semantic_weight / (rrf_k + semantic_rank)`
 
 A missing branch contributes zero. Sorting is deterministic: fused score
-descending, then first appearance, then logical ID. The configured `text_weight`
-and `semantic_weight` fields are not consumed by this algorithm.
+descending, then first appearance, then logical ID. A configured zero-weight
+branch is omitted before provider or storage execution; both weights cannot be
+zero. Direct low-level retrieval services that receive no configuration retain
+their `1.0`/`1.0` defaults.
 
 ## Degradation and CLI mapping
 
@@ -100,6 +108,10 @@ applies every filter before branch limits. Resource-target search groups units
 within each branch before RRF so a long document does not gain rank merely by
 having more chunks. Exact duplicate lookup uses `content_hash`; semantic resource
 similarity uses an already persisted whole-resource vector and explicit space.
+Core validates returned candidates for exact one-based positional ranks and
+unique unit IDs after the existing candidate-limit slice. Malformed adapter
+output becomes a privacy-safe adapter degradation; tolerant overproduction
+slicing remains part of the current contract.
 
 ## Public result contract
 
@@ -114,6 +126,10 @@ Each result includes:
 
 Text scores preserve the FTS candidate value; semantic scores preserve cosine;
 hybrid `score` equals `rrf_score`.
+
+Direct-image search uses the same mode distinction without widening its public
+key set: text and semantic `score` expose the representative raw adapter score,
+while hybrid `score` exposes the fused RRF score.
 
 ## Reranking boundary
 
