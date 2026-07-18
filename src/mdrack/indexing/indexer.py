@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from mdrack.adapters.sqlite.index_storage import create_sqlite_index_storage
+from mdrack.application.compatibility import create_application_storage
 from mdrack.application.indexing import IndexingService
 
 
@@ -33,7 +33,7 @@ def run_indexer(
     force_reindex: bool = False,
 ) -> IndexerResult:
     """Compose the default SQLite adapter and run the application service."""
-    storage = create_sqlite_index_storage(root, config)
+    storage = create_application_storage(root, config)
     service = IndexingService(
         root,
         config,

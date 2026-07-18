@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
+from mdrack.storage.sqlite.fts import plain_query_fallback
 from mdrack_core.domain import (
     BranchExecutionError,
     CatalogExecutionError,
@@ -294,7 +295,7 @@ class SQLiteResourceStore:
             self._require_scope(scope)
             clauses, params = self._scope_clauses(scope)
             where = ["core_search_units_fts MATCH ?", *clauses]
-            rows = self.connection.execute(
+            statement = (
                 "SELECT u.*, p.resource_id AS representation_resource_id, "
                 "p.modality AS representation_modality, "
                 "bm25(core_search_units_fts) AS branch_score "
@@ -303,9 +304,21 @@ class SQLiteResourceStore:
                 "JOIN core_representations p ON p.representation_id = u.representation_id "
                 "JOIN core_resources r ON r.resource_id = u.resource_id "
                 f"WHERE {' AND '.join(where)} "
-                "ORDER BY branch_score ASC, u.unit_id ASC LIMIT ?",
-                (branch.query, *params, branch.candidate_limit),
-            ).fetchall()
+                "ORDER BY branch_score ASC, core_search_units_fts.rowid ASC LIMIT ?"
+            )
+            try:
+                rows = self.connection.execute(
+                    statement,
+                    (branch.query, *params, branch.candidate_limit),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                fallback_query = plain_query_fallback(branch.query)
+                if fallback_query is None:
+                    raise
+                rows = self.connection.execute(
+                    statement,
+                    (fallback_query, *params, branch.candidate_limit),
+                ).fetchall()
             return [
                 self._candidate(row, rank=index, score=-float(row["branch_score"]), branch_id=branch.branch_id)
                 for index, row in enumerate(rows, start=1)

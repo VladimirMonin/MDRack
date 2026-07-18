@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mdrack.adapters.sqlite.index_storage import create_sqlite_index_storage
+from mdrack.application.compatibility import create_application_storage
 from mdrack.application.indexing import IndexingService
 from mdrack.application.query import ReadService, SearchService
 from mdrack.domain.indexing import IndexingResult, SourceLocator
@@ -36,7 +36,7 @@ class MDRackEngine:
         self.profile = profile
         self.root_id = root_id
         if storage is None:
-            storage = create_sqlite_index_storage(self.root, config)
+            storage = create_application_storage(self.root, config)
         self.storage = storage
         self.search_index = search_index or storage
         self.read_storage = read_storage or storage

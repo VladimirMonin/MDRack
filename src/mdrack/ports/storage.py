@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from mdrack.domain.indexing import PreparedFile, SourceLocator
 from mdrack.domain.retrieval import RetrievalCandidate
+from mdrack_core.domain import SearchRequest, SearchResult
 
 
 class ChangePlan(Protocol):
@@ -85,6 +86,14 @@ class RetrievalStorage(Protocol):
         profile_fingerprint: str | None,
         limit: int,
     ) -> list[RetrievalCandidate]: ...
+
+    def search_core(self, request: SearchRequest) -> SearchResult: ...
+
+    def resolve_embedding_space(
+        self,
+        profile: str,
+        profile_fingerprint: str | None,
+    ) -> str | None: ...
 
 
 class ReadStorage(Protocol):

@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sqlite3
 from pathlib import Path
 from typing import Any
 
 import click
 
-from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
-from mdrack.application.retrieval import RetrievalService
+from mdrack.application.compatibility import (
+    StoreGenerationManagerError,
+    create_application_storage,
+)
+from mdrack.application.retrieval import InvalidTextSearchError, RetrievalService
 from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import (
     close_async_resource,
@@ -22,16 +24,20 @@ from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import StorageError
 from mdrack.output.json_output import emit_json
-from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.fts import FTSQueryError
 
 logger = logging.getLogger(__name__)
 
 
-def _open_connection(db_path: Path) -> sqlite3.Connection:
-    if not db_path.is_file():
+def _open_storage(root: Path, config: Any, db_path: Path) -> Any:
+    configured = Path(config.paths.store)
+    store_dir = configured if configured.is_absolute() else root.resolve() / configured
+    if not db_path.is_file() and not (store_dir / "active-generation.json").is_file():
         raise StorageError("Database not found. Run 'mdrack scan' first.")
-    return get_connection(db_path)
+    try:
+        return create_application_storage(root, config)
+    except StoreGenerationManagerError:
+        raise StorageError("Active index generation is not ready.") from None
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
@@ -77,7 +83,7 @@ def cli_search(
     limit_value: int = limit or config.search.top_k
     provider: EmbeddingProvider | None = None
     try:
-        connection = _open_connection(db_path)
+        storage = _open_storage(ctx.obj.get("root", Path(".")), config, db_path)
     except StorageError as exc:
         _output(ctx, envelope_error(str(exc), exc.code, command))
         ctx.exit(1)
@@ -94,7 +100,7 @@ def cli_search(
             provider_name: str = embedding_provider or config.embedding.provider
             provider = create_embedding_provider(provider_name, config)
         service = RetrievalService(
-            SQLiteIndexStorage(connection),
+            storage,
             embedding_provider=provider,
             profile="default",
             profile_fingerprint=(
@@ -110,7 +116,7 @@ def cli_search(
             asyncio.run(_run_semantic_search(service, query, limit_value, ctx, command))
         else:
             asyncio.run(_run_hybrid_search(service, query, limit_value, ctx, command))
-    except FTSQueryError:
+    except (FTSQueryError, InvalidTextSearchError):
         _output(ctx, envelope_error("Invalid text search query", "FTS_ERROR", command))
     except Exception:
         logger.error("cli.search.failed status=failed reason=internal_error")
@@ -121,7 +127,7 @@ def cli_search(
                 asyncio.run(close_async_resource(provider))
             except Exception:
                 logger.debug("embedding.provider.close_failed reason=cleanup_error")
-        connection.close()
+        storage.close()
 
 
 def _run_text_search(

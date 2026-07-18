@@ -10,6 +10,7 @@ from typing import Any
 
 import click
 
+from mdrack.application.compatibility import create_active_generation_rebuild_storage
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.embeddings.protocol import EmbeddingProvider
 from mdrack.embeddings.runtime import (
@@ -17,6 +18,8 @@ from mdrack.embeddings.runtime import (
     create_embedding_provider,
     embedding_profile_from_config,
 )
+from mdrack.indexing.indexer import run_indexer
+from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 from mdrack.storage.sqlite.connection import get_connection
@@ -32,6 +35,12 @@ DEFAULT_BATCH_SIZE = 32
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     json_flag: bool = ctx.obj.get("json_output", True) if ctx.obj else True
     emit_json(payload, pretty=not json_flag)
+
+
+def _active_generation_configured(root: Path, config: Any) -> bool:
+    configured = Path(config.paths.store)
+    store_dir = configured if configured.is_absolute() else root.resolve() / configured
+    return (store_dir / "active-generation.json").is_file()
 
 
 def _profile_from_provider(
@@ -228,6 +237,23 @@ def rebuild_fts_cmd(ctx: click.Context) -> None:
     if db_path is None:
         return
 
+    config = ctx.obj.get("config") if ctx.obj else None
+    root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+    if config is not None and _active_generation_configured(root, config):
+        storage = create_active_generation_rebuild_storage(root, config)
+        try:
+            fts_count, chunk_count = storage.rebuild_fts_index()
+            _output(
+                ctx,
+                envelope_success(
+                    {"fts_count": fts_count, "chunk_count": chunk_count},
+                    command=cmd,
+                ),
+            )
+        finally:
+            storage.close()
+        return
+
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = get_connection(db_path)
@@ -280,8 +306,41 @@ def rebuild_embeddings_cmd(
     provider_name: str = embedding_provider or config.embedding.provider
     provider = create_embedding_provider(provider_name, config)
     try:
-        data = rebuild_embeddings_in_db(db_path, provider, profile_name, config=config)
-        data["provider"] = provider_name
+        root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+        if _active_generation_configured(root, config):
+            result = run_indexer(
+                root,
+                config,
+                provider=provider,
+                profile=profile_name,
+                force_reindex=True,
+            )
+            data = {
+                "embedded_count": result.chunks_created,
+                "total_chunks": result.chunks_created,
+                "profile": profile_name,
+                "provider": provider_name,
+            }
+            if result.status != "success":
+                error_codes = tuple(sorted(set(result.error_codes)))
+                code = error_codes[0] if error_codes else "INDEX_REBUILD_FAILED"
+                _output(
+                    ctx,
+                    envelope_error(
+                        "Embedding rebuild did not complete successfully",
+                        code,
+                        cmd,
+                        details={
+                            **data,
+                            "status": result.status,
+                            "error_codes": list(error_codes),
+                        },
+                    ),
+                )
+                raise click.exceptions.Exit(1)
+        else:
+            data = rebuild_embeddings_in_db(db_path, provider, profile_name, config=config)
+            data["provider"] = provider_name
 
         _output(
             ctx,

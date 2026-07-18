@@ -24,6 +24,13 @@ def _quote_as_fts_phrase(query: str) -> str:
     return f'"{escaped}"'
 
 
+def plain_query_fallback(query: str) -> str | None:
+    """Return the legacy quoted-phrase retry for non-operator input."""
+    if _supports_raw_fts_syntax(query):
+        return None
+    return _quote_as_fts_phrase(query)
+
+
 def upsert_fts(
     conn: sqlite3.Connection,
     chunk_id: str,
@@ -97,7 +104,7 @@ def search_fts(
             SELECT chunk_id, rank, snippet(chunks_fts, 1, '<b>', '</b>', '...', 64) AS snippet
             FROM chunks_fts
             WHERE chunks_fts MATCH ?
-            ORDER BY rank
+            ORDER BY rank, chunks_fts.rowid
             LIMIT ?
             """,
             (query, limit),
@@ -111,15 +118,15 @@ def search_fts(
             for row in cursor.fetchall()
         ]
     except sqlite3.OperationalError as exc:
-        if not _supports_raw_fts_syntax(query):
-            fallback_query = _quote_as_fts_phrase(query)
+        fallback_query = plain_query_fallback(query)
+        if fallback_query is not None:
             try:
                 cursor = conn.execute(
                     """
                     SELECT chunk_id, rank, snippet(chunks_fts, 1, '<b>', '</b>', '...', 64) AS snippet
                     FROM chunks_fts
                     WHERE chunks_fts MATCH ?
-                    ORDER BY rank
+                    ORDER BY rank, chunks_fts.rowid
                     LIMIT ?
                     """,
                     (fallback_query, limit),

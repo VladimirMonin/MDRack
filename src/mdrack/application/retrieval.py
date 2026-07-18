@@ -3,61 +3,121 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 
+from mdrack.application.compatibility import CoreCompatibilityMapper
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
-from mdrack.domain.retrieval import RetrievalCandidate, RetrievalItem, RetrievalResult
+from mdrack.domain.retrieval import (
+    RetrievalCandidate,
+    RetrievalItem,
+    RetrievalMode,
+    RetrievalResult,
+)
 from mdrack.embeddings.protocol import EmbeddingError, EmbeddingProvider
 from mdrack.ports.storage import RetrievalStorage
+from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
+from mdrack_core.domain import (
+    TARGET_UNIT,
+    BranchExecutionError,
+    LexicalBranch,
+    RankedCandidate,
+    SearchRequest,
+    SearchScope,
+    VectorBranch,
+)
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class _Fused:
-    candidate: RetrievalCandidate
-    text_rank: int | None
-    semantic_rank: int | None
-    text_score: float | None
-    semantic_score: float | None
-    rrf_score: float
-    first_seen: int
+class InvalidTextSearchError(ValueError):
+    """A stable app error for a text branch rejected by the active search adapter."""
 
 
-def _fuse_candidates(
+class _CandidateSearchPort:
+    """Adapt already-ranked legacy candidates to the core fusion owner."""
+
+    def __init__(
+        self,
+        text_candidates: list[RetrievalCandidate],
+        semantic_candidates: list[RetrievalCandidate],
+        mapper: CoreCompatibilityMapper,
+    ) -> None:
+        self._text = self._ranked(text_candidates, "text", mapper)
+        self._semantic = self._ranked(semantic_candidates, "semantic", mapper)
+
+    def search_lexical(self, branch: LexicalBranch, *, scope: SearchScope) -> list[RankedCandidate]:
+        del scope
+        return self._text[: branch.candidate_limit]
+
+    def search_vector(self, branch: VectorBranch, *, scope: SearchScope) -> list[RankedCandidate]:
+        del scope
+        return self._semantic[: branch.candidate_limit]
+
+    @staticmethod
+    def _ranked(
+        candidates: list[RetrievalCandidate],
+        branch_id: str,
+        mapper: CoreCompatibilityMapper,
+    ) -> list[RankedCandidate]:
+        return [
+            RankedCandidate(
+                unit_id=candidate.logical_id,
+                resource_id=str(candidate.metadata.get("resource_id") or candidate.logical_id),
+                representation_id=str(
+                    candidate.metadata.get("representation_id") or candidate.logical_id
+                ),
+                rank=rank,
+                raw_score=candidate.score,
+                branch_id=branch_id,
+                evidence_locator=mapper.core_locator(candidate.source_locator),
+                metadata={
+                    "content_preview": candidate.content_preview,
+                    "heading_path": candidate.source_locator.heading_path,
+                    "section_title": candidate.metadata.get("section_title"),
+                },
+            )
+            for rank, candidate in enumerate(candidates, start=1)
+        ]
+
+
+def _fuse_with_core(
+    *,
+    query: str,
     text_candidates: list[RetrievalCandidate],
     semantic_candidates: list[RetrievalCandidate],
-    *,
+    limit: int,
     rrf_k: int,
-) -> list[_Fused]:
-    text_ranks, text_scores = RetrievalService._first_ranks_and_scores(text_candidates)
-    semantic_ranks, semantic_scores = RetrievalService._first_ranks_and_scores(semantic_candidates)
-    candidates: dict[str, RetrievalCandidate] = {}
-    first_seen: dict[str, int] = {}
-    for ordinal, candidate in enumerate(text_candidates + semantic_candidates):
-        candidates.setdefault(candidate.logical_id, candidate)
-        first_seen.setdefault(candidate.logical_id, ordinal)
-
-    fused: list[_Fused] = []
-    for logical_id, candidate in candidates.items():
-        text_rank = text_ranks.get(logical_id)
-        semantic_rank = semantic_ranks.get(logical_id)
-        rrf_score = (1 / (rrf_k + text_rank) if text_rank is not None else 0.0) + (
-            1 / (rrf_k + semantic_rank) if semantic_rank is not None else 0.0
+    mapper: CoreCompatibilityMapper,
+    degraded_reason: str | None = None,
+) -> RetrievalResult:
+    candidate_limit = max(limit * 2, len(text_candidates), len(semantic_candidates), 1)
+    core = CoreRetrievalService(
+        _CandidateSearchPort(text_candidates, semantic_candidates, mapper)
+    ).search(
+        SearchRequest(
+            lexical_branches=(
+                LexicalBranch("text", query or "compatibility-query", candidate_limit=candidate_limit),
+            ),
+            vector_branches=(
+                VectorBranch(
+                    "semantic",
+                    "compatibility-space",
+                    (0.0,),
+                    candidate_limit=candidate_limit,
+                ),
+            ),
+            scope=SearchScope(),
+            target=TARGET_UNIT,
+            limit=limit,
+            rrf_k=rrf_k,
+            allow_partial=True,
         )
-        fused.append(
-            _Fused(
-                candidate=candidate,
-                text_rank=text_rank,
-                semantic_rank=semantic_rank,
-                text_score=text_scores.get(logical_id),
-                semantic_score=semantic_scores.get(logical_id),
-                rrf_score=rrf_score,
-                first_seen=first_seen[logical_id],
-            )
-        )
-    fused.sort(key=lambda item: (-item.rrf_score, item.first_seen, item.candidate.logical_id))
-    return fused
+    )
+    return mapper.retrieval_result(
+        query=query,
+        mode="hybrid",
+        result=core,
+        degraded_reason=degraded_reason,
+    )
 
 
 class RetrievalService:
@@ -79,9 +139,34 @@ class RetrievalService:
         self.profile = profile
         self.profile_fingerprint = profile_fingerprint
         self.rrf_k = rrf_k
+        self.compatibility_mapper = CoreCompatibilityMapper()
 
     def search_text(self, query: str, *, limit: int = 20, offset: int = 0) -> RetrievalResult:
         self._validate_page(limit, offset)
+        search_core = getattr(self.storage, "search_core", None)
+        if callable(search_core):
+            try:
+                core = self.storage.search_core(
+                    SearchRequest(
+                        lexical_branches=(
+                            LexicalBranch("text", query, candidate_limit=limit + offset),
+                        ),
+                        vector_branches=(),
+                        scope=SearchScope(),
+                        target=TARGET_UNIT,
+                        limit=limit + offset,
+                        rrf_k=self.rrf_k,
+                    )
+                )
+            except (BranchExecutionError, ValueError):
+                raise InvalidTextSearchError("invalid_text_query") from None
+            return self.compatibility_mapper.retrieval_result(
+                query=query,
+                mode="text",
+                result=core,
+                offset=offset,
+                limit=limit,
+            )
         candidates = self.storage.retrieve_text_candidates(query, limit=limit, offset=offset)
         items = tuple(
             self._candidate_item(candidate, text_rank=rank)
@@ -91,6 +176,37 @@ class RetrievalService:
 
     async def search_semantic(self, query: str, *, limit: int = 20) -> RetrievalResult:
         self._validate_page(limit, 0)
+        if callable(getattr(self.storage, "search_core", None)):
+            vector, degraded_reason = await self._prepare_query_vector(query)
+            if vector is None:
+                return self._empty_degraded(query, "semantic", degraded_reason)
+            space_id = self._resolve_embedding_space()
+            if space_id is None:
+                return self._empty_degraded(
+                    query,
+                    "semantic",
+                    "incompatible_embedding_profile",
+                )
+            try:
+                core = self.storage.search_core(
+                    SearchRequest(
+                        lexical_branches=(),
+                        vector_branches=(
+                            VectorBranch("semantic", space_id, vector, candidate_limit=limit),
+                        ),
+                        scope=SearchScope(),
+                        target=TARGET_UNIT,
+                        limit=limit,
+                        rrf_k=self.rrf_k,
+                    )
+                )
+            except BranchExecutionError as error:
+                return self._empty_degraded(query, "semantic", error.category.value)
+            return self.compatibility_mapper.retrieval_result(
+                query=query,
+                mode="semantic",
+                result=core,
+            )
         candidates, degraded_reason = await self._semantic_candidates(query, limit=limit)
         items = tuple(
             self._candidate_item(candidate, semantic_rank=rank)
@@ -116,32 +232,68 @@ class RetrievalService:
         if reranker is not None:
             raise ValueError("reranking is not supported in v0.2")
         self._validate_page(limit, 0)
+        if callable(getattr(self.storage, "search_core", None)):
+            if not query.strip():
+                raise InvalidTextSearchError("invalid_text_query")
+            vector, degraded_reason = await self._prepare_query_vector(query)
+            vector_branches: tuple[VectorBranch, ...] = ()
+            if vector is not None:
+                space_id = self._resolve_embedding_space()
+                if space_id is None:
+                    degraded_reason = "incompatible_embedding_profile"
+                else:
+                    vector_branches = (
+                        VectorBranch(
+                            "semantic",
+                            space_id,
+                            vector,
+                            candidate_limit=limit * 2,
+                        ),
+                    )
+            request = SearchRequest(
+                lexical_branches=(
+                    LexicalBranch("text", query, candidate_limit=limit * 2),
+                ),
+                vector_branches=vector_branches,
+                scope=SearchScope(),
+                target=TARGET_UNIT,
+                limit=limit,
+                rrf_k=self.rrf_k,
+                allow_partial=False,
+            )
+            try:
+                core = self.storage.search_core(request)
+            except (BranchExecutionError, ValueError) as error:
+                if not isinstance(error, BranchExecutionError) or error.branch_id == "text":
+                    raise InvalidTextSearchError("invalid_text_query") from None
+                degraded_reason = error.category.value
+                core = self.storage.search_core(
+                    SearchRequest(
+                        lexical_branches=request.lexical_branches,
+                        vector_branches=(),
+                        scope=request.scope,
+                        target=request.target,
+                        limit=request.limit,
+                        rrf_k=request.rrf_k,
+                        allow_partial=False,
+                    )
+                )
+            return self.compatibility_mapper.retrieval_result(
+                query=query,
+                mode="hybrid",
+                result=core,
+                degraded_reason=degraded_reason,
+            )
         candidate_limit = limit * 2
         text_candidates = self.storage.retrieve_text_candidates(query, limit=candidate_limit, offset=0)
         semantic_candidates, degraded_reason = await self._semantic_candidates(query, limit=candidate_limit)
-        fused = self._fuse(text_candidates, semantic_candidates)[:limit]
-        items = tuple(
-            RetrievalItem(
-                logical_id=item.candidate.logical_id,
-                score=item.rrf_score,
-                source_locator=item.candidate.source_locator,
-                content_preview=item.candidate.content_preview,
-                text_rank=item.text_rank,
-                semantic_rank=item.semantic_rank,
-                rrf_rank=rank,
-                rrf_score=item.rrf_score,
-                text_score=item.text_score,
-                semantic_score=item.semantic_score,
-                metadata=item.candidate.metadata,
-            )
-            for rank, item in enumerate(fused, start=1)
-        )
-        return RetrievalResult(
+        return _fuse_with_core(
             query=query,
-            mode="hybrid",
-            results=items,
-            total_count=len(items),
-            degraded=degraded_reason is not None,
+            text_candidates=text_candidates,
+            semantic_candidates=semantic_candidates,
+            limit=limit,
+            rrf_k=self.rrf_k,
+            mapper=self.compatibility_mapper,
             degraded_reason=degraded_reason,
         )
 
@@ -151,13 +303,12 @@ class RetrievalService:
         *,
         limit: int,
     ) -> tuple[list[RetrievalCandidate], str | None]:
-        if self.embedding_provider is None:
-            logger.warning("retrieval.semantic.degraded reason=embedding_provider_unavailable")
-            return [], "embedding_provider_unavailable"
+        query_vector, degraded_reason = await self._prepare_query_vector(query)
+        if query_vector is None:
+            return [], degraded_reason
         try:
-            query_vector = await self.embedding_provider.embed_query(query, profile=self.profile)
             candidates = self.storage.retrieve_semantic_candidates(
-                query_vector,
+                list(query_vector),
                 profile=self.profile,
                 profile_fingerprint=self.profile_fingerprint,
                 limit=limit,
@@ -165,20 +316,49 @@ class RetrievalService:
         except IncompatibleEmbeddingProfileError:
             logger.warning("retrieval.semantic.degraded reason=incompatible_embedding_profile")
             return [], "incompatible_embedding_profile"
-        except EmbeddingError:
-            logger.warning("retrieval.semantic.degraded reason=embedding_provider_error")
-            return [], "embedding_provider_error"
         except Exception:
             logger.warning("retrieval.semantic.degraded reason=semantic_search_error")
             return [], "semantic_search_error"
         return candidates, None
 
-    def _fuse(
+    async def _prepare_query_vector(
         self,
-        text_candidates: list[RetrievalCandidate],
-        semantic_candidates: list[RetrievalCandidate],
-    ) -> list[_Fused]:
-        return _fuse_candidates(text_candidates, semantic_candidates, rrf_k=self.rrf_k)
+        query: str,
+    ) -> tuple[tuple[float, ...] | None, str | None]:
+        if self.embedding_provider is None:
+            logger.warning("retrieval.semantic.degraded reason=embedding_provider_unavailable")
+            return None, "embedding_provider_unavailable"
+        try:
+            vector = await self.embedding_provider.embed_query(query, profile=self.profile)
+        except EmbeddingError:
+            logger.warning("retrieval.semantic.degraded reason=embedding_provider_error")
+            return None, "embedding_provider_error"
+        except Exception:
+            logger.warning("retrieval.semantic.degraded reason=semantic_search_error")
+            return None, "semantic_search_error"
+        return tuple(float(value) for value in vector), None
+
+    def _resolve_embedding_space(self) -> str | None:
+        resolver = getattr(self.storage, "resolve_embedding_space", None)
+        if not callable(resolver):
+            return None
+        value = resolver(self.profile, self.profile_fingerprint)
+        return value if isinstance(value, str) and value else None
+
+    @staticmethod
+    def _empty_degraded(
+        query: str,
+        mode: RetrievalMode,
+        reason: str | None,
+    ) -> RetrievalResult:
+        return RetrievalResult(
+            query=query,
+            mode=mode,
+            results=(),
+            total_count=0,
+            degraded=True,
+            degraded_reason=reason,
+        )
 
     @staticmethod
     def _candidate_item(
@@ -199,16 +379,6 @@ class RetrievalService:
             metadata=candidate.metadata,
         )
 
-    @staticmethod
-    def _first_ranks_and_scores(
-        candidates: list[RetrievalCandidate],
-    ) -> tuple[dict[str, int], dict[str, float]]:
-        ranks: dict[str, int] = {}
-        scores: dict[str, float] = {}
-        for rank, candidate in enumerate(candidates, start=1):
-            ranks.setdefault(candidate.logical_id, rank)
-            scores.setdefault(candidate.logical_id, candidate.score)
-        return ranks, scores
 
     @staticmethod
     def _validate_page(limit: int, offset: int) -> None:
@@ -237,21 +407,11 @@ class HybridRetrievalService:
     ) -> RetrievalResult:
         if rerank_requested:
             raise ValueError("reranking is not supported in v0.2")
-        fused = _fuse_candidates(text_candidates, semantic_candidates, rrf_k=self.rrf_k)[:limit]
-        items = tuple(
-            RetrievalItem(
-                logical_id=item.candidate.logical_id,
-                score=item.rrf_score,
-                source_locator=item.candidate.source_locator,
-                content_preview=item.candidate.content_preview,
-                text_rank=item.text_rank,
-                semantic_rank=item.semantic_rank,
-                rrf_rank=rank,
-                rrf_score=item.rrf_score,
-                text_score=item.text_score,
-                semantic_score=item.semantic_score,
-                metadata=item.candidate.metadata,
-            )
-            for rank, item in enumerate(fused, start=1)
+        return _fuse_with_core(
+            query=query,
+            text_candidates=text_candidates,
+            semantic_candidates=semantic_candidates,
+            limit=limit,
+            rrf_k=self.rrf_k,
+            mapper=CoreCompatibilityMapper(),
         )
-        return RetrievalResult(query=query, mode="hybrid", results=items, total_count=len(items))
