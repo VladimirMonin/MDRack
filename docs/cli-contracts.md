@@ -1415,6 +1415,79 @@ queries, generated text, provider bodies, and exception strings are not emitted.
 
 ---
 
+## 17. `mdrack resources`
+
+Resource discovery commands require a ready resource-core generation and return only
+caller-owned logical resource/unit identities. They never call an embedding provider.
+
+Both commands accept repeatable scope filters before their final limits:
+`--resource-kind`, `--media-type`, `--source-namespace`, `--representation-kind`,
+`--modality`, `--unit-kind`, and `--facet-any|all|none NAMESPACE=VALUE`.
+
+### 17a. `mdrack resources duplicates`
+
+```
+mdrack resources duplicates <resource-id> [scope filters] [--limit N]
+```
+
+The command reads the selected resource's persisted content hash and returns other
+resources with the same exact byte hash in stable logical-ID order. The query resource
+itself is excluded. Missing resources or resources without a content hash return an
+empty degraded result with `resource_unavailable` or `content_hash_unavailable`.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "query_resource_id": "resource-1",
+    "results": [{"resource_id": "resource-2"}],
+    "total_count": 1,
+    "degraded": false,
+    "degraded_reason": null
+  },
+  "meta": {"command": "resources duplicates"}
+}
+```
+
+### 17b. `mdrack resources similar`
+
+```
+mdrack resources similar <query-unit-id> --space-id <space-id>
+  [scope filters] [--limit N] [--include-same-resource]
+```
+
+The query unit must already be a `whole_resource` unit with a persisted vector in the
+selected space. The stored vector is sent directly to the resource search adapter; no
+query text, provider, pooling, or score boost is involved. By default every unit from
+the query resource is excluded before the final result limit. `--include-same-resource`
+disables that exclusion.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "query_unit_id": "unit-resource-1",
+    "space_id": "visual-space",
+    "results": [
+      {"resource_id": "resource-2", "unit_id": "unit-resource-2", "score": 0.92, "rank": 1}
+    ],
+    "total_count": 1,
+    "degraded": false,
+    "degraded_reason": null
+  },
+  "meta": {"command": "resources similar"}
+}
+```
+
+Missing whole-resource units/vectors return an empty degraded result with
+`branch_unavailable`. Incompatible dimensions or spaces use
+`incompatible_vector_space`; adapter failures use a stable safe degradation category.
+Command-boundary failures use `RESOURCE_DUPLICATE_ERROR` or
+`RESOURCE_SIMILARITY_ERROR` and never serialize raw metadata/facet values, vectors,
+locators, paths, database IDs, or exception text.
+
+---
+
 ## Error Code Reference
 
 | Code | Typical cause |
@@ -1430,6 +1503,8 @@ queries, generated text, provider bodies, and exception strings are not emitted.
 | `IMAGE_INPUT_ERROR` | Direct image ingest omitted both caption and OCR text. |
 | `IMAGE_INGEST_ERROR` | Direct image validation, provider, generation, or storage operation failed. |
 | `IMAGE_SEARCH_ERROR` | Direct image search could not complete. |
+| `RESOURCE_DUPLICATE_ERROR` | Exact resource duplicate lookup could not complete. |
+| `RESOURCE_SIMILARITY_ERROR` | Existing-vector resource similarity lookup could not complete. |
 | `IMAGE_DELETE_ERROR` | Direct image graph deletion could not complete. |
 | `VALIDATION_ERROR` | Invalid argument value (e.g. negative page number). |
 | `INTERNAL_ERROR` | Unhandled exception during command execution. |
@@ -1457,6 +1532,7 @@ All commands read and write the same database file:
 | `eval retrieval` | `<store>/knowledge.db` |
 | `doctor` | `<store>/knowledge.db` |
 | `image ingest/search/delete` | Ready resource-core generation selected by `<store>/active-generation.json` |
+| `resources duplicates/similar` | Ready resource-core generation selected by `<store>/active-generation.json` |
 
 Relative store paths are resolved against the selected `--root`.
 

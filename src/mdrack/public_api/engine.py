@@ -8,6 +8,12 @@ from typing import Any
 from mdrack.application.compatibility import create_application_storage, embedding_space_id
 from mdrack.application.indexing import IndexingService
 from mdrack.application.query import ReadService, SearchService
+from mdrack.application.resources import (
+    DuplicateResourceResult,
+    ResourceQueryScope,
+    ResourceQueryService,
+    SimilarResourceResult,
+)
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.runtime import embedding_profile_from_config
@@ -124,6 +130,36 @@ class MDRackEngine:
     async def search_images_hybrid(self, query: str, *, limit: int = 20) -> ImageSearchResult:
         return await self._image_service().search_hybrid(query, limit=limit)
 
+    def find_resource_duplicates(
+        self,
+        resource_id: str,
+        *,
+        scope: ResourceQueryScope | None = None,
+        limit: int = 20,
+    ) -> DuplicateResourceResult:
+        return self._resource_query_service().find_duplicates(
+            resource_id,
+            scope=scope,
+            limit=limit,
+        )
+
+    def find_similar_resources(
+        self,
+        query_unit_id: str,
+        space_id: str,
+        *,
+        scope: ResourceQueryScope | None = None,
+        limit: int = 20,
+        exclude_same_resource: bool = True,
+    ) -> SimilarResourceResult:
+        return self._resource_query_service().find_similar(
+            query_unit_id,
+            space_id,
+            scope=scope,
+            limit=limit,
+            exclude_same_resource=exclude_same_resource,
+        )
+
     def get_file_by_path(self, relative_path: str) -> dict[str, Any] | None:
         public_reader = getattr(self.read_storage, "get_public_file_by_path", None)
         if callable(public_reader):
@@ -171,6 +207,12 @@ class MDRackEngine:
             profile=self.profile,
         )
         return self._images
+
+    def _resource_query_service(self) -> ResourceQueryService:
+        catalog = getattr(self.storage, "resource_store", None)
+        if catalog is None:
+            raise RuntimeError("active resource-core generation is required for resource operations")
+        return ResourceQueryService(catalog)
 
     def close(self) -> None:
         self.storage.close()

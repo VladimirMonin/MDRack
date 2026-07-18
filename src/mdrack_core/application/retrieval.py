@@ -6,18 +6,28 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 
 from ..domain.errors import (
     BranchExecutionError,
+    CatalogExecutionError,
     DegradationCategory,
     ErrorCategory,
 )
-from ..domain.results import Degradation, SearchResult, SearchResultItem
+from ..domain.resources import UNIT_WHOLE_RESOURCE, ResourceRecord
+from ..domain.results import (
+    Degradation,
+    SearchResult,
+    SearchResultItem,
+    SimilarityRequest,
+    SimilarityResult,
+)
 from ..domain.search import (
     TARGET_RESOURCE,
     LexicalBranch,
     RankedCandidate,
     SearchRequest,
+    SearchScope,
     VectorBranch,
 )
 from ..observability import (
@@ -26,7 +36,8 @@ from ..observability import (
     emit_event,
     safe_fingerprint,
 )
-from ..ports.search import SearchPort
+from ..ports.catalog import ResourceReadPort
+from ..ports.search import SearchPort, VectorSearchPort
 from .fusion import FusionBranch, FusionCandidate, weighted_rrf
 
 _ERROR_TO_DEGRADATION = {
@@ -36,12 +47,253 @@ _ERROR_TO_DEGRADATION = {
     ErrorCategory.ADAPTER_ERROR: DegradationCategory.ADAPTER_ERROR,
 }
 
+_CATALOG_ERROR_TO_DEGRADATION = {
+    ErrorCategory.CATALOG_ERROR: DegradationCategory.ADAPTER_ERROR,
+    ErrorCategory.ADAPTER_TIMEOUT: DegradationCategory.ADAPTER_TIMEOUT,
+}
+
 
 @dataclass(frozen=True)
 class _ExecutedBranch:
     branch_id: str
     weight: float
     candidates: tuple[RankedCandidate, ...]
+
+
+class ResourceDiscoveryService:
+    """Provider-free exact-duplicate and whole-resource similarity queries."""
+
+    _SIMILARITY_BRANCH = "similarity"
+
+    def __init__(
+        self,
+        catalog: ResourceReadPort,
+        search_port: VectorSearchPort | None = None,
+        *,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._catalog = catalog
+        self._search_port = search_port or cast(VectorSearchPort, catalog)
+        self._logger = logger or logging.getLogger(__name__)
+
+    def find_duplicates(
+        self,
+        resource_id: str,
+        *,
+        scope: SearchScope,
+        limit: int,
+    ) -> tuple[ResourceRecord, ...]:
+        """Return other resources with the same byte hash in logical-ID order."""
+        if not isinstance(resource_id, str) or not resource_id.strip():
+            raise ValueError("resource_id must be a non-empty string")
+        if not isinstance(scope, SearchScope):
+            raise ValueError("scope must be a SearchScope")
+        if type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive integer")
+        try:
+            resource = self._catalog.read_resource(resource_id)
+            if resource is None or resource.content_hash is None:
+                return ()
+            matches = self._catalog.find_by_content_hash(resource.content_hash, scope=scope)
+        except CatalogExecutionError:
+            raise
+        except TimeoutError:
+            raise CatalogExecutionError(ErrorCategory.ADAPTER_TIMEOUT) from None
+        except Exception:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+        return tuple(
+            sorted(
+                (item for item in matches if item.resource_id != resource_id),
+                key=lambda item: item.resource_id,
+            )[:limit]
+        )
+
+    def similar(self, request: SimilarityRequest) -> SimilarityResult:
+        """Search from an existing whole-resource vector without provider calls."""
+        if not isinstance(request, SimilarityRequest):
+            raise ValueError("request must be a SimilarityRequest")
+        started = time.perf_counter()
+        self._emit_similarity(
+            "core.similarity.started",
+            request,
+            status=LifecycleStatus.STARTED,
+            requested_limit=request.limit,
+            scope_filter_count=self._scope_filter_count(request.scope),
+        )
+        try:
+            unit = self._catalog.read_unit(request.query_unit_id)
+            if unit is None or unit.unit_kind != UNIT_WHOLE_RESOURCE:
+                return self._unavailable(request, started)
+            vector = self._catalog.read_vector(request.query_unit_id, request.space_id)
+            if vector is None:
+                return self._unavailable(request, started)
+        except CatalogExecutionError as error:
+            return self._completed(
+                request,
+                (),
+                (
+                    Degradation(
+                        self._SIMILARITY_BRANCH,
+                        _CATALOG_ERROR_TO_DEGRADATION[error.category],
+                    ),
+                ),
+                started,
+            )
+        except TimeoutError:
+            return self._completed(
+                request,
+                (),
+                (Degradation(self._SIMILARITY_BRANCH, DegradationCategory.ADAPTER_TIMEOUT),),
+                started,
+            )
+        except Exception:
+            return self._completed(
+                request,
+                (),
+                (Degradation(self._SIMILARITY_BRANCH, DegradationCategory.ADAPTER_ERROR),),
+                started,
+            )
+
+        scope = self._whole_resource_scope(request.scope)
+        if scope is None:
+            return self._completed(request, (), (), started)
+        candidate_limit = request.limit + (1 if request.exclude_same_resource else 0)
+        selected: list[RankedCandidate] = []
+        try:
+            while True:
+                branch = VectorBranch(
+                    self._SIMILARITY_BRANCH,
+                    request.space_id,
+                    vector.vector,
+                    candidate_limit=candidate_limit,
+                )
+                raw_candidates = self._search_port.search_vector(branch, scope=scope)
+                candidates = RetrievalService._validate_candidates(branch, raw_candidates)
+                selected = [
+                    candidate
+                    for candidate in candidates
+                    if not request.exclude_same_resource
+                    or candidate.resource_id != unit.resource_id
+                ][: request.limit]
+                if len(selected) == request.limit or len(candidates) < candidate_limit:
+                    break
+                candidate_limit *= 2
+        except BranchExecutionError as error:
+            return self._completed(
+                request,
+                (),
+                (Degradation(self._SIMILARITY_BRANCH, _ERROR_TO_DEGRADATION[error.category]),),
+                started,
+            )
+        except TimeoutError:
+            return self._completed(
+                request,
+                (),
+                (Degradation(self._SIMILARITY_BRANCH, DegradationCategory.ADAPTER_TIMEOUT),),
+                started,
+            )
+        except Exception:
+            return self._completed(
+                request,
+                (),
+                (Degradation(self._SIMILARITY_BRANCH, DegradationCategory.ADAPTER_ERROR),),
+                started,
+            )
+
+        items = tuple(
+            SearchResultItem(
+                logical_id=candidate.resource_id,
+                resource_id=candidate.resource_id,
+                unit_id=candidate.unit_id,
+                score=candidate.raw_score,
+                rank=rank,
+                evidence=(candidate,),
+                metadata={},
+            )
+            for rank, candidate in enumerate(selected, start=1)
+        )
+        return self._completed(request, items, (), started)
+
+    @staticmethod
+    def _whole_resource_scope(scope: SearchScope) -> SearchScope | None:
+        if scope.unit_kinds and UNIT_WHOLE_RESOURCE not in scope.unit_kinds:
+            return None
+        return SearchScope(
+            resource_kinds=scope.resource_kinds,
+            media_types=scope.media_types,
+            source_namespaces=scope.source_namespaces,
+            representation_kinds=scope.representation_kinds,
+            modalities=scope.modalities,
+            unit_kinds=(UNIT_WHOLE_RESOURCE,),
+            facets_any=scope.facets_any,
+            facets_all=scope.facets_all,
+            facets_none=scope.facets_none,
+        )
+
+    def _unavailable(self, request: SimilarityRequest, started: float) -> SimilarityResult:
+        return self._completed(
+            request,
+            (),
+            (Degradation(self._SIMILARITY_BRANCH, DegradationCategory.BRANCH_UNAVAILABLE),),
+            started,
+        )
+
+    def _completed(
+        self,
+        request: SimilarityRequest,
+        items: tuple[SearchResultItem, ...],
+        degradations: tuple[Degradation, ...],
+        started: float,
+    ) -> SimilarityResult:
+        self._emit_similarity(
+            "core.similarity.completed",
+            request,
+            status=LifecycleStatus.DEGRADED if degradations else LifecycleStatus.COMPLETED,
+            result_count=len(items),
+            degraded_branch_count=len(degradations),
+            elapsed_ms=RetrievalService._elapsed_ms(started),
+        )
+        return SimilarityResult(
+            request.query_unit_id,
+            request.space_id,
+            items,
+            degradations,
+        )
+
+    def _emit_similarity(
+        self,
+        name: str,
+        request: SimilarityRequest,
+        **fields: object,
+    ) -> None:
+        emit_event(
+            self._logger,
+            SafeEvent(
+                name=name,
+                fields={
+                    "branch_fingerprint": safe_fingerprint(request.query_unit_id),
+                    "space_fingerprint": safe_fingerprint(request.space_id),
+                    **fields,
+                },
+            ),
+        )
+
+    @staticmethod
+    def _scope_filter_count(scope: SearchScope) -> int:
+        return sum(
+            len(values)
+            for values in (
+                scope.resource_kinds,
+                scope.media_types,
+                scope.source_namespaces,
+                scope.representation_kinds,
+                scope.modalities,
+                scope.unit_kinds,
+                scope.facets_any,
+                scope.facets_all,
+                scope.facets_none,
+            )
+        )
 
 
 class RetrievalService:
