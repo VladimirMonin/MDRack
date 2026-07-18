@@ -1,8 +1,9 @@
 # SQLite persistence
 
-MDRack stores all persistent state in one SQLite database, normally
-`.mdrack/knowledge.db`. Source Markdown and asset files remain outside the
-database and are never rewritten by indexing.
+SQLite is MDRack's only persistent backend. The legacy compatibility store is
+normally `.mdrack/knowledge.db`; resource-core data is built in a separate store
+generation selected through an app-owned pointer. Source Markdown and image bytes
+remain outside databases and are never rewritten by indexing.
 
 ## Connection and migration rules
 
@@ -21,10 +22,34 @@ one `BEGIN IMMEDIATE` transaction.
 | `0002` | Content-bearing `chunks_fts` FTS5 table, maintained manually. |
 | `0003` | Logical IDs, parser/chunker provenance, source lines, block IDs, and richer run counters. |
 | `0004` | Complete embedding-profile identity/fingerprint fields and vector fingerprint binding. |
-| `0005` | Assets, asset references, and reserved asset descriptions. |
-| `0006` | Chunk character offsets plus explicit block and chunk kinds. |
+| `0005` | Immutable historical asset, asset-reference, and reserved-description tables. Current Markdown indexing does not populate or maintain them. |
+| `0006` | Chunk character offsets plus explicit block and chunk kinds; highest migration accepted by the active legacy composition. |
+| `0007` | Create-only generic resources, representations, search units, embedding spaces/vectors, facets, and manual resource FTS. No legacy row is changed or backfilled. |
+
+The runner validates a compiled ordered filename/content manifest and digest before
+touching a connection. `apply_migrations` is intentionally bounded at `0006` for
+the legacy database; only explicit candidate composition may apply `0007`.
+
+## Store generations and recovery
+
+Generation metadata records identity, readiness, migration manifest, contract
+version, producer fingerprints, verification time, and a stable failure reason.
+States are `legacy_only`, `rebuild_required`, `building`, `ready`, and `failed`;
+only `ready` may serve core-backed search/write.
+
+A candidate is created exclusively, migrated, rebuilt, verified (FK/integrity,
+canonical records, FTS/vector/facet graph), checkpointed, closed and fsynced before
+its ready metadata becomes durable. Under one-writer quiescence, the active pointer
+is replaced and its directory fsynced. Readers see the old or new generation only.
+Rollback switches the pointer to the untouched retained legacy generation. Cleanup
+is a separate destructive action and is not part of rollback or release acceptance.
 
 ## Current ER model
+
+The diagram below records the immutable legacy `0000`–`0006` schema, including
+the dormant historical `0005` tables. It is a DDL history, not a statement that
+current Markdown indexing owns every table shown. Migration `0007` adds a separate
+`core_*` graph; it does not replace or backfill these tables.
 
 ```mermaid
 erDiagram
@@ -145,24 +170,30 @@ neither column is individually unique.
 ER link expresses the intended one-row-per-chunk projection. SQLite FTS5 also
 creates internal shadow tables; they are not application contracts.
 
-## Foreign-key semantics that matter
+## Legacy foreign-key semantics that matter
 
 - `sections.file_id` and `chunks.file_id` cascade on file deletion.
 - `sections.parent_id` and `chunks.section_id` use SQLite's default `NO ACTION`.
 - `chunk_embeddings.chunk_id` cascades; `profile_name` uses `NO ACTION`.
 - `files.index_run_id` and `diagnostics.run_id` use `NO ACTION`.
-- `asset_references.file_id` cascades; its nullable `asset_id` becomes `NULL`
-  when an asset is deleted.
-- `asset_descriptions.asset_id` cascades.
+- Historical `asset_references.file_id` cascades; its nullable `asset_id` becomes
+  `NULL` when an asset is deleted. Historical `asset_descriptions.asset_id`
+  cascades. Current Markdown indexing does not exercise these `0005` relations.
 
 ## Atomic file replacement
 
-One file replacement runs under a savepoint. The adapter removes stale asset
-references and orphan assets, FTS rows, chunks, and sections; then writes the
-file, sections, chunks, FTS rows, vectors, assets, and references. It validates
-stored section and chunk counts before commit. A failure rolls the whole file
-replacement back. Run metadata and per-file diagnostics commit separately, so a
-multi-file run can be `partial_success` without leaving a half-written file.
+One file replacement runs under a savepoint. The adapter removes stale FTS rows,
+chunks, and sections, then writes the file, sections, chunks, FTS rows, and
+optional vectors. It validates stored section and chunk counts before commit. A
+failure rolls the whole file replacement back. Run metadata and per-file
+diagnostics commit separately, so a multi-file run can be `partial_success`
+without leaving a half-written file. Markdown replacement neither writes nor
+deletes the dormant historical `0005` asset tables.
+
+Resource replacement is a separate serialized transaction owned by
+`SQLiteResourceStore`. Core preflight and all provider/filesystem work finish first.
+Resource children, manual FTS, vectors, facets, counts, and integrity commit together;
+failure preserves the previous complete graph. Delete is atomic and idempotent.
 
 ## FTS and vectors
 
@@ -177,8 +208,10 @@ This is a linear scan; no ANN or SQLite vector extension is present.
 
 ## Identity and source persistence
 
-Logical file, section, block, chunk, asset, and reference IDs are distinct from
-SQLite record IDs. Public source locators contain only a portable root ID,
+Logical file, section, block, and chunk IDs are distinct from SQLite record IDs.
+The dormant historical `0005` schema also has asset/reference identifiers, but
+current Markdown indexing does not create them and they are not a current public
+identity surface. Public source locators contain only a portable root ID,
 normalized relative POSIX path, line range, optional half-open character range,
 heading array, structural kinds, and logical block/chunk IDs.
 
@@ -190,9 +223,12 @@ lossless whole-document archive.
 ## Primary source anchors
 
 - Migrations: `src/mdrack/storage/sqlite/migrations/0000_schema_migrations.sql`
-  through `0006_complete_provenance.sql`
+  through `0007_resource_core.sql`
 - Runner: `src/mdrack/storage/sqlite/migrations.py`
 - Connection: `src/mdrack/storage/sqlite/connection.py`
 - Atomic adapter: `src/mdrack/adapters/sqlite/index_storage.py`
+- Resource adapter: `src/mdrack/adapters/sqlite/resource_store.py`
+- Generation manager/runtime: `src/mdrack/application/generation_manager.py`,
+  `src/mdrack/adapters/sqlite/generation_runtime.py`
 - FTS: `src/mdrack/storage/sqlite/fts.py`
 - Vectors: `src/mdrack/storage/sqlite/vector.py`

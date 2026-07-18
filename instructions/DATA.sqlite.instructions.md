@@ -31,13 +31,16 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 - `0002`: manually maintained content-bearing FTS5 index.
 - `0003`: logical IDs and indexing provenance.
 - `0004`: complete embedding-profile identity and fingerprints.
-- `0005`: assets, references, and reserved descriptions.
+- `0005`: immutable historical asset/reference/description tables; current
+  Markdown indexing has no production owner for them.
 - `0006`: complete chunk offsets and block/chunk kinds.
+- `0007`: provider-neutral resources, representations, search units, embedding spaces,
+  unit embeddings, facets, resource-facet assignments, FTS, and supporting indexes.
 
 Future migrations extend this ledger; this instruction must be updated when the
 current schema advances.
 
-## Approved v0.3 generation and schema preconditions
+## Implemented v0.3 generation and schema contract
 
 - Build a v0.3 resource index in a separate candidate database/store generation,
   never in the active v0.2 file. A v0.2 build must never be asked to open `0007`.
@@ -49,11 +52,11 @@ current schema advances.
   or new only. Rollback switches to the untouched retained v0.2 generation.
 - Retain the complete old generation read-only for at least one compatibility
   release. Cleanup is a separate explicitly authorized destructive action.
-- No `0007` SQL may be authored before an independent schema review maps every
-  frozen core field/invariant to exact DDL, FK action, CHECK, UNIQUE/index,
-  transaction, and contract test.
+- Migration `0007` was authored after independent schema review mapped every frozen
+  core field/invariant to exact DDL, FK action, CHECK, UNIQUE/index, transaction, and
+  contract test. Any later schema change requires a new immutable migration and review.
 - The create-only `0007` must not mutate/backfill legacy rows or drop legacy tables.
-- The schema review must settle canonical source identity/rename semantics,
+- The accepted schema review settled canonical source identity/rename semantics,
   same-resource graph constraints, explicit delete actions, ordinal/range/type
   checks, NULL-safe facet deduplication, orphan policy, vector codec/finite values/
   dimensions/metrics/fingerprint behavior, and indexes for pre-limit filters.
@@ -61,9 +64,9 @@ current schema advances.
   an active caller transaction. Validation, provider calls, and filesystem work
   finish before it opens; graph/FTS/vector/facet checks commit together; any failure
   preserves the prior complete graph.
-- Candidate path/ID, lock and busy behavior, WAL/SHM, reader lifecycle,
-  checkpoint/fsync, atomic switch, interruption recovery, retention, and cleanup
-  semantics must be tested before active cutover.
+- Test coverage must continue to protect candidate path/ID, lock and busy behavior,
+  WAL/SHM, reader lifecycle, checkpoint/fsync, atomic switch, interruption recovery,
+  retention, and separately authorized cleanup semantics.
 
 ## Transaction and integrity invariants
 
@@ -74,8 +77,10 @@ current schema advances.
 - FTS rows are maintained with chunk writes/deletes; do not assume automatic triggers.
 - Embedding profile name, fingerprint, and dimensions must match before vector use.
 - Vectors remain JSON-encoded float arrays in SQLite and are scanned in Python.
-- Asset references reject external, absolute, and traversal targets and resolve beneath the configured root.
-- Ambiguous chunk-to-asset mapping fails closed.
+- Current Markdown indexing treats eligible image alt/alias text as prose only. It
+  does not resolve image targets or create, update, or delete rows in the dormant
+  `0005` asset/reference tables. Explicit direct-image ingestion persists a typed
+  resource through the separate `0007` resource-store transaction.
 
 ## Identity rules
 

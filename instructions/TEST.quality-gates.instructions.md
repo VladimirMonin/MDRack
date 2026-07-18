@@ -32,9 +32,14 @@ and any skipped gate with a concrete reason.
 - Retrieval/public DTO: text/semantic/hybrid parity across CLI and `MDRackEngine`,
   scores/ranks, logical IDs, heading arrays, source locators, degradation, pagination.
 - SQLite/migrations: fresh database, upgrade path, fail-closed migration discovery,
-  foreign keys, atomic replacement, FTS/vector/profile/asset integrity.
-- Assets: traversal/external rejection, existing/missing status, deduplication, and
-  unambiguous asset-to-chunk ownership.
+  foreign keys, atomic replacement, FTS/vector/profile/resource integrity, and the
+  dormant historical status of legacy `0005` asset tables.
+- Markdown images: eligible alt/textual alias appears once as prose; referenced files
+  are never resolved, inspected, or diagnosed; no asset graph/reference or image
+  resource is created; source bytes and stable IDs remain unchanged.
+- Direct images: explicit local-file ingestion, deterministic resource identity,
+  typed text/visual spaces, atomic replacement/delete, pre-limit filters, and safe
+  missing/inaccessible-path failures across CLI and `MDRackEngine`.
 - Documentation: relative links, heading anchors, Mermaid syntax/rendering or waiver,
   instruction routing/frontmatter, and `git diff --check`.
 - Packaging/public CLI: use installed-package or live CLI checks when the claim crosses

@@ -7,4 +7,4 @@ def test_version_exists() -> None:
 
     assert hasattr(mdrack, "__version__")
     assert isinstance(mdrack.__version__, str)
-    assert mdrack.__version__ == "0.2.0"
+    assert mdrack.__version__ == "0.3.0"

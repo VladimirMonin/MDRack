@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "generated_for": "release",
+  "status": "ok",
+  "checks": [
+    {"code": "unit_offline", "status": "ok", "counts": {"passed": 1266}},
+    {"code": "local_components", "status": "ok", "counts": {"sqlite_smokes": 2}},
+    {"code": "installed_package", "status": "ok", "counts": {"artifacts": 2}},
+    {"code": "compatibility_imports", "status": "ok", "counts": {"modules": 18, "symbols": 82, "public_exports": 23, "parity_modes": 3}},
+    {"code": "privacy_matrix", "status": "ok"},
+    {"code": "documentation", "status": "ok", "counts": {"mermaid": 5}},
+    {"code": "build_reproducibility", "status": "ok", "counts": {"artifacts": 2, "reproductions": 2}},
+    {"code": "network_blocked", "status": "ok", "counts": {"attempted": 0}}
+  ]
+}

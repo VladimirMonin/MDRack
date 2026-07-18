@@ -9,6 +9,16 @@ from mdrack.application.resources import (
     SimilarResourceResult,
 )
 from mdrack.application.retrieval import HybridRetrievalService
+from mdrack.ingestion.images import (
+    ExtractedImageText,
+    ImageEmbeddingSpace,
+    ImageExtractor,
+    ImageIngestionResult,
+    ImageSearchItem,
+    ImageSearchResult,
+    StaticImageExtractor,
+    VisualEmbeddingProvider,
+)
 from mdrack.public_api.engine import MDRackEngine
 from mdrack.public_api.models import (
     EmbeddingCapabilities,
@@ -27,6 +37,12 @@ __all__ = [
     "DuplicateResourceResult",
     "FacetFilter",
     "HybridRetrievalService",
+    "ExtractedImageText",
+    "ImageEmbeddingSpace",
+    "ImageExtractor",
+    "ImageIngestionResult",
+    "ImageSearchItem",
+    "ImageSearchResult",
     "IndexingResult",
     "MDRackEngine",
     "RetrievalCandidate",
@@ -36,4 +52,6 @@ __all__ = [
     "SimilarResourceItem",
     "SimilarResourceResult",
     "SourceLocator",
+    "StaticImageExtractor",
+    "VisualEmbeddingProvider",
 ]

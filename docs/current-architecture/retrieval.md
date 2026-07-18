@@ -1,9 +1,10 @@
 # Retrieval
 
-`RetrievalService` is the canonical application path for text, semantic, and
-hybrid retrieval. The SQLite adapter emits normalized candidates; the service
-assigns public ranks and performs hybrid fusion; CLI and `MDRackEngine` serialize
-the same `RetrievalResult` DTO.
+Legacy document retrieval remains exposed through the compatibility
+`RetrievalService`. The v0.3 canonical resource path prepares query vectors in
+`mdrack`, executes ready lexical/vector branches through `mdrack_core`, applies
+scope in the adapter before candidate limits, groups evidence per resource, and
+performs deterministic weighted RRF.
 
 ## Retrieval sequence
 
@@ -66,7 +67,7 @@ the selected rows with source locators. This path is O(n) in stored vectors.
 A semantic query is sent to the provider even when its text is empty; there is no
 current empty-query short circuit at the service boundary.
 
-## Hybrid mode and RRF
+## Legacy document hybrid mode and RRF
 
 Hybrid mode asks each branch for `2 * limit` candidates. Candidates are
 identified by public logical chunk ID. Only the first occurrence in each branch
@@ -86,6 +87,19 @@ search fails, the service returns `degraded=true` with a reason and any availabl
 results. `MDRackEngine` preserves that result. The CLI maps semantic degradation
 to `EMBEDDING_ERROR`; hybrid CLI search can return text results with degradation,
 but errors if degradation leaves the result empty.
+
+Core resource retrieval instead carries stable per-branch degradation categories.
+An allowed failed vector branch may degrade to lexical results; adapter errors and
+space/dimension mismatch never include raw exceptions, query text, vectors, or paths.
+
+## Resource discovery and scope
+
+`SearchScope` can filter resource kind, media type, source namespace,
+representation kind, modality, unit kind, and facets (`any`/`all`/`none`). SQLite
+applies every filter before branch limits. Resource-target search groups units
+within each branch before RRF so a long document does not gain rank merely by
+having more chunks. Exact duplicate lookup uses `content_hash`; semantic resource
+similarity uses an already persisted whole-resource vector and explicit space.
 
 ## Public result contract
 
@@ -118,3 +132,7 @@ completion or model lifecycle call substitutes for reranking. `rerank_rank` and
 - FTS: `src/mdrack/storage/sqlite/fts.py`, `src/mdrack/search/text.py`
 - Vector scan: `src/mdrack/storage/sqlite/vector.py`
 - CLI mapping: `src/mdrack/cli/commands/search.py`
+- Core retrieval/fusion: `src/mdrack_core/application/retrieval.py`,
+  `src/mdrack_core/application/fusion.py`
+- Resource discovery façade: `src/mdrack/application/resources.py`
+- SQLite resource search: `src/mdrack/adapters/sqlite/resource_store.py`

@@ -1,12 +1,12 @@
 # MDRack
 
-Local Python 3.11+ command-line and embedded Markdown knowledge rack for AI
-agents.
+MDRack 0.3 is a local Python 3.11+ command-line and embedded retrieval rack for
+Markdown documents and explicitly supplied images.
 
-MDRack indexes Markdown into structural retrieval chunks, stores metadata,
-FTS5 indexes, JSON-encoded vectors, and asset provenance in SQLite, obtains
-embeddings through an LM Studio HTTP endpoint, and returns stable JSON results
-with portable source locators.
+The distribution contains a stdlib-only `mdrack_core` package for provider- and
+persistence-neutral resource indexing/retrieval contracts plus the `mdrack`
+application package for Markdown/image ingestion, SQLite, LM Studio integration,
+Click JSON commands, and `MDRackEngine`.
 
 ## Quick start
 
@@ -27,14 +27,14 @@ LM Studio model-management commands. Host applications can use
 
 1. The default markdown-it adapter parses UTF-8 Markdown into source blocks
    with H1–H6 heading paths and exact line/character provenance.
-2. Structural chunker v2 applies separate prose, Python, code, table, Mermaid,
-   and image-reference policies.
-3. A per-file SQLite transaction replaces sections, chunks, FTS rows, optional
-   vectors, assets, and references atomically.
-4. Retrieval uses FTS5 text ranking, LM Studio query embeddings with a Python
-   cosine scan, or deterministic application-level RRF fusion.
-5. CLI and embedded search return the same logical identities, score/rank
-   fields, heading arrays, and `SourceLocator` shape.
+2. Markdown image syntax contributes only safe textual alt/alias prose; paths and
+   referenced files are never inspected or indexed as assets.
+3. The app projects documents into typed core resources and writes a complete
+   graph atomically to a ready SQLite store generation.
+4. Core retrieval accepts ready lexical/vector branches, applies scope filters
+   before limits, groups resource evidence, and performs deterministic weighted RRF.
+5. Explicit image ingestion stores derived caption/OCR text and ready vectors,
+   never source bytes; duplicate and whole-resource similarity use logical IDs.
 
 ## Documentation
 
@@ -47,19 +47,24 @@ LM Studio model-management commands. Host applications can use
 - [CLI and embedded interfaces](docs/current-architecture/public-interfaces.md)
 - [Current limitations](docs/current-architecture/limitations.md)
 - [CLI contracts](docs/cli-contracts.md)
+- [v0.3 compatibility registry](docs/compatibility/v0.3-compatibility-registry.md)
 - [Recovery procedures](docs/recovery.md)
 - [ADR-0001: reranking deferred](docs/decisions/0001-reranking-deferred.md)
+- [ADR-0002: provider/storage-neutral core](docs/decisions/0002-provider-storage-neutral-core.md)
+- [v0.3 release evidence](docs/evidence/v0.3-release-gate.md)
 
 Files under `docs/plans/` and the legacy architecture/design documents are
 historical unless explicitly marked as an active plan. They are not the current
 product contract.
 
-## Image assets
+## Images
 
-The structural parser records Markdown images, Obsidian embeds, and HTML `img`
-references as a portable local asset graph. Search uses only alt text and
-immediate adjacent document text. MDRack performs no OCR, vision inference,
-visual embedding, network fetch, or source/asset mutation.
+Markdown image syntax never starts image ingestion. It preserves eligible alt or
+textual alias once as ordinary prose and discards target/path/title/dimensions.
+`mdrack image ingest` is a separate explicit local-file operation. Caption/OCR
+text is caller-supplied or produced by an injected extractor; live LM Studio use
+requires an explicit provider choice. Source bytes remain outside SQLite and are
+never modified.
 
 ## Known limitations
 
@@ -70,15 +75,19 @@ visual embedding, network fetch, or source/asset mutation.
 - Production reranking is disabled. `rerank_rank` and `rerank_score` remain
   `null`; non-null reranker injection fails closed.
 - Legacy `files` and `sections` inspection commands still expose internal record
-  IDs, unlike public logical-ID read and retrieval contracts.
+  IDs; new resource/image/search contracts expose logical IDs only.
+- The resource-core schema lives in candidate store generations. Only a verified
+  `ready` generation may serve resource search/write; cleanup is never automatic.
 
 See the complete [limitations ledger](docs/current-architecture/limitations.md).
 
 ## Verification and recovery
 
 Run the complete offline verification suite with `scripts/verify.sh` on Linux or
-`scripts/verify.ps1` on Windows. Migration, reindex, model-change, and rollback
-procedures are documented in [recovery](docs/recovery.md).
+`scripts/verify.ps1` on Windows. Release acceptance additionally builds wheel and
+sdist and runs `scripts/check_installed_package.py` from an isolated installed
+wheel outside the source tree. Migration, generation cutover, rollback, and
+retention procedures are documented in [recovery](docs/recovery.md).
 
 For a reproducible Windows executable build, see
 [Windows EXE build](docs/windows-exe-build.md).

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mdrack"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local command-line Markdown knowledge rack for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -48,4 +48,4 @@ asyncio_mode = "auto"
 packages = ["src/mdrack", "src/mdrack_core"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/docs/evidence/v0.2-release-gate.json"]
+exclude = ["/docs/evidence/*.json", "/docs/evidence/*.md"]

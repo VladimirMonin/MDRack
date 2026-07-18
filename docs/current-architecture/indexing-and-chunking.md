@@ -1,8 +1,8 @@
 # Indexing and structural chunking
 
 The default indexing path is structural and source-preserving. Markdown remains
-external and read-only; MDRack stores derived blocks, chunks, provenance, search
-copies, vectors, and asset metadata.
+external and read-only; the application projects prepared document resources,
+units and ready vectors into the provider-free core contract.
 
 ## Indexing sequence
 
@@ -14,7 +14,7 @@ sequenceDiagram
     participant Scanner as "Markdown scanner"
     participant Parser as "MarkdownItParser"
     participant Chunker as "StructuralChunker"
-    participant Assets as "Asset graph"
+    participant Projection as "Resource projection"
     participant Embedder as "EmbeddingProvider"
     participant Storage as "SQLiteIndexStorage"
 
@@ -30,13 +30,13 @@ sequenceDiagram
         Parser-->>Service: "Document and SourceBlock records"
         Service->>Chunker: "build bounded RetrievalChunk records"
         Chunker-->>Service: "display text, embedding text, exact spans"
-        Service->>Assets: "resolve local image references"
-        Assets-->>Service: "assets and references"
+        Service->>Projection: "project document resource graph"
+        Projection-->>Service: "typed resources and units"
         opt Embedding provider configured
             Service->>Embedder: "embed chunk embedding_text values"
             Embedder-->>Service: "vectors"
         end
-        Service->>Storage: "replace_file atomically"
+        Service->>Storage: "replace legacy file and ready resource graph atomically"
     end
 
     loop Each deleted file
@@ -69,7 +69,9 @@ normal scans already perform change detection.
 frontmatter, and emits parser-independent `Document` and `SourceBlock` values.
 The parser recognizes H1–H6 headings, paragraphs, lists, blockquotes and
 callouts, fenced and indented code, Mermaid, tables, thematic breaks, Markdown
-images, Obsidian embeds, and HTML `img` blocks.
+images, Obsidian embeds, and HTML `img`. Image syntax is projected to ordinary
+prose only when it has a non-empty textual alt/alias; paths, targets, titles,
+dimensions, bare/numeric aliases, and referenced files are ignored.
 
 Every block has a one-based line span. The structural path also carries half-open
 character offsets `[start_offset, end_offset)`. Heading paths are ordered tuples
@@ -98,7 +100,7 @@ retrieval chunks. Other blocks use type-specific policies:
 | Python code | Prefer top-level class, function, and async-function AST boundaries; invalid Python falls back to line windows. |
 | Other code / Mermaid | Use bounded line windows; an oversized individual line is fragmented into exact bounded slices. |
 | Table | Repeat header rows for retrieval; a single unrepresentable row/header uses a bounded hash marker. |
-| Image reference | Produce at most one bounded chunk from deduplicated alt and adjacent text; references with no searchable text produce no retrieval chunk. |
+| Image syntax | Eligible alt/textual alias participates once as ordinary prose; no image-reference block, asset graph, file access, or image resource is created. |
 
 Normal prose uses `target_chunk_chars`; every output also obeys
 `hard_limit_chars` and the estimated-token limit. `min_chunk_chars` only enables
@@ -112,10 +114,11 @@ neighboring chunks.
 
 ## Persistence handoff
 
-The prepared file contains file metadata, sections, chunks, assets, references,
-and optional vectors. `SQLiteIndexStorage.replace_file` removes stale derived
-rows, writes the complete new graph, validates section/chunk counts, and commits
-within one savepoint. On error it rolls back the replacement.
+The compatibility path still prepares file metadata, sections, chunks, and
+optional vectors. The v0.3 projection also prepares a complete core resource graph.
+The core validates ownership, UTF-8/JSON/vector invariants before the resource
+adapter opens its serialized transaction. Any write/FTS/vector/facet failure leaves
+the prior complete graph visible.
 
 ## Primary source anchors
 
@@ -124,5 +127,7 @@ within one savepoint. On error it rolls back the replacement.
 - Structural policies and exact spans: `src/mdrack/application/chunking.py`
 - Scanner: `src/mdrack/indexing/scanner.py`
 - Atomic handoff: `src/mdrack/adapters/sqlite/index_storage.py`
+- Core projection: `src/mdrack/application/compatibility.py`
+- Provider-free validation: `src/mdrack_core/application/indexing.py`
 - Domain records: `src/mdrack/domain/blocks.py`,
   `src/mdrack/domain/documents.py`, `src/mdrack/domain/chunks.py`

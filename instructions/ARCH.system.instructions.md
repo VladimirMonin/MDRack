@@ -15,7 +15,8 @@ indexing and retrieval system.
 
 - `domain/` owns value objects and invariants without CLI, SQLite, HTTP, or Click dependencies.
 - `ports/` defines storage and embedding capabilities consumed by application services.
-- `application/` orchestrates indexing, chunking, assets, reads, and retrieval primarily
+- `application/` orchestrates Markdown indexing, chunking, reads, retrieval, and
+  explicit direct-image ingestion primarily
   through ports. The current bounded exception is `IndexingService`: it imports and
   constructs the concrete `MarkdownItParser` default when no parser is injected.
 - `adapters/` implements ports, including the canonical SQLite composition.
@@ -37,7 +38,10 @@ explicitly changes that architecture.
   default-parser exception or describe it as edge-only composition. Moving that default
   to the composition edge requires a separately scoped architecture change.
 - Structural chunking owns exact source spans and distinct display/embedding text.
-- Asset discovery is local/offline and never mutates Markdown or fetches remote files.
+- Markdown image syntax contributes eligible alt/textual alias as prose only; normal
+  Markdown indexing neither inspects referenced files nor creates an asset graph.
+  Explicit direct-image ingestion is a separate local-file path. Neither path mutates
+  Markdown or fetches remote files.
 - Text, semantic, and hybrid retrieval converge on the same public result DTO.
 - Hybrid fusion and ranking policy live in the application layer, not SQLite.
 - Production reranking is unsupported; non-null reranker injection must fail closed.
@@ -46,8 +50,8 @@ explicitly changes that architecture.
 ## Approved v0.3 transition contract
 
 - The approved reusable boundary is a separate `src/mdrack_core/` import root in
-  the existing distribution. Until its reviewed implementation lands, current
-  `mdrack` behavior remains authoritative.
+  the existing distribution. Its reviewed v0.3 implementation is current; `mdrack`
+  remains the compatibility/application owner around the reusable core.
 - `mdrack_core` is stdlib-only and must not import `mdrack`, Click, HTTP, SQLite,
   Markdown/parser, provider/model, filesystem, or network code.
 - Current Markdown IR, `PreparedFile`, `SourceLocator`, `EmbeddingProfile`, and

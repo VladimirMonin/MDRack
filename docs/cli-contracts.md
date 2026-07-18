@@ -348,8 +348,9 @@ For hybrid results, `score` and `rrf_score` are the same RRF score (higher is
 better), and `rrf_rank` is the 1-based fused position. `text_score`,
 `semantic_score`, `text_rank`, and `semantic_rank` preserve the component
 candidate scores and positions; each may be `null` when the item is absent from
-that branch. Production v0.2 performs no reranking, so `rerank_rank` and
-`rerank_score` are always `null`.
+that branch. Current v0.3 preserves the legacy-compatible RRF-only behavior: it
+performs no production reranking, so `rerank_rank` and `rerank_score` are always
+`null`; non-null reranker injection is rejected.
 
 ### 3d. Result field contract (all modes)
 
@@ -364,8 +365,8 @@ that branch. Production v0.2 performs no reranking, so `rerank_rank` and
 | `semantic_rank` | integer or null | 1-based position in semantic candidates. |
 | `rrf_rank` | integer or null | 1-based fused rank; populated only for hybrid results. |
 | `rrf_score` | float or null | Reciprocal Rank Fusion score; populated only for hybrid results and equal to `score`. |
-| `rerank_rank` | null | Reserved for a future reranker; always `null` in production v0.2. |
-| `rerank_score` | null | Reserved for a future reranker; always `null` in production v0.2. |
+| `rerank_rank` | null | Reserved for a future reranker; always `null` in current v0.3 legacy-compatible retrieval. |
+| `rerank_score` | null | Reserved for a future reranker; always `null` in current v0.3 legacy-compatible retrieval. |
 | `content_preview` | string | Candidate preview; highlighted FTS5 snippet for text-origin candidates, otherwise up to 200 content characters. |
 | `snippet` | string | Compatibility alias equal to `content_preview`. |
 | `file` | string | Compatibility projection of `source_locator.relative_path`. |

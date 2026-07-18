@@ -1,71 +1,61 @@
-# Assets
+# Images: Markdown projection and direct ingestion
 
-MDRack indexes image references as local provenance. It does not inspect image
-semantics or turn images into embeddings.
+MDRack 0.3 deliberately separates Markdown image syntax from explicit image
+ingestion. Neither path fetches remote data or mutates source files.
 
-## Supported references
+## Markdown image policy
 
-The markdown-it adapter recognizes:
+The markdown-it adapter recognizes Markdown images, Obsidian embeds, and HTML
+`img` syntax only to project eligible human-readable text into normal prose:
 
-- Markdown images such as `![alt](path)`;
-- Obsidian embeds such as `![[path|alias]]`;
-- HTML `img` references.
+- a non-empty Markdown/HTML alt value is kept once;
+- a non-empty textual Obsidian alias is kept once;
+- bare, empty, or numeric aliases contribute no text;
+- target paths, `src`, titles, and dimensions contribute no text or metadata;
+- surrounding prose remains in its original order and is not duplicated.
 
-Standalone references inside paragraphs are separated into exact
-`IMAGE_REFERENCE` source blocks. Each block retains syntax, raw reference,
-heading path, alt text, surrounding text when present, and line/offset span.
+The scanner does not resolve, stat, open, hash, MIME-probe, or diagnose the
+referenced file. Production Markdown indexing creates no asset graph,
+`image_reference` chunk, or image resource. Legacy `0005` tables remain only
+because historical migrations are immutable.
 
-## Safe local resolution
+## Explicit direct-image ingestion
 
-`build_asset_graph` URL-decodes local paths, normalizes separators, and resolves
-them beneath the configured root. It rejects:
+`mdrack image ingest` and the corresponding `MDRackEngine` methods operate only
+on a caller-selected local file. The application reads the file to establish its
+media type, byte size, and content hash, obtains caption/OCR text from explicit
+arguments or an injected extractor, prepares ready vectors outside core, and
+atomically replaces one typed image resource in a ready resource-store generation.
 
-- URI schemes and network-relative targets as `external_reference`;
-- absolute paths, drive-like targets, empty targets, and traversal escapes as
-  `unsafe_reference`;
-- valid local paths that do not exist as `missing`.
+The source bytes remain outside SQLite. Each bounded caption/OCR representation
+owns one `whole_resource` search unit by default. Text and visual vectors use
+different explicit embedding spaces and are never compared across spaces.
 
-For an existing file, MDRack records SHA-256, MIME guess, byte size, and PNG/GIF
-dimensions when readable. No network fetch or source mutation occurs.
+Image text, semantic, and hybrid search apply `resource_kind=image` before the
+candidate limit. Provider failure degrades safely. Delete is idempotent and
+removes only the derived resource graph, never the source file.
 
-## Searchable text versus provenance
+## Duplicate and similarity discovery
 
-An image reference contributes searchable content only from deduplicated:
-
-1. explicit alt text;
-2. immediate adjacent non-image text from the parsed document.
-
-If searchable text exists, the structural chunker creates exactly one bounded
-`image_reference` chunk for the source block. If no searchable text exists, the
-asset reference is persisted without a retrieval chunk. Ambiguous mapping of one
-image block to more than one retrieval chunk raises an error instead of choosing
-silently.
-
-Raw reference text, resolved path, hashes, dimensions, and resolution status are
-provenance. They are not visual descriptions.
-
-## Persistence
-
-- `assets` owns root-relative asset identity and optional file metadata.
-- `asset_references` links one source occurrence to a file, block, optional
-  retrieval chunk, raw syntax, exact source span, searchable text, and resolution
-  status.
-- `asset_descriptions` reserves `(asset_id, description_kind)` rows, but current
-  production code has no reader or writer for descriptions.
-
-Storage ports and the SQLite adapter can list assets/references for a file, but
-there is no public asset CLI command and no `MDRackEngine` asset method today.
+- Exact duplicates compare persisted byte `content_hash` values and return other
+  logical resource IDs in stable order.
+- Similarity starts from an existing whole-resource unit/vector in an explicit
+  space. By default, every unit from the query resource is excluded before the
+  result limit.
+- Facet and typed scope filters are applied in the adapter before top-k.
 
 ## Explicit non-capabilities
 
-Asset indexing does not perform OCR, vision inference, captioning, visual
-embeddings, remote download, or modification of Markdown or asset files.
+MDRack does not claim live OCR/caption quality, automatic image discovery from
+Markdown, perceptual near-duplicate hashing, image regions, remote fetch, binary
+storage in SQLite, or source mutation. Deterministic fake and local SQLite tests
+do not prove a live visual provider.
 
 ## Primary source anchors
 
-- Parsing and adjacent text: `src/mdrack/adapters/markdown_it/parser.py`
-- Safe resolution and metadata: `src/mdrack/application/assets.py`
-- One bounded searchable chunk: `src/mdrack/application/chunking.py`
-- Domain records: `src/mdrack/domain/assets.py`
-- Schema: `src/mdrack/storage/sqlite/migrations/0005_assets.sql`
-- Persistence: `src/mdrack/adapters/sqlite/index_storage.py`
+- Markdown text projection: `src/mdrack/adapters/markdown_it/parser.py`
+- Explicit image pipeline: `src/mdrack/ingestion/images.py`
+- CLI/API: `src/mdrack/cli/commands/images.py`, `src/mdrack/public_api/engine.py`
+- Resource persistence: `src/mdrack/adapters/sqlite/resource_store.py`
+- Resource schema: `src/mdrack/storage/sqlite/migrations/0007_resource_core.sql`
+- Discovery: `src/mdrack/application/resources.py`

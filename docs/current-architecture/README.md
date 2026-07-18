@@ -1,6 +1,6 @@
 # MDRack current architecture
 
-This package describes the checked-out MDRack v0.2 implementation. It is the
+This package describes the checked-out MDRack v0.3 implementation. It is the
 maintainer entry point for current module boundaries, indexing, persistence,
 retrieval, asset handling, public interfaces, and known limitations.
 
@@ -18,9 +18,9 @@ When sources disagree, use this order:
 
 - [System overview](system-overview.md) — layers, dependency direction, component diagram, and source anchors.
 - [Indexing and structural chunking](indexing-and-chunking.md) — scan, parsing, identities, exact spans, chunks, embeddings, and atomic replacement.
-- [SQLite persistence](sqlite-persistence.md) — migrations `0000`–`0006`, current ER model, transactions, FTS, vectors, and identity.
+- [SQLite persistence](sqlite-persistence.md) — immutable `0000`–`0006`, candidate `0007`, generations, transactions, FTS, vectors, and identity.
 - [Retrieval](retrieval.md) — text, semantic, hybrid RRF, degradation, and the reranking boundary.
-- [Assets](assets.md) — supported image-reference syntax, safe local resolution, searchable text, and persisted provenance.
+- [Images](assets.md) — Markdown text projection versus explicit direct-image ingestion.
 - [Public interfaces](public-interfaces.md) — CLI capability matrix, embedded engine, class/port diagram, and DTO boundaries.
 - [Limitations](limitations.md) — explicit unsupported or asymmetric behavior.
 
@@ -28,6 +28,9 @@ When sources disagree, use this order:
 
 - [CLI contracts](../cli-contracts.md)
 - [ADR-0001: reranking deferred](../decisions/0001-reranking-deferred.md)
+- [ADR-0002: provider/storage-neutral core](../decisions/0002-provider-storage-neutral-core.md)
+- [v0.3 compatibility registry](../compatibility/v0.3-compatibility-registry.md)
+- [v0.3 release evidence](../evidence/v0.3-release-gate.md)
 - [Recovery and migration procedures](../recovery.md)
 - [Windows executable build](../windows-exe-build.md)
 

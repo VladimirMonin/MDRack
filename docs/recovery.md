@@ -1,41 +1,95 @@
-# Migration, Reindex and Recovery
+# Migration, Store Generations, Rollback and Recovery
 
-MDRack stores all persistent state in the configured SQLite store. Source Markdown and referenced assets are read-only inputs and are never recovery targets.
+MDRack stores derived state in SQLite. Markdown and explicitly ingested image
+files are read-only inputs and are never recovery targets.
+
+## Safety boundaries
+
+- Stop every writer for the selected store before backup, activation, or rollback.
+- Preserve the complete store directory, including database, WAL/SHM, generation
+  metadata, and active pointer. Copying one `.db` file is not a complete backup.
+- Never open a `0007` candidate with an older v0.2 build. The legacy composition
+  is intentionally bounded at migration `0006`.
+- Never activate `building`, `failed`, `rebuild_required`, or `legacy_only` as a
+  resource generation. Only a verified `ready` candidate is eligible.
+- Cleanup is destructive, separately authorized, and not part of rollback.
 
 ## Before an upgrade
 
-1. Stop MDRack commands that write the same store.
-2. Copy the complete store directory, including `knowledge.db`, `knowledge.db-wal`, and `knowledge.db-shm` when present.
-3. Keep the configured root and store mapping unchanged until verification finishes.
-4. Run `scripts/verify.sh` on Linux or `scripts/verify.ps1` on Windows.
+1. Quiesce commands/processes that can write the store and close long-lived readers.
+2. Copy the complete store directory and verify the copy can be listed/read.
+3. Record the current active generation ID and retain the legacy generation
+   read-only through at least the v0.3 compatibility release.
+4. Run `scripts/verify.sh` on Linux. The PowerShell script is provided for Windows,
+   but Linux execution is not evidence that Windows passed.
+5. Build the release artifacts and run `scripts/check_installed_package.py` from an
+   isolated installed wheel outside the source tree.
 
-Migrations are forward-only, contiguous, and transactional. Duplicate, missing, malformed, or unknown future migration versions fail closed before pending schema changes are applied. MDRack does not silently downgrade a newer database.
+## Candidate build and activation
 
-## Reindex
+The v0.3 resource index is rebuilt into a separate candidate generation; active
+legacy bytes are not migrated or backfilled.
 
-Use a full rebuild when the parser backend, chunk strategy version, or active embedding profile changes incompatibly:
+1. Create the candidate exclusively and persist `building` metadata.
+2. Apply the compiled exact migration manifest through create-only `0007`.
+3. Rebuild the complete resource graph from the authorized source using the same
+   producer/profile configuration intended for serving.
+4. Verify migration identity, foreign keys, canonical resource/unit/vector/facet
+   records, graph counts, manual FTS consistency, producer fingerprints, and
+   resource contract version.
+5. Checkpoint, close, fsync the candidate database and directory, then persist
+   verified `ready` metadata durably.
+6. Under one-writer quiescence, atomically replace and fsync the active-generation
+   pointer. Existing readers may finish on the old generation; new readers resolve
+   the new one.
+7. Run `mdrack status` and `mdrack doctor`; retain only their privacy-safe output.
 
-```bash
-uv run mdrack --root /path/to/vault rebuild all --provider fake
-```
+An interruption before pointer replacement leaves the old generation active. An
+interruption after durable replacement recovers from the new pointer. Missing,
+corrupt, non-ready, or manifest-mismatched pointers fail closed.
 
-Use the real provider only in an explicitly authorized LIVE session with LM Studio GUI/server available. A model or output-dimension change creates a different embedding profile fingerprint; incompatible vectors are rejected rather than mixed.
+## Rollback
 
-## Recovery
+Rollback changes only the app-owned pointer:
 
-If migration or indexing fails:
+1. Stop writers and close/retire active readers.
+2. Confirm the retained legacy generation is unchanged, migration `0006`, and
+   registered `legacy_only` for compatibility retention.
+3. Atomically switch and fsync the pointer back to that generation.
+4. Resolve the pointer again, then run `status` and `doctor`.
+5. Preserve the failed/new generation for diagnosis. Do not delete it as part of
+   rollback.
 
-1. Preserve the failed store for diagnosis.
-2. Restore the complete pre-upgrade store directory, not only the main `.db` file.
-3. Run `uv run mdrack --root /path/to/vault doctor`.
-4. Retry with the same parser/chunk/profile configuration, or create a new empty store and run a full reindex.
+Rollback does not modify source files, rewrite schema, reverse migrations, or copy
+rows between generations.
 
-Per-file indexing uses a savepoint. A failed replacement rolls back the file's chunks, vectors, assets, and asset references together, leaving the previous indexed version available. Asset rows no longer referenced by any document are removed during successful replacement/deletion.
+## Candidate or indexing failure
 
-## Asset limitations
+- A failed candidate never becomes active and records only a stable reason code.
+- Core validates a complete resource graph before the SQLite transaction opens.
+- Resource replacement/deletion commits resource children, manual FTS, vectors,
+  facets, and integrity together. Any failure preserves the previous complete graph.
+- Legacy per-file indexing remains savepoint-atomic for its compatibility tables.
+- Preserve failing artifacts and use safe diagnostics; never paste raw paths,
+  content, vectors, endpoints, provider bodies, or private exception text into
+  support/recovery/release evidence.
 
-The offline asset foundation resolves only root-contained relative references. External URLs and traversal/absolute paths are retained as unresolved references but are never fetched or opened. Search text comes only from image alt text and adjacent document text. No OCR, vision model, visual embedding, network request, or asset mutation occurs.
+## Model/profile changes
 
-## LIVE evaluation boundary
+Embedding space identity includes dimensions, metric, and fingerprint. A model or
+dimension change must produce a new compatible space/profile and rebuild derived
+vectors; incompatible vectors fail closed rather than mix. Use a live provider only
+when separately authorized. Offline fake evidence is not live-provider evidence.
 
-`scripts/live_lmstudio_eval.py` is intentionally guarded. Without `--confirm-live` it exits with status 2 and `calls_attempted: 0`. In this offline stage, even the confirmation path performs no LM Studio call; implementation and execution belong to the dedicated LIVE stage.
+## Evidence boundaries
+
+Release evidence labels are exact:
+
+- `unit/offline`: isolated tests and deterministic fakes;
+- `local components`: explicitly named local SQLite/filesystem components;
+- `installed package`: wheel installed and exercised outside source imports;
+- `real source`, `live external`, and `Windows`: only when separately authorized
+  and actually executed.
+
+The v0.3 offline release packet makes no claim for a real vault/source corpus, live
+LM Studio/OCR/caption/visual runtime, external network, or Windows execution.

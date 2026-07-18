@@ -13,6 +13,13 @@ classDiagram
         +search_text(query, limit, offset) RetrievalResult
         +search_semantic(query, limit) RetrievalResult
         +search_hybrid(query, limit, reranker) RetrievalResult
+        +ingest_image(path, resource_id, source_namespace, source_ref) ImageIngestionResult
+        +search_images_text(query, limit) ImageSearchResult
+        +search_images_semantic(query, limit) ImageSearchResult
+        +search_images_hybrid(query, limit) ImageSearchResult
+        +delete_image(resource_id)
+        +find_resource_duplicates(resource_id, scope, limit) DuplicateResourceResult
+        +find_similar_resources(unit_id, space_id, scope, limit) SimilarResourceResult
         +get_file_by_path(relative_path) dict
         +get_chunk(logical_id) dict
         +get_chunk_source_locator(chunk_id) SourceLocator
@@ -102,6 +109,8 @@ Live command registration exposes:
 | `rebuild fts` | Rebuild the manually maintained FTS projection. |
 | `rebuild embeddings` | Recreate vectors for the active profile. |
 | `eval retrieval` | Run retrieval evaluation against the indexed store. |
+| `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against a ready resource generation; never triggered by Markdown scan. |
+| `resources duplicates`, `similar` | Provider-free exact hash and existing-vector discovery with typed/facet scope filters. |
 | `model list`, `loaded`, `download`, `download-status`, `load`, `unload`, `switch` | LM Studio model discovery and lifecycle operations. |
 
 CLI responses use the JSON envelope documented in
@@ -117,10 +126,12 @@ application degradation states to command errors; see [retrieval](retrieval.md).
 - file lookup by relative path;
 - chunk lookup by logical ID;
 - source-locator lookup;
+- explicit direct-image ingest/search/delete;
+- exact duplicate and whole-resource vector similarity discovery;
 - explicit or context-managed close.
 
 It does not expose CLI diagnostics, status, model lifecycle, rebuild, evaluation,
-section listing, or asset listing methods.
+or legacy section listing methods.
 
 The engine imports no Click modules. By default it composes
 `SQLiteIndexStorage`, while callers may inject compatible storage/read/search
@@ -136,6 +147,13 @@ The `files` and `sections` inspection groups are a documented legacy asymmetry:
 they still expose/use raw database record IDs. Do not generalize that behavior
 into a new public contract.
 
+New image/resource results contain only logical resource/unit/representation IDs,
+stable ranks/scores/degradation categories, and portable source references. They
+never expose SQLite row IDs, local paths, caption/OCR text, vectors, facet values,
+provider bodies, or raw exception strings. `mdrack.public_api` re-exports the
+engine, compatibility retrieval DTOs, image result/config protocols, and resource
+discovery scope/results; pure generic core DTOs remain under `mdrack_core`.
+
 ## Primary source anchors
 
 - CLI registration: `src/mdrack/cli/__init__.py`
@@ -145,3 +163,6 @@ into a new public contract.
   `src/mdrack/application/retrieval.py`, `src/mdrack/application/query.py`
 - Ports: `src/mdrack/ports/storage.py`, `src/mdrack/ports/embeddings.py`
 - Shared DTO: `src/mdrack/domain/retrieval.py`
+- Image API DTOs: `src/mdrack/ingestion/images.py`
+- Resource discovery DTOs: `src/mdrack/application/resources.py`
+- Pure core exports: `src/mdrack_core/__init__.py`

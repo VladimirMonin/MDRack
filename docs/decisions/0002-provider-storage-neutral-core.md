@@ -1,6 +1,6 @@
 # ADR-0002: Provider- and storage-neutral retrieval core
 
-- **Status:** Accepted for staged v0.3 implementation; not yet implemented
+- **Status:** Accepted and implemented for the v0.3 compatibility release
 - **Date:** 2026-07-17
 - **Decision owners:** MDRack maintainers
 - **Applies to:** MDRack v0.3 plan and all implementation slices derived from it
@@ -21,9 +21,10 @@ Markdown, Click, HTTP, or persistence behavior. The index is derived data, but a
 upgraded SQLite file is not executable rollback evidence: the v0.2 migration runner
 rejects an unknown `0007` ledger entry.
 
-This ADR records the owner-approved Gates A–D and the audited preconditions. It is a
-contract for later stages, not a statement that the code, schema, CLI, or runtime has
-already changed.
+This ADR records the owner-approved Gates A–D and the audited preconditions that
+governed the staged implementation. The baseline context above is historical; the
+checked-out v0.3 package now implements the accepted core, compatibility, schema,
+generation, privacy, image-ingestion, and retrieval slices described below.
 
 ## Decision
 
@@ -98,10 +99,10 @@ build to open a database containing `0007`. The complete v0.2 generation is reta
 read-only for at least one compatibility release. Cleanup or deletion is a separate,
 explicit destructive operation.
 
-Before `0007` exists, the migration runner must enforce a compiled expected schema
-version and exact ordered migration manifest/digest independent of directory
-discovery. It must reject a package missing an expected migration before applying SQL
-and retain fail-closed handling of unknown future versions.
+The migration runner enforces a compiled expected schema version and exact ordered
+migration manifest/digest independent of directory discovery. It rejects a package
+missing an expected migration before applying SQL and retains fail-closed handling of
+unknown future versions.
 
 Schema version and readiness are separate. A durable store-generation state machine
 must represent at least:
@@ -122,8 +123,8 @@ vectors, facets, invariant checks, and commit share that transaction. Any failur
 preserves the previous complete graph. No fixed reusable savepoint name or surprise
 commit of caller-owned work is allowed.
 
-Migration SQL is blocked until an independent data/schema review maps every frozen
-contract to DDL. The review must settle:
+Migration `0007` was authored only after an independent data/schema review mapped
+every frozen contract to DDL. That accepted review settled:
 
 - explicit foreign-key actions and cross-resource representation/unit integrity;
 - canonical source identity, uniqueness, upsert, and rename semantics;
@@ -201,14 +202,15 @@ A PASS at one boundary must not be promoted to another. Fake vectors do not prov
 live model, local source fixtures do not prove a real vault, and Linux does not prove
 Windows.
 
-## Sequencing and review gates
+## Implementation sequencing and review gates
 
-The executable order is ADR/plan amendment and review; baseline/guard; core domain;
-complete contract freeze; then non-overlapping retrieval and indexing lanes. SQLite
-work is split into schema review, migration identity/readiness, create-only schema and
-adapter, then candidate rebuild/cutover/recovery. App compatibility cutover precedes
-complete Markdown asset removal; privacy/LM Studio cutover precedes direct image
-acceptance; facets/similarity and final release evidence follow.
+The following is the historical implementation ledger, retained to explain dependency
+order. The completed sequence was ADR/plan amendment and review; baseline/guard; core
+domain; complete contract freeze; then retrieval and indexing lanes. SQLite work was
+split into schema review, migration identity/readiness, create-only schema and adapter,
+then candidate rebuild/cutover/recovery. App compatibility cutover preceded complete
+Markdown asset removal; privacy/LM Studio cutover preceded direct image acceptance;
+facets/similarity and final release evidence followed.
 
 Each semantic slice is implemented, independently reviewed at an exact revision, and
 only then committed by its designated writer. Push remains a separate owner gate.
@@ -226,8 +228,8 @@ only then committed by its designated writer. Push remains a separate owner gate
 
 ### Negative
 
-- V0.3 requires a staged compatibility layer and more than one storage generation.
-- Schema and cutover implementation cannot begin until contract and data reviews pass.
+- V0.3 retains a staged compatibility layer and more than one storage generation.
+- Schema and cutover implementation required contract and data review before mutation.
 - Legacy tables and a full old generation consume storage for at least one release.
 - The initial core does not provide Postgres, live vision, audio/video, ANN, or reranking.
 
@@ -240,10 +242,11 @@ active v0.2 database, accepts a non-ready generation, alters compatibility witho
 parity evidence, touches referenced images during Markdown scan, leaks a privacy
 sentinel, overstates evidence, or lacks review of the exact revision.
 
-## Non-claims
+## Current implementation boundary and non-claims
 
-This ADR does not claim that `mdrack_core`, migration `0007`, store generations,
-direct image ingestion, PostgreSQL/pgvector, live OCR/caption/visual embeddings,
-audio/video ingestion, Windows support, or a real-source run currently exists or has
-passed. Current v0.2 behavior remains authoritative until the corresponding reviewed
-stage is committed.
+The checked-out v0.3 package implements and tests `mdrack_core`, create-only migration
+`0007`, store generations, compatibility mapping, direct image ingestion, and the
+provider-neutral resource/retrieval contracts. This ADR does not claim a
+PostgreSQL/pgvector adapter, live OCR/caption/visual execution, audio/video ingestion,
+Windows execution, or a real-source run. Those evidence boundaries remain separate
+and require explicit authorization.
