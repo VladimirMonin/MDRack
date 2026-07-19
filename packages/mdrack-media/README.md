@@ -10,9 +10,11 @@ Python 3.11 or newer is required. The only runtime dependency is
 ## Boundary
 
 The package validates caller-prepared values, groups timed atoms with a caller-owned
-token counter, and projects typed millisecond locators to generic
-`mdrack_core.Locator` records. It does not read files, access a database or network,
-call providers, load a tokenizer, create embeddings, or execute builders. Source
+token counter, projects typed millisecond locators to generic
+`mdrack_core.Locator` records, and provides a provider-free audio transcript batch
+projection. The audio builder does not read files, access a database or network,
+call providers, load a tokenizer, or create embeddings; vectors remain caller-owned.
+Source
 identity is accepted only by deterministic ID helpers and is never admitted to
 media event fields.
 

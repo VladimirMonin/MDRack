@@ -1,5 +1,6 @@
 """Provider-, persistence-, and filesystem-neutral media contracts."""
 
+from .audio import build_audio_transcript_batch
 from .builders import (
     MEDIA_RESOURCE_KINDS,
     RESOURCE_AUDIO,
@@ -151,6 +152,7 @@ __all__ = [
     "WholeMediaLocator",
     "WholeResourceTextPolicy",
     "atom_id",
+    "build_audio_transcript_batch",
     "canonical_json",
     "frame_id",
     "group_timed_atoms",

@@ -50,8 +50,18 @@ SHA-256.
 `TimedChunkingPolicy`, `TextNormalizationPolicy` and `WholeResourceTextPolicy` are
 validated policy records. `TokenCounter` is the caller-owned protocol for an exact
 tokenizer or deterministic estimate and exposes its typed fingerprint.
-`TranscriptBatchBuilderInput` and `FrameBatchBuilderInput` validate future builder
-inputs but perform no projection, embedding or persistence.
+`TranscriptBatchBuilderInput` and `FrameBatchBuilderInput` validate provider-free
+builder inputs. `build_audio_transcript_batch()` projects a transcript through the
+timed grouper into a `mdrack_core.PreparedResourceBatch`; it accepts only
+caller-supplied vectors, never reads media bytes, and persists no data itself.
+
+The audio projection uses a `timed_passage` representation with `time_segment`
+units and integer-millisecond `time_segment` locators. An explicit whole-resource
+policy adds a `whole_resource` representation and unit for transcript-semantic
+resource retrieval. Embedding spaces are shared by compatible fingerprint,
+dimension, and metric identities so semantic retrieval can cross resources.
+Changing producer, normalization, grouping, aggregation, or embedding fingerprints
+changes the corresponding logical identities and requires a fresh replacement batch.
 
 ## Deterministic timed grouper
 

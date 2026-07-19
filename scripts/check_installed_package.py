@@ -179,6 +179,87 @@ def _batch():
     )
 
 
+def _audio_batch(resource_id: str, *, replacement: bool = False):
+    from mdrack_core import (
+        EmbeddingSpaceRecord,
+        Facet,
+        Locator,
+        PreparedResourceBatch,
+        RepresentationRecord,
+        ResourceFacet,
+        ResourceRecord,
+        SearchUnitRecord,
+        VectorRecord,
+    )
+
+    representation_id = f"representation-{resource_id}"
+    texts = ("replacement passage",) if replacement else ("needle needle", "needle")
+    units = tuple(
+        SearchUnitRecord(
+            f"unit-{resource_id}-{ordinal}",
+            resource_id,
+            representation_id,
+            "time_segment",
+            "text",
+            text,
+            Locator(
+                "time_segment",
+                {"start_ms": ordinal * 1_000, "end_ms": (ordinal + 1) * 1_000, "track": "audio"},
+            ),
+            ordinal,
+        )
+        for ordinal, text in enumerate(texts)
+    )
+    return PreparedResourceBatch(
+        ResourceRecord(
+            resource_id,
+            "audio",
+            "audio/wav",
+            "installed-audio",
+            Locator("relative", {"name": f"{resource_id}.wav"}),
+            f"sha256:{resource_id}",
+        ),
+        (RepresentationRecord(representation_id, resource_id, "timed_passage", "text", "\\n\\n".join(texts)),),
+        units,
+        (EmbeddingSpaceRecord("audio-space", 2, "dot", "audio-fixture-v1", {}),),
+        tuple(VectorRecord(unit.unit_id, "audio-space", (1.0, 0.0)) for unit in units),
+        (ResourceFacet(resource_id, Facet("media", "audio"), "installed-audio"),),
+    )
+
+
+def _check_installed_audio_retrieval() -> None:
+    from mdrack_core import Facet, LexicalBranch, SearchScope, VectorBranch
+    from mdrack_sqlite import SQLiteCatalog
+
+    with tempfile.TemporaryDirectory(prefix="mdrack-installed-audio-") as directory:
+        catalog = SQLiteCatalog.create(Path(directory) / "audio.sqlite3")
+        try:
+            for resource_id in ("audio-a", "audio-b"):
+                catalog.replace_resource(_audio_batch(resource_id))
+            scopes = (
+                SearchScope(resource_kinds=("audio",), media_types=("audio/wav",)),
+                SearchScope(representation_kinds=("timed_passage",), unit_kinds=("time_segment",)),
+                SearchScope(facets_any=(Facet("media", "audio"),)),
+            )
+            for scope in scopes:
+                lexical = catalog.search_lexical(
+                    LexicalBranch("installed-audio-lexical", "needle", candidate_limit=10), scope=scope
+                )
+                vector = catalog.search_vector(
+                    VectorBranch("installed-audio-vector", "audio-space", (1.0, 0.0), candidate_limit=10),
+                    scope=scope,
+                )
+                assert tuple(item.rank for item in lexical) == tuple(range(1, len(lexical) + 1))
+                assert tuple(item.rank for item in vector) == tuple(range(1, len(vector) + 1))
+                assert all(item.evidence_locator.kind == "time_segment" for item in lexical + vector)
+            catalog.replace_resource(_audio_batch("audio-a", replacement=True))
+            assert catalog.search_lexical(
+                LexicalBranch("installed-audio-replacement", "replacement"), scope=SearchScope()
+            )
+        finally:
+            catalog.close()
+
+
 def _check_imports() -> int:
     import mdrack
     import mdrack_core
@@ -366,6 +447,7 @@ def main() -> None:
         symbol_count = _check_imports()
         _check_memory_core()
         _check_sqlite_candidate()
+        _check_installed_audio_retrieval()
         _check_cli_json()
         parity_mode_count = _check_legacy_retrieval_parity()
 
@@ -381,6 +463,7 @@ def main() -> None:
                     "public_api_exports_checked": len(EXPECTED_PUBLIC_API_EXPORTS),
                     "memory_core": "passed",
                     "sqlite_candidate": "passed",
+                    "installed_audio_retrieval": "passed",
                     "cli_json": "passed",
                     "legacy_retrieval_parity_modes": parity_mode_count,
                     "network_attempts": 0,
