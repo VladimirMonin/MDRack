@@ -1,0 +1,22 @@
+{
+  "duration_ms": 120000,
+  "frames": [],
+  "passages": [
+    {
+      "end_ms": 40000,
+      "start_ms": 0,
+      "text": "Synthetic video passage 1 about hybrid ranking; marker video-09-0."
+    },
+    {
+      "end_ms": 80000,
+      "start_ms": 40000,
+      "text": "Synthetic video passage 2 about hybrid ranking; marker video-09-1."
+    },
+    {
+      "end_ms": 120000,
+      "start_ms": 80000,
+      "text": "Synthetic video passage 3 about hybrid ranking; marker video-09-2."
+    }
+  ],
+  "resource_id": "res_d6668fce5b6f018bce428177152f522b"
+}

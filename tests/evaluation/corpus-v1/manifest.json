@@ -1,0 +1,1963 @@
+{
+  "contract": "mdrack.evaluation-corpus",
+  "contract_digest": "sha256:2183e11b7e80b660e178322ae1305392c3311a801a749064e1845aeb3b78a534",
+  "corpus_id": "corpus_0905f42584ead7ba6c0e29fddca9a80e",
+  "corpus_version": "1.0.0",
+  "policy_refs": {
+    "builder": "sha256:3c71a02cee5737fdf79b08fa7cf49bb506659e38e4e9d8c0fe253b9584efdebd",
+    "chunker": "sha256:3f572ca3e27fde809f713d4a9f344625379af923b320b3e062cb5393adf97019",
+    "parser": "sha256:d6e05d602f7f689ca99b25b46a8b15df7b2f897e67a498b6e4d6f75a2c564c04",
+    "vector_profile": "sha256:51a9fb4fd240a3306eb4900ee0c4396d125805791024fdb603c4086650511fee"
+  },
+  "query_set_ref": {
+    "contract": "mdrack.evaluation-queries",
+    "path": "queries-v1/queries.json",
+    "schema_version": 1
+  },
+  "resources": [
+    {
+      "artifact_ref": "artifacts/document-01.md",
+      "artifact_sha256": "sha256:0a231209b7349304aaa67d71adf77ac39a774a399fdb9d2f2cfd28a90988d380",
+      "content_sha256": "sha256:0a231209b7349304aaa67d71adf77ac39a774a399fdb9d2f2cfd28a90988d380",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-001",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_d30a7d71a3d1c1b76a67d8e5a45fc654",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_409a5ba1282fe348a56712a346a4bb0b",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_cdf7011dc1e80a524b04abf1816d1bed",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-02.md",
+      "artifact_sha256": "sha256:2aa77f0c6e695fc5fe617b883af411a4d146188cd0b10b53fdb341e9cbd8d048",
+      "content_sha256": "sha256:2aa77f0c6e695fc5fe617b883af411a4d146188cd0b10b53fdb341e9cbd8d048",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-002",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_e605812c6aea3986b378d2cfeb120c12",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_528970df91dd5050ac19bac002e245c5",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_55e2ba576a4ab6652e6bf053a3445a8b",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-03.md",
+      "artifact_sha256": "sha256:cf0391bd18ca7441f19de3aa91655ec2511c94f7993c5016018bb6ccda8fed17",
+      "content_sha256": "sha256:cf0391bd18ca7441f19de3aa91655ec2511c94f7993c5016018bb6ccda8fed17",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-003",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_b65914ac878201dfa3732f595ad2b090",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_cf73f5ef3eeae32750a1793e8d8b41d0",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_642b9727af7de938835f29728483c78f",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-04.md",
+      "artifact_sha256": "sha256:f80ad3b0cfe9ed4eabd62a773497a0761bc3200d1df737b0f7acafd85ec34d40",
+      "content_sha256": "sha256:f80ad3b0cfe9ed4eabd62a773497a0761bc3200d1df737b0f7acafd85ec34d40",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-004",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_0b44a7ffaf0d3b7fd403bea1aae4d503",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_a7347d9945392db15f61915d18854fcc",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_c808711af2895d0da8820589eef2b8ca",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-05.md",
+      "artifact_sha256": "sha256:247ba095e72f9ce7179cf97b012b8ae4dd746782001383e16cd6778211e4b37f",
+      "content_sha256": "sha256:247ba095e72f9ce7179cf97b012b8ae4dd746782001383e16cd6778211e4b37f",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-005",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_b13dac6f692006230d7d3fd3fc1b64c6",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_44ef2a535dd177d8aa7158bfc312b6af",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_4c94c5f9154df8de66bae97cfb0017fd",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-06.md",
+      "artifact_sha256": "sha256:85aa4ceb9730d85a3ac8195126678fb54e3f62dde2e3d12705b3f6d880927eea",
+      "content_sha256": "sha256:85aa4ceb9730d85a3ac8195126678fb54e3f62dde2e3d12705b3f6d880927eea",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-006",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_3397125a9329b81bf52d1c467ca86100",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_0c4fdcdc4b79bd9d04984b1d2dd20406",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_f4eafed15fc8a1404ba7014ded0eb8fa",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-07.md",
+      "artifact_sha256": "sha256:8c53fe5061f47a56fe0fd70188e77fa0de4a87d853bb45b4f3778dcd57886277",
+      "content_sha256": "sha256:8c53fe5061f47a56fe0fd70188e77fa0de4a87d853bb45b4f3778dcd57886277",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-007",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_9903150227debc267245ef7321d887fb",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_f40379c30e760b60f5b775cf8acf5ec1",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_e457afb2360b70e915bf4bf8217ff203",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-08.md",
+      "artifact_sha256": "sha256:97bca5af5a5eee6b69ffe2e62a3430abb8a04989af2418d6065eac16941e7e92",
+      "content_sha256": "sha256:97bca5af5a5eee6b69ffe2e62a3430abb8a04989af2418d6065eac16941e7e92",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-008",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_bcdf2b032bebb744b5d2d29de95fe6f1",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_1c4b35d88da55914169eac5ec21e08ce",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_6de31d2414cdb3fb20b51b9b58e3f9cf",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-09.md",
+      "artifact_sha256": "sha256:98c38253e9a6a79e1a4c44296352d9b3dbe124b31d64103e883d619f628f8504",
+      "content_sha256": "sha256:98c38253e9a6a79e1a4c44296352d9b3dbe124b31d64103e883d619f628f8504",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-009",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_168d29f9ca0e313b1d308fac0738ceef",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_1f3a6b0a5b2d67a9ab2aa064c6911685",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_41113db20e0c925bf9b9fe2bfa9c7d00",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-10.md",
+      "artifact_sha256": "sha256:74de001cf26ddd4d30b1eeaa16e32c76991ee29f23ac7d6e8c2bc728cbb34185",
+      "content_sha256": "sha256:74de001cf26ddd4d30b1eeaa16e32c76991ee29f23ac7d6e8c2bc728cbb34185",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-010",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_7f033a7b04d43e45ee2206f81f67cdd7",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_1a6d0cac05d77e1ab6988496c5b98f92",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_22615d8b2aa480bbaac7ec6603b6164a",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-11.md",
+      "artifact_sha256": "sha256:8d5bbd6e1aad6b010342c66e8c6012e0121ea6b3e980656d5327a9326b9dc701",
+      "content_sha256": "sha256:8d5bbd6e1aad6b010342c66e8c6012e0121ea6b3e980656d5327a9326b9dc701",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-011",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_feb0bb8acb8c5cd26b5dfbf3397be332",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_7d124bfc8e5041ba60c47196b85cc6e7",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_26832fb4d8efd5a8fb14dd93b0222a79",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-12.md",
+      "artifact_sha256": "sha256:98e9b7b10f152057c7b918ed5a2adc3113ee23ac3b8890d71e36ba30375e4484",
+      "content_sha256": "sha256:98e9b7b10f152057c7b918ed5a2adc3113ee23ac3b8890d71e36ba30375e4484",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-012",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_223761a8abe64b27dc7d97c2849c8ecf",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_1395af331c4801286efbe483901f7184",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_b369b9816da8bb6d74195de59790d4f5",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-13.md",
+      "artifact_sha256": "sha256:78b04cc9cc02b50f86e9eaf7ea270281105be079a41800ed978e78bf9bc41349",
+      "content_sha256": "sha256:78b04cc9cc02b50f86e9eaf7ea270281105be079a41800ed978e78bf9bc41349",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-013",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_adc0bd7028269e4933b1c47f556c6b9a",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_f8f32d884cfc2033816a0430b88d2b34",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_7c704a388519e32285f5ad576ff1eabc",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-14.md",
+      "artifact_sha256": "sha256:16d371a107aa824cd729cc6d529d6078dd20c8b88781cd11799650cae9eca4d0",
+      "content_sha256": "sha256:16d371a107aa824cd729cc6d529d6078dd20c8b88781cd11799650cae9eca4d0",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-014",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_7258968ea5abe1c67de05262f7568160",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_575c60205f994d304c23cb2f2f468f42",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_ac441476dd5b505caa53a145a9258161",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-15.md",
+      "artifact_sha256": "sha256:58352a9897392a186456a7e0c095ea5b92dcbe25bfe101ae123342db23c8c3a8",
+      "content_sha256": "sha256:58352a9897392a186456a7e0c095ea5b92dcbe25bfe101ae123342db23c8c3a8",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-015",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_dad087c268b05f5883d85743c4d0be79",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_103a574c6d5306923078d8ed5ab3a600",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_4da40aebd784fc828dbbc8751b9bcc98",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-16.md",
+      "artifact_sha256": "sha256:bec4053483a2af64dc40edc53d45070d38fcccc432a47a5e907368f5dcb9b0a3",
+      "content_sha256": "sha256:bec4053483a2af64dc40edc53d45070d38fcccc432a47a5e907368f5dcb9b0a3",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-016",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_ce5fd24a8bce6fb0505fbd42d6e3117e",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_ece32c8376c43befc5c994349bd2f52b",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_2f15bf92c640a46301eda3b1f231e4db",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-17.md",
+      "artifact_sha256": "sha256:af8d3c3a8c1ccccafaa1fd62c5ef9f84dc89e00b3825b939d110946c0c8e86af",
+      "content_sha256": "sha256:af8d3c3a8c1ccccafaa1fd62c5ef9f84dc89e00b3825b939d110946c0c8e86af",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-017",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_ed1e080fc11d7c4ef77bc42d8704a4ab",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_0eb894ecb86c78ac6887e04833e303c8",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_ede427f2924fbf2d7c4ac2608650fe88",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-18.md",
+      "artifact_sha256": "sha256:ee05fa2ef4391009b8118390fa979a8f5a2fb0d2af6bf9c9791774718ab3898c",
+      "content_sha256": "sha256:ee05fa2ef4391009b8118390fa979a8f5a2fb0d2af6bf9c9791774718ab3898c",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-018",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_b454befe053b4a9d0687f4fc84baa336",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_150be316f60e62fbb4947ceef4e7f332",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_015b51becf3e0f7fc67a5a2b06c75180",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-19.md",
+      "artifact_sha256": "sha256:187bb57b3f4720ec61c75e9bd99dd3a2eededa84f7d3a88ec0dfc5af39d725eb",
+      "content_sha256": "sha256:187bb57b3f4720ec61c75e9bd99dd3a2eededa84f7d3a88ec0dfc5af39d725eb",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-019",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_e4054780aea574e9ccb2c0793b710b2b",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_9eeaa04096f75a037b53a745f54f6d6c",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_e76e50df8970227d52493f9050c1c160",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/document-20.md",
+      "artifact_sha256": "sha256:f9222897872157c6c0e607e0a07635d0fc3a86f4af27d865f3959340ee6a075f",
+      "content_sha256": "sha256:f9222897872157c6c0e607e0a07635d0fc3a86f4af27d865f3959340ee6a075f",
+      "media_type": "text/markdown",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-020",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "retrieval_text"
+      ],
+      "resource_id": "res_e8a080dc18cb709db23249995063bd76",
+      "resource_kind": "document",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_cc75c9b866b4aac63bc654c99503ded7",
+          "unit_kind": "text_chunk"
+        },
+        {
+          "ordinal": 1,
+          "representation_kind": "retrieval_text",
+          "unit_id": "unit_a8ff6fc6830482df32612a05efa70fb8",
+          "unit_kind": "text_chunk"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-21.json",
+      "artifact_sha256": "sha256:3353eedbd6a76a18bade8a3af5239f6719987078ee2ab475f89620044a78492c",
+      "content_sha256": "sha256:3353eedbd6a76a18bade8a3af5239f6719987078ee2ab475f89620044a78492c",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-021",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_beadc43287ae0d1a75c25d0455c68de5",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_0aa7cfcb93ecfef3110f6debf9af1a2a",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-22.json",
+      "artifact_sha256": "sha256:ee92656037acc419981ecc1e3b863c93d9bbb1abaa0fdaa0a37a9fdd08a144e9",
+      "content_sha256": "sha256:ee92656037acc419981ecc1e3b863c93d9bbb1abaa0fdaa0a37a9fdd08a144e9",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-022",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_d958978c84fa167cd4a8249e01fd1cb5",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_a66f304d16297cd53a78e71eafdcc308",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-23.json",
+      "artifact_sha256": "sha256:79cce3b4e1505cde4468a8f7a75158a7b10162493f52b2a0c6f1bededd16e882",
+      "content_sha256": "sha256:79cce3b4e1505cde4468a8f7a75158a7b10162493f52b2a0c6f1bededd16e882",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-023",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_11a4eb69e65c5a40f4b116117f858094",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_c580095fa61c34ea0ba44b9bf62c4a85",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-24.json",
+      "artifact_sha256": "sha256:0887d445145666df7917439bd7c230db2073e2d54ed0ade144783325358f5727",
+      "content_sha256": "sha256:0887d445145666df7917439bd7c230db2073e2d54ed0ade144783325358f5727",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-024",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_926b85dd1864e021733b3283219fbc02",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_fa5a8c8ae51f5e6d92942eb83118d13f",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-25.json",
+      "artifact_sha256": "sha256:0526fb0dd971561a6ef0f0a25fd7d538c5d56eee803d86010e1d667a590a08f5",
+      "content_sha256": "sha256:0526fb0dd971561a6ef0f0a25fd7d538c5d56eee803d86010e1d667a590a08f5",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-025",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_d0f080f517ea1ce862e2dd3a767e3ce6",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_7c90dfd5cbc34bb4dedb37435aca2669",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-26.json",
+      "artifact_sha256": "sha256:f60c396aecc4041138a7647ab7c0fd72c324379f814d8b32aaad415461c71315",
+      "content_sha256": "sha256:f60c396aecc4041138a7647ab7c0fd72c324379f814d8b32aaad415461c71315",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-026",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_eb5c62332b326d5e72647d1af1345377",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_9ff2350988f31ae2f1343c107e6d846c",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-27.json",
+      "artifact_sha256": "sha256:1229545d10c6ed65fab06c72354935d8979fd0bd766fdbe6b75b850c078296c4",
+      "content_sha256": "sha256:1229545d10c6ed65fab06c72354935d8979fd0bd766fdbe6b75b850c078296c4",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-027",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_e143d859140ca4ac52221e3b61448bda",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_41636b7d010fd0f00be1ba134007edc7",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-28.json",
+      "artifact_sha256": "sha256:9e575bee6040a51d3286189664656b368c87416c9ea146a5b39e1d577dd4abd7",
+      "content_sha256": "sha256:9e575bee6040a51d3286189664656b368c87416c9ea146a5b39e1d577dd4abd7",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-028",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_7ddf123244ec6d85e92b0015e6e5b9a8",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_c939eb8df965bf7f9c6fe064dd4d27ec",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-29.json",
+      "artifact_sha256": "sha256:190e8b095736b6355c531eb827c899920ad8ef0ead416f9de41fb4895e935074",
+      "content_sha256": "sha256:190e8b095736b6355c531eb827c899920ad8ef0ead416f9de41fb4895e935074",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-029",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_571cf92b310a66179e8487d03b7a32c2",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_1ab64f91e081cc86391f4138fe407f0c",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/image-30.json",
+      "artifact_sha256": "sha256:7c5b8bedc9651821d8d2026ada2999e0179851ffae98132f3f64fdd509f989f0",
+      "content_sha256": "sha256:7c5b8bedc9651821d8d2026ada2999e0179851ffae98132f3f64fdd509f989f0",
+      "media_type": "application/vnd.mdrack.synthetic-image-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-030",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "ocr_text",
+        "caption_text"
+      ],
+      "resource_id": "res_5bb6f13551d1bd2cea73af056fdf50e1",
+      "resource_kind": "image",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "ordinal": 0,
+          "representation_kind": "caption_text",
+          "unit_id": "unit_bc1610cb39dd05063468e2a8680c0d1e",
+          "unit_kind": "whole_resource"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-31.json",
+      "artifact_sha256": "sha256:f8d7c939350233f992307460d27152997af85fe5d744bb3d1a6272009e13d2de",
+      "content_sha256": "sha256:f8d7c939350233f992307460d27152997af85fe5d744bb3d1a6272009e13d2de",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-031",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_3408eac6f3ca74f79574c6d90c6b12db",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_5739608fb7c7804e4ce4ac4e1fe0ea7d",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_7156eda1cdfc183e3cc474e471dcf2f6",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_7700e083ecdbf030240d01cde8270c89",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-32.json",
+      "artifact_sha256": "sha256:88c46572cd3a6e357a1cad60d126d71645a72ac41e7d19b81fe529b25248a025",
+      "content_sha256": "sha256:88c46572cd3a6e357a1cad60d126d71645a72ac41e7d19b81fe529b25248a025",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-032",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_e2ffb8570c3777924e8bb6a84ed04c41",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_7a042099a06928cc2a78280745476c6e",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_61e99ef7807ad344ebab032895732799",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_bc2603214bc256130f238cb89d029468",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-33.json",
+      "artifact_sha256": "sha256:4220e82eaa054cf5e8972dcf4e8d7f3e99adaa50c5d812123b626ba369c2686e",
+      "content_sha256": "sha256:4220e82eaa054cf5e8972dcf4e8d7f3e99adaa50c5d812123b626ba369c2686e",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-033",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_ad85cf6ba6ffd47eb99cf2515558f35d",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_4cb3d559ee5e59b6447724f332d55349",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_0e870be87f05710085e285f9723bc2cd",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_490e2a52e26982eca1521355d351a7db",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-34.json",
+      "artifact_sha256": "sha256:983bfd876ee0a432323ab0605397cb763954a66bd96f64f1f7410d93743b2b82",
+      "content_sha256": "sha256:983bfd876ee0a432323ab0605397cb763954a66bd96f64f1f7410d93743b2b82",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-034",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_6f6f3e1c449f4039725e44fcc0a138b9",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_3d6fa252b053cc7c1c783172586ff41a",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_708af3518b19b01051d93179d982cae6",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_b2963bae9562b31b231c5641d0b4ad62",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-35.json",
+      "artifact_sha256": "sha256:6bcb8e3b32f68a58afd40c57807344696bb41d6f86e30d858e1d0244e645018f",
+      "content_sha256": "sha256:6bcb8e3b32f68a58afd40c57807344696bb41d6f86e30d858e1d0244e645018f",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-035",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_48a33e14d97d203313aacd6b4213423e",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_ae777ebc28fc5edb9e47ed6e6a188f42",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_fd2c31dd48a92071d7ee8fbeded6a05a",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_6fe10a965fca34c5a94e4fa9883ee335",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-36.json",
+      "artifact_sha256": "sha256:5d98202d23923fa53b0ea7ee52bb303dc9ff66cc4766b4d1ff8fc9f9e58abaf2",
+      "content_sha256": "sha256:5d98202d23923fa53b0ea7ee52bb303dc9ff66cc4766b4d1ff8fc9f9e58abaf2",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-036",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_8927d4c924226b65968ecc41af392e72",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_f0e2734d3279860d2c59ceb24022e9ad",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_16f41cf47b3118152b2be21697d255bb",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_822de83f28ca878b2bbbeec4c5558e07",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-37.json",
+      "artifact_sha256": "sha256:9ff29aa82208aeb07d1e1ad5922b28f33c7ff55c965ae909ebcf5783090e173c",
+      "content_sha256": "sha256:9ff29aa82208aeb07d1e1ad5922b28f33c7ff55c965ae909ebcf5783090e173c",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-037",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_394568c5ba8c8d3f56b14cdcd45c5153",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_ddfc0a11eabf62a8208b756ceb634127",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_9a91bd7a2dda4d414b94d2127f02ae35",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_6447f274d3874ed8106c071398a5267c",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-38.json",
+      "artifact_sha256": "sha256:dacb2e3b396d38f991120f725b8eed7920a02a2d5ede48ae3d64fba18a865510",
+      "content_sha256": "sha256:dacb2e3b396d38f991120f725b8eed7920a02a2d5ede48ae3d64fba18a865510",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-038",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_7609649065c23b10b76b026fdaa2e763",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_6138ed95bd8dc97b0581f49777b17f53",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_58f8bcf1334567164184ad921cfe9a75",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_8bd3b17f33f90cb671f3220a590eb60a",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-39.json",
+      "artifact_sha256": "sha256:fff75af57c05e96b02dc36e679b2993ae6c999cf91266097667a525919a740be",
+      "content_sha256": "sha256:fff75af57c05e96b02dc36e679b2993ae6c999cf91266097667a525919a740be",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-039",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_56b034d5e9ebc8055bb62ec9eac13843",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_d33b40b9bbfc6314820a339bd7a97b6d",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_7663b6568af71b8651ea30517709027d",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_dd98d60fe1d0c6a7b5d69945281ef7a7",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/audio-40.json",
+      "artifact_sha256": "sha256:a28f9de52d4b4e5002f693c1e3f97ea8cec287ea881b1480fb634e7ca6c61c5e",
+      "content_sha256": "sha256:a28f9de52d4b4e5002f693c1e3f97ea8cec287ea881b1480fb634e7ca6c61c5e",
+      "media_type": "application/vnd.mdrack.synthetic-transcript+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-040",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_d0cb44e0d7b609a1c886c1ca33242d8d",
+      "resource_kind": "audio",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 30000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_eb24511316e674ea67d0f8bb252ae41b",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 60000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 30000,
+          "unit_id": "unit_0400f0b3986f3ed3863cb43f5c46d4d4",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 90000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 60000,
+          "unit_id": "unit_0708e854f8497ae49b53b51296c8ceca",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-41.json",
+      "artifact_sha256": "sha256:e3a034fa9988b9defad99982ec304cd58516550cc85d3f7a2f4ce1d17a51e761",
+      "content_sha256": "sha256:e3a034fa9988b9defad99982ec304cd58516550cc85d3f7a2f4ce1d17a51e761",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-041",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript",
+        "frame_caption"
+      ],
+      "resource_id": "res_4888b20d50cb07a6d3f8147125693231",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_de17bd0d9de5337430cfe9a717f0410c",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_3db85373a1af7c706090fb337c2a913f",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_a6698a162e5e39101c640e66a73205ab",
+          "unit_kind": "time_segment"
+        },
+        {
+          "frame_id": "frame_07a8462e9b9fcf1c9a3698a1dc108820",
+          "ordinal": 3,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 20000,
+          "unit_id": "unit_ed031592dc9a110bded2224f376ab7af",
+          "unit_kind": "frame"
+        },
+        {
+          "frame_id": "frame_000fb9f7fcecb1760b1794caf4f87f3c",
+          "ordinal": 4,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 80000,
+          "unit_id": "unit_e83504c043ced7d6e210c163ca45b18d",
+          "unit_kind": "frame"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-42.json",
+      "artifact_sha256": "sha256:c216afa743cb2a588b98645546b54882ddd6d6757fe31645ae17764d2ee33320",
+      "content_sha256": "sha256:c216afa743cb2a588b98645546b54882ddd6d6757fe31645ae17764d2ee33320",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-042",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript",
+        "frame_caption"
+      ],
+      "resource_id": "res_b56eef0667ddf40063eab11efa268017",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_667f273cf7f94b9e9b8e0eb6a428f720",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_dc9746829359f8a91c7fb6b477af41e1",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_1474c2781ecc70d95fb19883972e5133",
+          "unit_kind": "time_segment"
+        },
+        {
+          "frame_id": "frame_72ba0b986dcacb083d4b2c3bfb6863c0",
+          "ordinal": 3,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 20000,
+          "unit_id": "unit_d74c43706f736a3f4808d48a7e262da0",
+          "unit_kind": "frame"
+        },
+        {
+          "frame_id": "frame_f033dad39599cd9910c199a7c78b5bf6",
+          "ordinal": 4,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 80000,
+          "unit_id": "unit_db3b1f02f20f5fa902a9ad0c3ce479d3",
+          "unit_kind": "frame"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-43.json",
+      "artifact_sha256": "sha256:1bfc61769820ac6281b0c0d1cffb69811771b3dbd9bb6e0a930f393fff017900",
+      "content_sha256": "sha256:1bfc61769820ac6281b0c0d1cffb69811771b3dbd9bb6e0a930f393fff017900",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-043",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript",
+        "frame_caption"
+      ],
+      "resource_id": "res_35935aafe2cd2019bdacc092ac996f4d",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_2b8a9c878eec4b8924462da2a6f303cd",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_612b444fee6f08c009d176bec0b5469a",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_74d76e7534ea244f671c7f24f5aad020",
+          "unit_kind": "time_segment"
+        },
+        {
+          "frame_id": "frame_544dd9c9888e65dc2f271c562dcbabb9",
+          "ordinal": 3,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 20000,
+          "unit_id": "unit_7b49a48a750ebacb1703f2cfab91a3d2",
+          "unit_kind": "frame"
+        },
+        {
+          "frame_id": "frame_9ab2871ffb8e54139b0307f3d9f1d02c",
+          "ordinal": 4,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 80000,
+          "unit_id": "unit_c6a8d54d29575a58bfbd75c97fcf72fd",
+          "unit_kind": "frame"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-44.json",
+      "artifact_sha256": "sha256:0a50b206463e7c9a6e65ec5ab6ff91ebaa3a2fd59963a97c3796ac0c3082bc67",
+      "content_sha256": "sha256:0a50b206463e7c9a6e65ec5ab6ff91ebaa3a2fd59963a97c3796ac0c3082bc67",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-044",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript",
+        "frame_caption"
+      ],
+      "resource_id": "res_a6d6cf8b5d4569c4d52dd2eaa1e42607",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_086f1cfbe9837656cf9752d0f0ff6cc8",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_7fd7d480f7a45a9728b1c60eb33483de",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_9a624e5d331137fc70226796d48b4d30",
+          "unit_kind": "time_segment"
+        },
+        {
+          "frame_id": "frame_42cd437756f0e0bf7c36889bad5182de",
+          "ordinal": 3,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 20000,
+          "unit_id": "unit_f2ea0112ab4c98a559291207208de64b",
+          "unit_kind": "frame"
+        },
+        {
+          "frame_id": "frame_c6f85a2fa5fe7151cdc7ddb1dda89727",
+          "ordinal": 4,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 80000,
+          "unit_id": "unit_93ded6e892f9e66875d208984b0681d3",
+          "unit_kind": "frame"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-45.json",
+      "artifact_sha256": "sha256:3cb3980f7327f066a4946f93975dce836ee0125495683b3e895f87ac08d1aa1b",
+      "content_sha256": "sha256:3cb3980f7327f066a4946f93975dce836ee0125495683b3e895f87ac08d1aa1b",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-045",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript",
+        "frame_caption"
+      ],
+      "resource_id": "res_11e935b4aee084cc1505afc039c996ef",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_a88041f129548518c8fa767809b064da",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_fea832ecf62f8b690624598b3c13226f",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_8a3a0c15620fee6457437e63a94c534d",
+          "unit_kind": "time_segment"
+        },
+        {
+          "frame_id": "frame_f5f07239e35491c7543e9558b3d63e17",
+          "ordinal": 3,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 20000,
+          "unit_id": "unit_b8620c23a0dabdcb9742fa7739042986",
+          "unit_kind": "frame"
+        },
+        {
+          "frame_id": "frame_062a29bc13ca7883c01b4ad588ad3743",
+          "ordinal": 4,
+          "representation_kind": "frame_caption",
+          "timestamp_ms": 80000,
+          "unit_id": "unit_1fa442f3beb8a5f243d1509232a5806c",
+          "unit_kind": "frame"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-46.json",
+      "artifact_sha256": "sha256:da13c3fcec333965cc24f217094ea2da558bc27256629c2ba5bbb0ae0261c174",
+      "content_sha256": "sha256:da13c3fcec333965cc24f217094ea2da558bc27256629c2ba5bbb0ae0261c174",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-046",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_7011fb31ab113f29dc58db3e427b24b4",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_a1064d34c42329532999fdc3429a2346",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_5cb1e07bb23c911c7b73bd4b0803a211",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_886bce90f241aa470a3189539d0f1c86",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-47.json",
+      "artifact_sha256": "sha256:cb5622b16d99867d8b32850323e7dbc9d075bf537ab6d1b199e010fe0cdfbe19",
+      "content_sha256": "sha256:cb5622b16d99867d8b32850323e7dbc9d075bf537ab6d1b199e010fe0cdfbe19",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-047",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_90a94b7ba26f8ac97f39b0379b677d99",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_f1cb7ad8a757b028aa538b140fe04b21",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_5c5846928970f0a1198a003d366f678c",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_f7fa8da6fddf30948d1091ad84f4f696",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-48.json",
+      "artifact_sha256": "sha256:c720d9cee0da3b28337595baebcf8be27ae54eb72cbbeb4fd3be6a64b155ceda",
+      "content_sha256": "sha256:c720d9cee0da3b28337595baebcf8be27ae54eb72cbbeb4fd3be6a64b155ceda",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-048",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_b895737e5ef9f53358ebfb1582b01a7a",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_606aaa222ff7255582f5a6c3e0e779a1",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_d783eb2c85c0e53708c8040372757637",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_e3c369dfa72cf202c2fb8dedd4de4078",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-49.json",
+      "artifact_sha256": "sha256:1fe14875cdf86e3dc130c0c42b330ce8e43f37a0d6045866d46dc787918758d0",
+      "content_sha256": "sha256:1fe14875cdf86e3dc130c0c42b330ce8e43f37a0d6045866d46dc787918758d0",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-049",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_48335784d43dc150dcbc1a544f463073",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_351d3e4b3501016c0837d03f46d305f1",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_8fdfe60f2d42b08e6803f0cf64fd686c",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_01cccc328709c9d69d3a7878db4ce355",
+          "unit_kind": "time_segment"
+        }
+      ]
+    },
+    {
+      "artifact_ref": "artifacts/video-50.json",
+      "artifact_sha256": "sha256:b3d4a387a95f8567b05bc27c4543a360d6988771426e15b3be478800ad01d76b",
+      "content_sha256": "sha256:b3d4a387a95f8567b05bc27c4543a360d6988771426e15b3be478800ad01d76b",
+      "media_type": "application/vnd.mdrack.synthetic-video-text+json",
+      "provenance": {
+        "classification": "synthetic",
+        "license_spdx": "CC0-1.0",
+        "origin": "deterministic-generator-case-050",
+        "pii_status": "reviewed_no_pii",
+        "publishable": true
+      },
+      "representations": [
+        "audio_transcript"
+      ],
+      "resource_id": "res_d6668fce5b6f018bce428177152f522b",
+      "resource_kind": "video",
+      "source_namespace": "mdrack-public-eval-v1",
+      "units": [
+        {
+          "end_ms": 40000,
+          "ordinal": 0,
+          "representation_kind": "audio_transcript",
+          "start_ms": 0,
+          "unit_id": "unit_7864b2b0e44147e7556f1dd34a3d8df2",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 80000,
+          "ordinal": 1,
+          "representation_kind": "audio_transcript",
+          "start_ms": 40000,
+          "unit_id": "unit_9fcd9b6328ac3066e4c2bc87da56c091",
+          "unit_kind": "time_segment"
+        },
+        {
+          "end_ms": 120000,
+          "ordinal": 2,
+          "representation_kind": "audio_transcript",
+          "start_ms": 80000,
+          "unit_id": "unit_fb11242224ccc2502ef6f4607b0fba5d",
+          "unit_kind": "time_segment"
+        }
+      ]
+    }
+  ],
+  "roadmap_scale": {
+    "actual": {
+      "audio": 10,
+      "document": 20,
+      "image": 10,
+      "video": 10,
+      "videos_with_frames": 5
+    },
+    "required": {
+      "audio": 10,
+      "document": 20,
+      "image": 10,
+      "video": 10,
+      "videos_with_frames": 5
+    },
+    "status": "satisfied"
+  },
+  "schema_version": 1,
+  "source_namespace": "mdrack-public-eval-v1"
+}

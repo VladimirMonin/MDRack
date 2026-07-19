@@ -1,0 +1,22 @@
+{
+  "duration_ms": 120000,
+  "frames": [],
+  "passages": [
+    {
+      "end_ms": 40000,
+      "start_ms": 0,
+      "text": "Synthetic video passage 1 about transaction boundaries; marker video-06-0."
+    },
+    {
+      "end_ms": 80000,
+      "start_ms": 40000,
+      "text": "Synthetic video passage 2 about transaction boundaries; marker video-06-1."
+    },
+    {
+      "end_ms": 120000,
+      "start_ms": 80000,
+      "text": "Synthetic video passage 3 about transaction boundaries; marker video-06-2."
+    }
+  ],
+  "resource_id": "res_90a94b7ba26f8ac97f39b0379b677d99"
+}

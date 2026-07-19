@@ -1,0 +1,143 @@
+{
+  "$id": "https://mdrack.invalid/schemas/evaluation/queries-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract": {"const": "mdrack.evaluation-queries"},
+    "schema_version": {"const": 1},
+    "query_set_id": {"pattern": "^qry_[0-9a-f]{32}$", "type": "string"},
+    "query_set_version": {"minLength": 1, "type": "string"},
+    "corpus_ref": {"$ref": "#/$defs/digest"},
+    "contract_digest": {"$ref": "#/$defs/digest"},
+    "roadmap_scale": {"$ref": "#/$defs/scale"},
+    "cases": {"items": {"$ref": "#/$defs/case"}, "minItems": 170, "type": "array"}
+  },
+  "required": ["contract", "schema_version", "query_set_id", "query_set_version", "corpus_ref", "contract_digest", "roadmap_scale", "cases"],
+  "type": "object",
+  "$defs": {
+    "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "resource_id": {"pattern": "^res_[0-9a-f]{32}$", "type": "string"},
+    "unit_id": {"pattern": "^unit_[0-9a-f]{32}$", "type": "string"},
+    "frame_id": {"pattern": "^frame_[0-9a-f]{32}$", "type": "string"},
+    "query_id": {"pattern": "^qry_[0-9a-f]{32}$", "type": "string"},
+    "counts": {
+      "additionalProperties": false,
+      "properties": {
+        "lexical": {"minimum": 50, "type": "integer"},
+        "semantic": {"minimum": 50, "type": "integer"},
+        "hybrid": {"minimum": 30, "type": "integer"},
+        "resource_similarity": {"minimum": 20, "type": "integer"},
+        "timestamp": {"minimum": 20, "type": "integer"}
+      },
+      "required": ["lexical", "semantic", "hybrid", "resource_similarity", "timestamp"],
+      "type": "object"
+    },
+    "scale": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {"const": "satisfied"},
+        "required": {"$ref": "#/$defs/counts"},
+        "actual": {"$ref": "#/$defs/counts"}
+      },
+      "required": ["status", "required", "actual"],
+      "type": "object"
+    },
+    "allowed": {
+      "additionalProperties": false,
+      "properties": {
+        "resource_kinds": {"items": {"enum": ["document", "image", "audio", "video"]}, "minItems": 1, "type": "array", "uniqueItems": true},
+        "representation_kinds": {"items": {"enum": ["retrieval_text", "ocr_text", "caption_text", "audio_transcript", "frame_caption"]}, "minItems": 1, "type": "array", "uniqueItems": true},
+        "unit_kinds": {"items": {"enum": ["text_chunk", "time_segment", "frame", "whole_resource"]}, "minItems": 1, "type": "array", "uniqueItems": true}
+      },
+      "required": ["resource_kinds", "representation_kinds", "unit_kinds"],
+      "type": "object"
+    },
+    "evidence": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {"kind": {"const": "time_interval"}, "start_ms": {"minimum": 0, "type": "integer"}, "end_ms": {"minimum": 1, "type": "integer"}},
+          "required": ["kind", "start_ms", "end_ms"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {"kind": {"const": "frame_timestamp"}, "timestamp_ms": {"minimum": 0, "type": "integer"}, "frame_id": {"$ref": "#/$defs/frame_id"}},
+          "required": ["kind", "timestamp_ms", "frame_id"],
+          "type": "object"
+        }
+      ]
+    },
+    "judgment": {
+      "additionalProperties": false,
+      "properties": {
+        "resource_id": {"$ref": "#/$defs/resource_id"},
+        "unit_id": {"$ref": "#/$defs/unit_id"},
+        "grade": {"maximum": 3, "minimum": 0, "type": "integer"},
+        "basis": {"enum": ["document_text", "ocr_text", "caption_text", "transcript_text", "frame_caption_text"]},
+        "evidence": {"$ref": "#/$defs/evidence"}
+      },
+      "required": ["resource_id", "grade", "basis"],
+      "type": "object"
+    },
+    "case": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"case_kind": {"const": "lexical"}}, "required": ["case_kind"]},
+          "then": {"properties": {"mode": {"const": "text"}, "target": {"const": "unit"}}}
+        },
+        {
+          "if": {"properties": {"case_kind": {"const": "semantic"}}, "required": ["case_kind"]},
+          "then": {"properties": {"mode": {"const": "semantic"}, "target": {"const": "unit"}}}
+        },
+        {
+          "if": {"properties": {"case_kind": {"const": "hybrid"}}, "required": ["case_kind"]},
+          "then": {"properties": {"mode": {"const": "hybrid"}, "target": {"const": "unit"}}}
+        },
+        {
+          "if": {"properties": {"case_kind": {"const": "resource_similarity"}}, "required": ["case_kind"]},
+          "then": {"properties": {"mode": {"const": "similarity"}, "target": {"const": "resource"}}}
+        },
+        {
+          "if": {"properties": {"case_kind": {"const": "timestamp"}}, "required": ["case_kind"]},
+          "then": {"properties": {"mode": {"const": "hybrid"}, "target": {"const": "unit"}}}
+        },
+        {
+          "if": {"properties": {"target": {"const": "unit"}}, "required": ["target"]},
+          "then": {"properties": {"judgments": {"items": {"required": ["unit_id"]}}}}
+        },
+        {
+          "if": {"properties": {"target": {"const": "resource"}}, "required": ["target"]},
+          "then": {
+            "properties": {
+              "judgments": {
+                "items": {"not": {"anyOf": [{"required": ["unit_id"]}, {"required": ["evidence"]}]}}
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "query_id": {"$ref": "#/$defs/query_id"},
+        "query_text": {"minLength": 1, "type": "string"},
+        "query_resource_id": {"$ref": "#/$defs/resource_id"},
+        "case_kind": {"enum": ["lexical", "semantic", "hybrid", "resource_similarity", "timestamp"]},
+        "mode": {"enum": ["text", "semantic", "hybrid", "similarity"]},
+        "target": {"enum": ["unit", "resource"]},
+        "basis": {"enum": ["document_text", "ocr_text", "caption_text", "transcript_text", "frame_caption_text"]},
+        "allowed": {"$ref": "#/$defs/allowed"},
+        "cutoffs": {
+          "additionalProperties": false,
+          "properties": {"recall": {"const": [5, 10]}, "mrr": {"const": 10}, "ndcg": {"const": 10}},
+          "required": ["recall", "mrr", "ndcg"],
+          "type": "object"
+        },
+        "slice_tags": {"items": {"minLength": 1, "type": "string"}, "minItems": 1, "type": "array", "uniqueItems": true},
+        "judgments": {"items": {"$ref": "#/$defs/judgment"}, "minItems": 1, "type": "array"}
+      },
+      "required": ["query_id", "query_text", "case_kind", "mode", "target", "basis", "allowed", "cutoffs", "slice_tags", "judgments"],
+      "type": "object"
+    }
+  }
+}

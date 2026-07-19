@@ -1,0 +1,21 @@
+{
+  "duration_ms": 90000,
+  "passages": [
+    {
+      "end_ms": 30000,
+      "start_ms": 0,
+      "text": "Synthetic audio passage 1 about deterministic indexing; marker audio-06-0."
+    },
+    {
+      "end_ms": 60000,
+      "start_ms": 30000,
+      "text": "Synthetic audio passage 2 about deterministic indexing; marker audio-06-1."
+    },
+    {
+      "end_ms": 90000,
+      "start_ms": 60000,
+      "text": "Synthetic audio passage 3 about deterministic indexing; marker audio-06-2."
+    }
+  ],
+  "resource_id": "res_394568c5ba8c8d3f56b14cdcd45c5153"
+}

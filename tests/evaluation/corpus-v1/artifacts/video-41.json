@@ -1,0 +1,33 @@
+{
+  "duration_ms": 120000,
+  "frames": [
+    {
+      "caption": "Synthetic frame 1 illustrates resource grouping.",
+      "frame_id": "frame_07a8462e9b9fcf1c9a3698a1dc108820",
+      "timestamp_ms": 20000
+    },
+    {
+      "caption": "Synthetic frame 2 illustrates resource grouping.",
+      "frame_id": "frame_000fb9f7fcecb1760b1794caf4f87f3c",
+      "timestamp_ms": 80000
+    }
+  ],
+  "passages": [
+    {
+      "end_ms": 40000,
+      "start_ms": 0,
+      "text": "Synthetic video passage 1 about resource grouping; marker video-00-0."
+    },
+    {
+      "end_ms": 80000,
+      "start_ms": 40000,
+      "text": "Synthetic video passage 2 about resource grouping; marker video-00-1."
+    },
+    {
+      "end_ms": 120000,
+      "start_ms": 80000,
+      "text": "Synthetic video passage 3 about resource grouping; marker video-00-2."
+    }
+  ],
+  "resource_id": "res_4888b20d50cb07a6d3f8147125693231"
+}

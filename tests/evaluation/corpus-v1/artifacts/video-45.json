@@ -1,0 +1,33 @@
+{
+  "duration_ms": 120000,
+  "frames": [
+    {
+      "caption": "Synthetic frame 1 illustrates deterministic indexing.",
+      "frame_id": "frame_f5f07239e35491c7543e9558b3d63e17",
+      "timestamp_ms": 20000
+    },
+    {
+      "caption": "Synthetic frame 2 illustrates deterministic indexing.",
+      "frame_id": "frame_062a29bc13ca7883c01b4ad588ad3743",
+      "timestamp_ms": 80000
+    }
+  ],
+  "passages": [
+    {
+      "end_ms": 40000,
+      "start_ms": 0,
+      "text": "Synthetic video passage 1 about deterministic indexing; marker video-04-0."
+    },
+    {
+      "end_ms": 80000,
+      "start_ms": 40000,
+      "text": "Synthetic video passage 2 about deterministic indexing; marker video-04-1."
+    },
+    {
+      "end_ms": 120000,
+      "start_ms": 80000,
+      "text": "Synthetic video passage 3 about deterministic indexing; marker video-04-2."
+    }
+  ],
+  "resource_id": "res_11e935b4aee084cc1505afc039c996ef"
+}

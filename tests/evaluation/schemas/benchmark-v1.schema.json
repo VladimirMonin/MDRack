@@ -1,0 +1,46 @@
+{
+  "$id": "https://mdrack.invalid/schemas/evaluation/benchmark-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract": {"const": "mdrack.evaluation-benchmark"},
+    "schema_version": {"const": 1},
+    "benchmark_id": {"pattern": "^benchmark_[0-9a-f]{32}$", "type": "string"},
+    "benchmark_version": {"minLength": 1, "type": "string"},
+    "corpus_ref": {"$ref": "#/$defs/digest"},
+    "query_ref": {"$ref": "#/$defs/digest"},
+    "contract_digest": {"$ref": "#/$defs/digest"},
+    "materialization": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {"const": "gated_manifest"},
+        "gate": {"const": "W5-B13"},
+        "seed": {"minimum": 0, "type": "integer"},
+        "artifact_policy": {"const": "generated-no-binaries"}
+      },
+      "required": ["status", "gate", "seed", "artifact_policy"],
+      "type": "object"
+    },
+    "cells": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "units": {"enum": [1000, 10000, 50000, 100000]},
+          "dimensions": {"enum": [384, 768, 1024]}
+        },
+        "required": ["units", "dimensions"],
+        "type": "object"
+      },
+      "maxItems": 12,
+      "minItems": 12,
+      "type": "array"
+    },
+    "operations": {"items": {"minLength": 1, "type": "string"}, "minItems": 1, "type": "array", "uniqueItems": true},
+    "non_claims": {"items": {"minLength": 1, "type": "string"}, "minItems": 1, "type": "array"}
+  },
+  "required": ["contract", "schema_version", "benchmark_id", "benchmark_version", "corpus_ref", "query_ref", "contract_digest", "materialization", "cells", "operations", "non_claims"],
+  "type": "object",
+  "$defs": {
+    "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}
+  }
+}

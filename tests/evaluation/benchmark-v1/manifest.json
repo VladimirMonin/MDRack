@@ -1,0 +1,82 @@
+{
+  "benchmark_id": "benchmark_a5d112a96045041ea7b636b45e92b9e6",
+  "benchmark_version": "1.0.0",
+  "cells": [
+    {
+      "dimensions": 384,
+      "units": 1000
+    },
+    {
+      "dimensions": 768,
+      "units": 1000
+    },
+    {
+      "dimensions": 1024,
+      "units": 1000
+    },
+    {
+      "dimensions": 384,
+      "units": 10000
+    },
+    {
+      "dimensions": 768,
+      "units": 10000
+    },
+    {
+      "dimensions": 1024,
+      "units": 10000
+    },
+    {
+      "dimensions": 384,
+      "units": 50000
+    },
+    {
+      "dimensions": 768,
+      "units": 50000
+    },
+    {
+      "dimensions": 1024,
+      "units": 50000
+    },
+    {
+      "dimensions": 384,
+      "units": 100000
+    },
+    {
+      "dimensions": 768,
+      "units": 100000
+    },
+    {
+      "dimensions": 1024,
+      "units": 100000
+    }
+  ],
+  "contract": "mdrack.evaluation-benchmark",
+  "contract_digest": "sha256:1a2df8d9c85fc4ebe0ac1b1645d56ee58fafe0880b0cb3a76f92a473b9c4614d",
+  "corpus_ref": "sha256:2183e11b7e80b660e178322ae1305392c3311a801a749064e1845aeb3b78a534",
+  "materialization": {
+    "artifact_policy": "generated-no-binaries",
+    "gate": "W5-B13",
+    "seed": 20260719,
+    "status": "gated_manifest"
+  },
+  "non_claims": [
+    "Manifest cells are not materialized benchmark evidence.",
+    "No latency, capacity, provider quality, or backend decision is claimed."
+  ],
+  "operations": [
+    "atomic_replace",
+    "fts_query",
+    "semantic_linear_scan",
+    "hybrid_search",
+    "resource_grouping",
+    "weighted_rrf",
+    "duplicate_lookup",
+    "whole_resource_similarity",
+    "close_reopen",
+    "migration",
+    "batch_import"
+  ],
+  "query_ref": "sha256:91dd1b7e8b2531702069bdc83c442170881c72843413bb0853d17388bb42b1a7",
+  "schema_version": 1
+}
