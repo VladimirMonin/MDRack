@@ -53,6 +53,7 @@ LM Studio model-management commands. Host applications can use
 - [Recovery procedures](docs/recovery.md)
 - [ADR-0001: reranking deferred](docs/decisions/0001-reranking-deferred.md)
 - [ADR-0002: provider/storage-neutral core](docs/decisions/0002-provider-storage-neutral-core.md)
+- [ADR-0004: SQLite operating envelope](docs/decisions/0004-sqlite-operating-envelope.md)
 - [v0.3 release evidence](docs/evidence/v0.3-release-gate.md)
 
 Files under `docs/plans/` and the legacy architecture/design documents are

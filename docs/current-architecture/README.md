@@ -31,6 +31,7 @@ When sources disagree, use this order:
 - [ADR-0002: provider/storage-neutral core](../decisions/0002-provider-storage-neutral-core.md)
 - [v0.3 compatibility registry](../compatibility/v0.3-compatibility-registry.md)
 - [v0.3 release evidence](../evidence/v0.3-release-gate.md)
+- [W5-B13 SQLite envelope](../evaluation/w5-sqlite-envelope.md) and [ADR-0004](../decisions/0004-sqlite-operating-envelope.md)
 - [Recovery and migration procedures](../recovery.md)
 - [Windows executable build](../windows-exe-build.md)
 
