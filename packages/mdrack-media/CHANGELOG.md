@@ -15,3 +15,7 @@
   handling, structural metrics, and provisional A/B/C runner plumbing. Extraction,
   embedding, persistence, provider integration, and default-policy selection remain
   deferred.
+- Add provider-free video frame-caption batch projection with stable frame units,
+  timestamp evidence, empty/replacement-safe identity behavior, and caller-owned
+  optional vectors. Core categorical narrowing and weighted hybrid fusion remain
+  experimental retrieval composition rather than a production-default claim.

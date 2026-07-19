@@ -58,3 +58,7 @@ class AggregationFingerprint(_Fingerprint):
 
 class EmbeddingFingerprint(_Fingerprint):
     """Identity of the caller-owned embedding space preparation."""
+
+
+class ContentFingerprint(_Fingerprint):
+    """Identity of the caller-provided frame content represented by a caption."""

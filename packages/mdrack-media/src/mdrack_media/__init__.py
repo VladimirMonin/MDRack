@@ -21,12 +21,14 @@ from .events import (
 )
 from .fingerprints import (
     AggregationFingerprint,
+    ContentFingerprint,
     EmbeddingFingerprint,
     GrouperFingerprint,
     NormalizationFingerprint,
     ProducerFingerprint,
     TokenCounterFingerprint,
 )
+from .frames import build_video_frame_caption_batch
 from .grouper import (
     GROUPER_ALGORITHM,
     JOIN_POLICY,
@@ -91,6 +93,7 @@ from .records import (
 
 __all__ = [
     "AggregationFingerprint",
+    "ContentFingerprint",
     "EmbeddingFingerprint",
     "FrameBatchBuilderInput",
     "FrameCaptionArtifact",
@@ -153,6 +156,7 @@ __all__ = [
     "WholeResourceTextPolicy",
     "atom_id",
     "build_audio_transcript_batch",
+    "build_video_frame_caption_batch",
     "build_video_transcript_batch",
     "canonical_json",
     "frame_id",

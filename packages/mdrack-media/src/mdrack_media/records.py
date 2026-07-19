@@ -18,6 +18,7 @@ from .common import (
     require_text,
 )
 from .fingerprints import (
+    ContentFingerprint,
     GrouperFingerprint,
     NormalizationFingerprint,
     ProducerFingerprint,
@@ -383,6 +384,7 @@ class FrameCaptionObservation:
     producer_fingerprint: ProducerFingerprint
     normalization_fingerprint: NormalizationFingerprint
     metadata: Mapping[str, JSONValue] = field(default_factory=_empty_metadata)
+    content_fingerprint: ContentFingerprint | None = None
 
     def __post_init__(self) -> None:
         validate_media_id(self.resource_id, "resource_id", kind=ID_RESOURCE)
@@ -396,6 +398,14 @@ class FrameCaptionObservation:
             raise ValueError("producer_fingerprint must be a ProducerFingerprint")
         if not isinstance(self.normalization_fingerprint, NormalizationFingerprint):
             raise ValueError("normalization_fingerprint must be a NormalizationFingerprint")
+        if self.content_fingerprint is None:
+            object.__setattr__(
+                self,
+                "content_fingerprint",
+                ContentFingerprint.from_payload({"caption": self.caption}),
+            )
+        elif not isinstance(self.content_fingerprint, ContentFingerprint):
+            raise ValueError("content_fingerprint must be a ContentFingerprint or None")
         expected_frame_id = frame_id(
             self.resource_id,
             self.producer_fingerprint.value,
@@ -412,8 +422,10 @@ class FrameCaptionObservation:
         object.__setattr__(self, "metadata", freeze_metadata(self.metadata))
 
     def to_dict(self) -> dict[str, object]:
+        assert self.content_fingerprint is not None
         return {
             "caption": self.caption,
+            "content_fingerprint": self.content_fingerprint.value,
             "frame_id": self.frame_id,
             "metadata": plain_json(self.metadata),
             "normalization_fingerprint": self.normalization_fingerprint.value,
@@ -430,6 +442,7 @@ class FrameCaptionObservation:
         keys = frozenset(
             {
                 "caption",
+                "content_fingerprint",
                 "frame_id",
                 "metadata",
                 "normalization_fingerprint",
@@ -448,6 +461,7 @@ class FrameCaptionObservation:
             timestamp_ms=cast(int, data["timestamp_ms"]),
             observation_identity=cast(str, data["observation_identity"]),
             caption=cast(str, data["caption"]),
+            content_fingerprint=ContentFingerprint.from_dict(data["content_fingerprint"]),
             ordinal=cast(int, data["ordinal"]),
             token_count=TokenCount.from_dict(data["token_count"]),
             producer_fingerprint=ProducerFingerprint.from_dict(data["producer_fingerprint"]),

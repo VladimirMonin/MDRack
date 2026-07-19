@@ -12,6 +12,9 @@ repository packaging tests.
 - `TranscriptArtifact`: zero or more transcript atoms under one resource and
   representation.
 - `FrameCaptionObservation` and `FrameCaptionArtifact`: timed textual frame evidence.
+- Each frame observation carries a content fingerprint. It defaults to a
+  deterministic caption fingerprint for simple callers; frame producers should
+  provide the source-frame fingerprint when captions can be regenerated.
 
 All intervals use integer milliseconds and `[start_ms,end_ms)` semantics. Text is
 validated but never normalized or truncated.
@@ -55,6 +58,18 @@ builder inputs. `build_audio_transcript_batch()` and `build_video_transcript_bat
 transcript through the timed grouper into a `mdrack_core.PreparedResourceBatch`;
 they accept only
 caller-supplied vectors, never reads media bytes, and persists no data itself.
+`build_video_frame_caption_batch()` projects a `FrameCaptionArtifact` into
+`frame` text units with `video_frame` timestamp evidence. It preserves empty
+artifacts as a resource/representation with no units, requires exact vector-key
+matching when vectors are supplied, and uses the same deterministic embedding
+space identity rules. The frame builder is provider-, filesystem-, and
+persistence-neutral; categorical narrowing and weighted transcript/frame
+hybrid fusion are performed by the core retrieval service.
+Artifact metadata is retained on the resource and representation; observation
+metadata, including content fingerprints, is retained on each frame unit. The
+resource content hash changes when caption/content evidence changes while the
+logical frame ID remains stable, so catalog replacement is deterministic rather
+than an accidental duplicate.
 
 The audio projection uses a `timed_passage` representation with `time_segment`
 units and integer-millisecond `time_segment` locators. An explicit whole-resource

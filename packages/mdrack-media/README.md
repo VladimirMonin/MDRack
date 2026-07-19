@@ -11,12 +11,17 @@ Python 3.11 or newer is required. The only runtime dependency is
 
 The package validates caller-prepared values, groups timed atoms with a caller-owned
 token counter, projects typed millisecond locators to generic
-`mdrack_core.Locator` records, and provides provider-free audio and video transcript
-batch projections. The builders do not read files, access a database or network,
+`mdrack_core.Locator` records, and provides provider-free audio, video transcript, and
+video frame-caption batch projections. The builders do not read files, access a database or network,
 call providers, load a tokenizer, or create embeddings; vectors remain caller-owned.
 Source
 identity is accepted only by deterministic ID helpers and is never admitted to
 media event fields.
+
+Frame-caption batches expose stable frame IDs as searchable units and preserve
+integer-millisecond `video_frame` evidence. They can be narrowed with core
+categorical branch scopes and fused with transcript branches using weighted RRF;
+these are experimental retrieval compositions, not default production behavior.
 
 Token counts always retain `exact` or `estimated` truthfulness together with the
 fingerprint of the counter. Producer, normalization, grouper, token-counter,
