@@ -15,6 +15,7 @@ from mdrack.cli.commands.images import image as image_group
 from mdrack.cli.commands.model import model as model_group
 from mdrack.cli.commands.read import read
 from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
+from mdrack.cli.commands.resource import resource as resource_group
 from mdrack.cli.commands.resources import resources as resources_group
 from mdrack.cli.commands.scan import cli_scan
 from mdrack.cli.commands.search import cli_search
@@ -132,6 +133,9 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
     ctx.obj[CTX_ROOT] = resolved_root
     ctx.obj[CTX_JSON] = json_output
 
+    if ctx.invoked_subcommand == "resource":
+        return
+
     # Load configuration
     try:
         toml_path = Path(config_file) if config_file else None
@@ -206,6 +210,7 @@ main.add_command(cli_search, name="search")
 
 # Explicit direct-image lifecycle is separate from Markdown scan.
 main.add_command(image_group)
+main.add_command(resource_group)
 main.add_command(resources_group)
 
 

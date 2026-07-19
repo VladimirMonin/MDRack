@@ -110,6 +110,7 @@ Live command registration exposes:
 | `rebuild embeddings` | Recreate vectors for the active profile. |
 | `eval retrieval` | Run retrieval evaluation against the indexed store. |
 | `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against a ready resource generation; never triggered by Markdown scan. |
+| `resource import`, `inspect`, `delete` | Provider-free prepared-resource lifecycle against one explicitly named clean standalone catalog. |
 | `resources duplicates`, `similar` | Provider-free exact hash and existing-vector discovery with typed/facet scope filters. |
 | `model list`, `loaded`, `download`, `download-status`, `load`, `unload`, `switch` | LM Studio model discovery and lifecycle operations. |
 
@@ -133,6 +134,11 @@ application degradation states to command errors; see [retrieval](retrieval.md).
 It does not expose CLI diagnostics, status, model lifecycle, rebuild, evaluation,
 or legacy section listing methods.
 
+The separate Click-free `PreparedResourceCatalog` public facade opens one explicit
+clean standalone catalog path and provides manifest import plus redacted
+inspect/delete parity with the singular `resource` CLI. It does not use
+`MDRackEngine`, configured generations, providers, source files, or the network.
+
 The engine imports no Click modules. By default it composes
 `SQLiteIndexStorage`, while callers may inject compatible storage/read/search
 ports and an embedding provider.
@@ -152,7 +158,10 @@ stable ranks/scores/degradation categories, and portable source references. They
 never expose SQLite row IDs, local paths, caption/OCR text, vectors, facet values,
 provider bodies, or raw exception strings. `mdrack.public_api` re-exports the
 engine, compatibility retrieval DTOs, image result/config protocols, and resource
-discovery scope/results; pure generic core DTOs remain under `mdrack_core`.
+discovery scope/results. The explicit prepared-resource catalog facade and its safe
+result/error records are published from `mdrack.application.resource_catalog` without
+widening the frozen compatibility `mdrack.public_api.__all__`; pure generic core DTOs
+remain under `mdrack_core`.
 
 ## Primary source anchors
 

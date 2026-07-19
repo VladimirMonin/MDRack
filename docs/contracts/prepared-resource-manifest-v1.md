@@ -62,13 +62,33 @@ duplicate IDs, dangling relationships, vector mismatches and other graph errors
 therefore cannot open an adapter transaction. `index_prepared_resource(catalog,
 batch)` provides the same explicit-catalog path for an already prepared batch.
 
+`PreparedResourceCatalog.open(catalog_path)` is the public Click-free lifecycle
+facade for an existing clean `mdrack_sqlite_catalog_v1` database. Its
+`import_file`, `import_bytes`, `inspect`, and `delete` methods always use the
+explicit path; they never select or modify the application's configured/default
+store. `inspect` returns only logical identity, aggregate counts, kinds, and
+SHA-256 fingerprints. It never returns source namespace, title, text, metadata,
+facet values, vectors, producer values, or locator payload.
+
+The matching CLI is singular and path-explicit:
+
+```text
+mdrack resource import <manifest.json> --catalog <catalog.sqlite3>
+mdrack resource inspect <resource-id> --catalog <catalog.sqlite3>
+mdrack resource delete <resource-id> --catalog <catalog.sqlite3>
+```
+
+Each invocation writes exactly one JSON envelope to stdout. Runtime failures use
+fixed messages and stable codes; paths, payloads, IDs from failed requests, raw
+SQLite errors, and exception text are not serialized or logged.
+
 Failures expose only stable `ManifestErrorCode` values. Untrusted text, metadata,
 facets, vectors, locator payloads and raw parser exceptions are never included in the
 exception string.
 
 ## Deferred surfaces
 
-Manifest file I/O and CLI commands belong to the later resource CLI slice. Export is
-not part of v1: the frozen core read port cannot return an atomic complete graph, and
-widening it requires a separate contract and privacy review. This codec does not
-select or change the application's default store.
+Export is not part of v1: the frozen core read port cannot return an atomic complete
+graph, and widening it requires a separate contract and privacy review. Streaming
+import, source resolution, implicit embedding, catalog creation, and default-store
+selection remain deferred.

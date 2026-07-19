@@ -1489,6 +1489,60 @@ locators, paths, database IDs, or exception text.
 
 ---
 
+## 18. `mdrack resource`
+
+The singular lifecycle group operates only on the existing clean standalone catalog
+named by required `--catalog PATH`. It never selects the configured/default store,
+creates or migrates a catalog, opens a source locator, calls a provider, or uses the
+network.
+
+```text
+mdrack resource import <manifest.json> --catalog <catalog.sqlite3>
+mdrack resource inspect <resource-id> --catalog <catalog.sqlite3>
+mdrack resource delete <resource-id> --catalog <catalog.sqlite3>
+```
+
+`import` reads at most the fixed manifest limit plus one byte, validates the complete
+graph before one catalog replacement, closes the catalog, and returns logical identity
+plus record counts. `inspect` reopens the catalog and returns only allowlisted counts,
+kinds, and one-way fingerprints:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "resource_id": "resource-1",
+    "resource_kind": "document",
+    "media_type": "text/plain",
+    "locator": {"kind": "opaque", "fingerprint": "sha256:..."},
+    "counts": {"representations": 1, "units": 1, "spaces": 1, "vectors": 1, "facets": 1},
+    "kinds": {"representations": ["retrieval_text"], "modalities": ["text"], "units": ["text_chunk"]},
+    "fingerprints": {"content": "sha256:...", "producers": ["sha256:..."], "spaces": ["sha256:..."]}
+  },
+  "meta": {"command": "resource inspect"}
+}
+```
+
+Inspection never returns locator payload, source namespace, title, text, metadata,
+facet values, vectors, or raw producer/space values. `delete` is idempotent and returns
+`{"resource_id":"...","deleted":true|false}` after atomically deleting the complete
+logical graph. The redacted `content` fingerprint is `null` when no content hash was
+stored.
+
+Every runtime success or failure writes exactly one JSON object followed by one newline
+to stdout. Safe errors use `RESOURCE_MANIFEST_<MANIFEST_CODE>`,
+`RESOURCE_MANIFEST_UNAVAILABLE`, `RESOURCE_CATALOG_UNAVAILABLE`, or
+`RESOURCE_NOT_FOUND`; stderr/logs contain only fixed event names and safe categories.
+Failed request IDs, manifest/catalog paths, payloads, SQLite messages, and exception
+text are never emitted. Click usage errors that occur before command dispatch retain
+Click's standard usage stream.
+
+The Click-free Python-parity surface is
+`mdrack.application.resource_catalog.PreparedResourceCatalog.open(path)` with
+`import_file`, `import_bytes`, `inspect`, `delete`, and context-managed `close`.
+
+---
+
 ## Error Code Reference
 
 | Code | Typical cause |
@@ -1506,6 +1560,10 @@ locators, paths, database IDs, or exception text.
 | `IMAGE_SEARCH_ERROR` | Direct image search could not complete. |
 | `RESOURCE_DUPLICATE_ERROR` | Exact resource duplicate lookup could not complete. |
 | `RESOURCE_SIMILARITY_ERROR` | Existing-vector resource similarity lookup could not complete. |
+| `RESOURCE_MANIFEST_<MANIFEST_CODE>` | Prepared manifest parsing, limits, schema, or graph validation failed. |
+| `RESOURCE_MANIFEST_UNAVAILABLE` | The explicit manifest file could not be read. |
+| `RESOURCE_CATALOG_UNAVAILABLE` | The explicit path is missing, unreadable, invalid, or not a clean catalog. |
+| `RESOURCE_NOT_FOUND` | Explicit-catalog inspection did not find the logical resource. |
 | `IMAGE_DELETE_ERROR` | Direct image graph deletion could not complete. |
 | `VALIDATION_ERROR` | Invalid argument value (e.g. negative page number). |
 | `INTERNAL_ERROR` | Unhandled exception during command execution. |
@@ -1533,6 +1591,7 @@ All commands read and write the same database file:
 | `eval retrieval` | `<store>/knowledge.db` |
 | `doctor` | `<store>/knowledge.db` |
 | `image ingest/search/delete` | Ready resource-core generation selected by `<store>/active-generation.json` |
+| `resource import/inspect/delete` | Existing clean standalone database required by explicit `--catalog PATH` |
 | `resources duplicates/similar` | Ready resource-core generation selected by `<store>/active-generation.json` |
 
 Relative store paths are resolved against the selected `--root`.
