@@ -10,4 +10,8 @@
 - Add privacy-safe event records, policy DTOs and non-executing builder inputs.
 - Fail closed on invalid recursive JSON, transcript timelines, and mismatched
   atom/frame/representation identities; publish executable serialization examples.
-- Explicitly defer grouping, extraction, embedding and runtime integration.
+- Add deterministic timed grouping with exact source coverage, stable policy-aware
+  identities, strict order, overlap-component preservation, truthful unsplittable
+  handling, structural metrics, and provisional A/B/C runner plumbing. Extraction,
+  embedding, persistence, provider integration, and default-policy selection remain
+  deferred.
