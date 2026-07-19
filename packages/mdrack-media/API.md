@@ -51,8 +51,9 @@ SHA-256.
 validated policy records. `TokenCounter` is the caller-owned protocol for an exact
 tokenizer or deterministic estimate and exposes its typed fingerprint.
 `TranscriptBatchBuilderInput` and `FrameBatchBuilderInput` validate provider-free
-builder inputs. `build_audio_transcript_batch()` projects a transcript through the
-timed grouper into a `mdrack_core.PreparedResourceBatch`; it accepts only
+builder inputs. `build_audio_transcript_batch()` and `build_video_transcript_batch()` project a
+transcript through the timed grouper into a `mdrack_core.PreparedResourceBatch`;
+they accept only
 caller-supplied vectors, never reads media bytes, and persists no data itself.
 
 The audio projection uses a `timed_passage` representation with `time_segment`
@@ -62,6 +63,10 @@ resource retrieval. Embedding spaces are shared by compatible fingerprint,
 dimension, and metric identities so semantic retrieval can cross resources.
 Changing producer, normalization, grouping, aggregation, or embedding fingerprints
 changes the corresponding logical identities and requires a fresh replacement batch.
+The video projection reuses the same representation, grouping, vector, and
+whole-resource path while requiring a video resource and preserving
+`track: "video"` in every timed seek locator; it never projects an audio resource
+as video (or vice versa).
 
 ## Deterministic timed grouper
 

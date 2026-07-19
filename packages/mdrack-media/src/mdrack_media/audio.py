@@ -19,11 +19,11 @@ from mdrack_core import (
     VectorRecord,
 )
 
-from .builders import RESOURCE_AUDIO, TranscriptBatchBuilderInput
+from .builders import RESOURCE_AUDIO, RESOURCE_VIDEO, TranscriptBatchBuilderInput
 from .common import canonical_json
 from .grouper import group_timed_atoms
 from .identifiers import representation_id, whole_resource_id
-from .locators import TimeSegmentLocator
+from .locators import TRACK_AUDIO, TRACK_VIDEO, TimeSegmentLocator
 from .records import REPRESENTATION_TIMED_PASSAGE, TOKEN_COUNT_EXACT, TimedPassage
 
 
@@ -44,14 +44,16 @@ def _whole_text(passages: Sequence[TimedPassage]) -> str:
     return "\n\n".join(passage.text for passage in passages)
 
 
-def build_audio_transcript_batch(
+def _build_transcript_batch(
     input_value: TranscriptBatchBuilderInput,
     *,
     token_counter: object,
     vectors: Mapping[str, Sequence[float]] | None = None,
     metric: str = "cosine",
+    resource_kind: str,
+    track: str,
 ) -> PreparedResourceBatch:
-    """Build an immutable audio graph from caller-owned transcript text and vectors.
+    """Build an immutable timed-transcript graph from caller-owned text and vectors.
 
     The builder never reads or resolves the media locator. Passage units are the
     only retrieval units unless the input explicitly enables a whole-resource
@@ -61,6 +63,8 @@ def build_audio_transcript_batch(
     """
     if not isinstance(input_value, TranscriptBatchBuilderInput):
         raise TypeError("input_value must be a TranscriptBatchBuilderInput")
+    if input_value.resource.resource_kind != resource_kind:
+        raise ValueError(f"transcript builder requires a {resource_kind} resource")
     if not isinstance(vectors, (Mapping, type(None))):
         raise TypeError("vectors must be a mapping or None")
     if metric not in {"cosine", "dot", "l2"}:
@@ -77,7 +81,7 @@ def build_audio_transcript_batch(
     if grouped.grouper_fingerprint != input_value.grouper_fingerprint:
         raise ValueError("grouper_fingerprint does not match the effective grouping policy")
     if not grouped.passages:
-        raise ValueError("audio transcript must contain at least one timed passage")
+        raise ValueError("transcript must contain at least one timed passage")
     transcript = input_value.transcript
     resource_id = input_value.resource.resource_id
     passage_representation_id = input_value.passage_representation_id
@@ -108,7 +112,7 @@ def build_audio_transcript_batch(
             modality=MODALITY_TEXT,
             text=passage.text,
             evidence_locator=TimeSegmentLocator(
-                passage.start_ms, passage.end_ms, track="audio"
+                passage.start_ms, passage.end_ms, track=track
             ).to_core_locator(),
             ordinal=passage.ordinal,
             token_count=passage.token_count.count,
@@ -174,12 +178,12 @@ def build_audio_transcript_batch(
         if input_value.whole_text_policy is not None:
             expected_ids.add(units[-1].unit_id)
         if set(vectors) != expected_ids:
-            raise ValueError("vectors must contain exactly one vector per indexed audio unit")
+            raise ValueError("vectors must contain exactly one vector per indexed transcript unit")
         if not expected_ids:
             return PreparedResourceBatch(
                 resource=ResourceRecord(
                     resource_id=resource_id,
-                    resource_kind=RESOURCE_AUDIO,
+                    resource_kind=resource_kind,
                     media_type=input_value.resource.media_type,
                     source_namespace=input_value.resource.source_namespace,
                     locator=input_value.resource.locator,
@@ -217,7 +221,7 @@ def build_audio_transcript_batch(
     return PreparedResourceBatch(
         resource=ResourceRecord(
             resource_id=resource_id,
-            resource_kind=RESOURCE_AUDIO,
+            resource_kind=resource_kind,
             media_type=input_value.resource.media_type,
             source_namespace=input_value.resource.source_namespace,
             locator=input_value.resource.locator,
@@ -236,4 +240,40 @@ def build_audio_transcript_batch(
     )
 
 
-__all__ = ("build_audio_transcript_batch",)
+def build_audio_transcript_batch(
+    input_value: TranscriptBatchBuilderInput,
+    *,
+    token_counter: object,
+    vectors: Mapping[str, Sequence[float]] | None = None,
+    metric: str = "cosine",
+) -> PreparedResourceBatch:
+    """Build an immutable audio transcript graph with audio seek evidence."""
+    return _build_transcript_batch(
+        input_value,
+        token_counter=token_counter,
+        vectors=vectors,
+        metric=metric,
+        resource_kind=RESOURCE_AUDIO,
+        track=TRACK_AUDIO,
+    )
+
+
+def build_video_transcript_batch(
+    input_value: TranscriptBatchBuilderInput,
+    *,
+    token_counter: object,
+    vectors: Mapping[str, Sequence[float]] | None = None,
+    metric: str = "cosine",
+) -> PreparedResourceBatch:
+    """Build an immutable video transcript graph with video seek evidence."""
+    return _build_transcript_batch(
+        input_value,
+        token_counter=token_counter,
+        vectors=vectors,
+        metric=metric,
+        resource_kind=RESOURCE_VIDEO,
+        track=TRACK_VIDEO,
+    )
+
+
+__all__ = ("build_audio_transcript_batch", "build_video_transcript_batch")

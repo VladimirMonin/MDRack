@@ -54,14 +54,22 @@ class ContractStore(Protocol):
     ) -> list[RankedCandidate]: ...
 
 
-def _batch(resource_id: str, namespace: str, text: str, vector: tuple[float, ...]) -> PreparedResourceBatch:
+def _batch(
+    resource_id: str,
+    namespace: str,
+    text: str,
+    vector: tuple[float, ...],
+    *,
+    resource_kind: str = "document",
+    media_type: str = "text/plain",
+) -> PreparedResourceBatch:
     representation_id = f"representation-{resource_id}"
     unit_id = f"unit-{resource_id}"
     return PreparedResourceBatch(
         ResourceRecord(
             resource_id,
-            "document",
-            "text/plain",
+            resource_kind,
+            media_type,
             namespace,
             Locator("logical", {"id": resource_id}),
             "sha256:shared",
@@ -214,6 +222,36 @@ def test_generic_catalog_and_search_contract(
                 scope=multi_scope,
             )
         ] == ["unit-a", "unit-b"]
+
+        mixed_scope = SearchScope(media_types=("audio/mpeg", "video/mp4"))
+        # Insert video first so SQLite FTS rowid order differs from the contract key.
+        store.replace_resource(
+            _batch(
+                "z-video",
+                "media",
+                "shared lexical tie",
+                (1.0, 0.0),
+                resource_kind="video",
+                media_type="video/mp4",
+            )
+        )
+        store.replace_resource(
+            _batch(
+                "a-audio",
+                "media",
+                "shared lexical tie",
+                (1.0, 0.0),
+                resource_kind="audio",
+                media_type="audio/mpeg",
+            )
+        )
+        assert [
+            item.unit_id
+            for item in store.search_lexical(
+                LexicalBranch("mixed-media-tie", "shared", candidate_limit=10),
+                scope=mixed_scope,
+            )
+        ] == ["unit-a-audio", "unit-z-video"]
 
         replacement = _batch("included", "vault", "replacement needle", (2.0, 0.0))
         store.replace_resource(replacement)

@@ -17,6 +17,7 @@ from mdrack_media import (
     TranscriptBatchBuilderInput,
     atom_id,
     build_audio_transcript_batch,
+    build_video_transcript_batch,
     group_timed_atoms,
     representation_id,
     resource_id,
@@ -34,6 +35,7 @@ def _input(
     policy: TimedChunkingPolicy | None = None,
     *,
     resource_name: str = "audio-1",
+    resource_kind: str = "audio",
 ) -> tuple[TranscriptBatchBuilderInput, WordCounter]:
     counter = WordCounter()
     policy = policy or TimedChunkingPolicy(
@@ -85,8 +87,8 @@ def _input(
         TranscriptBatchBuilderInput(
             resource=MediaResourceDescriptor(
                 resource,
-                "audio",
-                "audio/wav",
+                resource_kind,
+                "video/mp4" if resource_kind == "video" else "audio/wav",
                 "fixture",
                 Locator("relative", {"name": f"{resource_name}.wav"}),
             ),
@@ -173,3 +175,27 @@ def test_audio_builder_rejects_empty_transcript_without_search_units() -> None:
 
     with pytest.raises(ValueError, match="at least one timed passage"):
         build_audio_transcript_batch(empty, token_counter=counter)
+
+
+def test_video_builder_reuses_transcript_projection_with_video_kind_and_seek_track() -> None:
+    input_value, counter = _input(resource_name="video-1", resource_kind="video")
+    batch = build_video_transcript_batch(
+        replace(input_value, embedding_fingerprint=None), token_counter=counter
+    )
+
+    assert batch.resource.resource_kind == "video"
+    assert batch.resource.media_type == "video/mp4"
+    assert batch.units
+    assert all(unit.evidence_locator.payload["track"] == "video" for unit in batch.units)
+    assert all(unit.unit_kind == "time_segment" for unit in batch.units)
+    assert batch.representations[0].text == "\n\n".join(unit.text for unit in batch.units)
+
+
+def test_transcript_builders_reject_cross_kind_projection() -> None:
+    audio_input, counter = _input()
+    video_input, video_counter = _input(resource_name="video-1", resource_kind="video")
+
+    with pytest.raises(ValueError, match="requires a video resource"):
+        build_video_transcript_batch(audio_input, token_counter=counter)
+    with pytest.raises(ValueError, match="requires a audio resource"):
+        build_audio_transcript_batch(video_input, token_counter=video_counter)

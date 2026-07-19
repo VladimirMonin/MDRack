@@ -304,7 +304,7 @@ class SQLiteResourceStore:
                 "JOIN core_representations p ON p.representation_id = u.representation_id "
                 "JOIN core_resources r ON r.resource_id = u.resource_id "
                 f"WHERE {' AND '.join(where)} "
-                "ORDER BY branch_score ASC, core_search_units_fts.rowid ASC LIMIT ?"
+                "ORDER BY branch_score ASC, u.unit_id ASC LIMIT ?"
             )
             try:
                 rows = self.connection.execute(

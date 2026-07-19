@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -138,5 +139,51 @@ def test_audio_replacement_and_injected_failure_are_atomic_across_adapters(tmp_p
         assert "AUDIO_PRIVATE_SENTINEL" not in str(sqlite_error.value)
         assert memory.read_resource("audio-a").content_hash == replacement.resource.content_hash  # type: ignore[union-attr]
         assert sqlite.read_resource("audio-a").content_hash == replacement.resource.content_hash  # type: ignore[union-attr]
+    finally:
+        sqlite.close()
+
+
+def test_video_transcript_retrieval_preserves_video_filter_rank_and_seek_evidence(
+    tmp_path: Path,
+) -> None:
+    source = _audio_batch("video-a")
+    video_units = tuple(
+        replace(
+            unit,
+            evidence_locator=Locator(
+                "time_segment",
+                {
+                    "start_ms": unit.evidence_locator.payload["start_ms"],
+                    "end_ms": unit.evidence_locator.payload["end_ms"],
+                    "track": "video",
+                },
+            ),
+        )
+        for unit in source.units
+    )
+    video = replace(
+        source,
+        resource=replace(source.resource, resource_kind="video", media_type="video/mp4"),
+        units=video_units,
+        facets=(ResourceFacet("video-a", Facet("media", "video"), "fixture"),),
+    )
+    memory = MemoryCatalog()
+    sqlite = SQLiteCatalog.create(tmp_path / "video.sqlite3")
+    try:
+        memory.replace_resource(video)
+        sqlite.replace_resource(video)
+        scope = SearchScope(resource_kinds=("video",), media_types=("video/mp4",))
+        lexical = LexicalBranch("video-lexical", "needle", candidate_limit=10)
+        memory_results = memory.search_lexical(lexical, scope=scope)
+        sqlite_results = sqlite.search_lexical(lexical, scope=scope)
+        assert _ids(memory_results) == _ids(sqlite_results)
+        assert tuple(item.rank for item in sqlite_results) == tuple(
+            range(1, len(sqlite_results) + 1)
+        )
+        assert all(item.evidence_locator.payload["track"] == "video" for item in sqlite_results)
+        assert not sqlite.search_lexical(
+            lexical,
+            scope=SearchScope(resource_kinds=("audio",)),
+        )
     finally:
         sqlite.close()
