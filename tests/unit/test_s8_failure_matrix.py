@@ -119,8 +119,8 @@ def test_explicit_config_failures_use_one_fixed_private_safe_envelope(
     [
         ("status", "mdrack.diagnostics.integrity.get_generation_status", _FIXED_STATUS_ERROR),
         ("status", "mdrack.diagnostics.integrity.get_store_status", _FIXED_STATUS_ERROR),
-        ("status", "mdrack.storage.sqlite.connection.get_connection", _FIXED_STATUS_ERROR),
-        ("doctor", "mdrack.storage.sqlite.connection.get_connection", _FIXED_DOCTOR_ERROR),
+        ("status", "mdrack.storage.sqlite.connection.get_read_only_connection", _FIXED_STATUS_ERROR),
+        ("doctor", "mdrack.storage.sqlite.connection.get_read_only_connection", _FIXED_DOCTOR_ERROR),
         ("doctor", "mdrack.diagnostics.doctor.run_doctor", _FIXED_DOCTOR_ERROR),
         ("doctor", "mdrack.diagnostics.doctor.report_to_dict", _FIXED_DOCTOR_ERROR),
     ],

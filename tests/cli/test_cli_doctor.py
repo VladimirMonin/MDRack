@@ -11,6 +11,7 @@ from click.testing import CliRunner
 from mdrack.adapters.sqlite.generation_runtime import SQLiteGenerationRuntime
 from mdrack.application.generation_manager import StoreGenerationManager
 from mdrack.application.store_generations import (
+    ActiveGenerationPointer,
     GenerationContractKind,
     GenerationRetention,
     GenerationState,
@@ -19,7 +20,12 @@ from mdrack.application.store_generations import (
 )
 from mdrack.cli import main
 from mdrack.storage.sqlite.connection import get_connection
-from mdrack.storage.sqlite.migrations import apply_migrations
+from mdrack.storage.sqlite.migrations import (
+    EXPECTED_MIGRATION_MANIFEST_DIGEST,
+    EXPECTED_MIGRATION_VERSION,
+    apply_candidate_migrations,
+    apply_migrations,
+)
 
 MODEL_SMALL = "Qwen/Qwen3-Embedding-0.6B-GGUF"
 MODEL_LARGE = "Qwen/Qwen3-Embedding-4B-GGUF"
@@ -140,6 +146,62 @@ def test_doctor_reports_profile_config_mismatch(tmp_path: Path) -> None:
         "configured_dimensions": 12,
         "profile_dimensions": 8,
     }
+
+
+def test_doctor_reads_ready_active_generation_instead_of_clean_store(tmp_path: Path) -> None:
+    decoy_path = _setup_db(tmp_path)
+    decoy = get_connection(decoy_path)
+    try:
+        decoy.execute(
+            "INSERT INTO files (id, relative_path, source_hash, indexed_at) VALUES (?, ?, ?, ?)",
+            ("decoy-file", "decoy.md", "decoy-hash", "2026-07-18T00:00:00Z"),
+        )
+        decoy.execute(
+            "INSERT INTO chunks (id, file_id, content, content_type, chunk_index) VALUES (?, ?, ?, ?, ?)",
+            ("decoy-chunk", "decoy-file", "decoy", "text", 0),
+        )
+        decoy.commit()
+    finally:
+        decoy.close()
+
+    manager = StoreGenerationManager(tmp_path / ".mdrack", runtime=SQLiteGenerationRuntime())
+    generation_id = "active-doctor"
+    active_path = manager.database_path(generation_id)
+    active_path.parent.mkdir(parents=True, exist_ok=True)
+    active = get_connection(active_path)
+    try:
+        apply_candidate_migrations(active, MIGRATIONS_DIR)
+    finally:
+        active.close()
+    generation = StoreGeneration(
+        generation_id=generation_id,
+        contract_kind=GenerationContractKind.RESOURCE_CORE_V1,
+        migration_manifest_digest=EXPECTED_MIGRATION_MANIFEST_DIGEST,
+        schema_version=EXPECTED_MIGRATION_VERSION,
+        state=GenerationState.READY,
+        created_at="2026-07-18T00:00:00Z",
+        verified_at="2026-07-18T00:00:01Z",
+    )
+    manager.metadata_path(generation_id).write_bytes(generation.to_bytes())
+    manager.pointer_path.write_bytes(
+        ActiveGenerationPointer(
+            generation_id,
+            GenerationContractKind.RESOURCE_CORE_V1,
+        ).to_bytes()
+    )
+    active_bytes = active_path.read_bytes()
+
+    result = CliRunner().invoke(main, ["--root", str(tmp_path), "doctor"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)["data"]
+    findings = {finding["code"]: finding for finding in payload["findings"]}
+    assert "GENERATION_READY" in findings
+    assert "SCHEMA_LATEST" in findings
+    assert "MISSING_FTS" not in findings
+    assert active_path.read_bytes() == active_bytes
+    assert generation_id not in result.output
+    assert str(tmp_path) not in result.output
 
 
 def test_doctor_reports_corrupt_generation_pointer_with_safe_fixed_fields(tmp_path: Path) -> None:

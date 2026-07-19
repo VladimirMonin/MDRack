@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 
 from mdrack.adapters.sqlite.generation_runtime import SQLiteGenerationRuntime
+from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
+from mdrack.application.compatibility import create_application_storage
 from mdrack.application.generation_manager import (
     StoreGenerationManager,
     StoreGenerationManagerError,
@@ -20,6 +22,7 @@ from mdrack.application.store_generations import (
     GenerationState,
     StoreGeneration,
 )
+from mdrack.config.models import MDRackConfig, PathsConfig
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
 
@@ -287,6 +290,23 @@ def test_candidate_build_cutover_reader_visibility_rollback_and_retention(tmp_pa
     legacy_reader = sqlite3.connect(f"file:{rolled_back_path.as_posix()}?mode=ro", uri=True)
     assert legacy_reader.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == "0006"
     legacy_reader.close()
+
+    storage = create_application_storage(
+        tmp_path,
+        MDRackConfig(paths=PathsConfig(root=".", store=str(manager.store_dir))),
+    )
+    assert isinstance(storage, SQLiteIndexStorage)
+    legacy_file = storage.get_file_by_path("fixture.md")
+    assert legacy_file is not None
+    assert legacy_file["id"] == "legacy-file"
+    with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        storage.start_run(
+            parser_name="parser",
+            parser_version="1",
+            chunk_strategy_name="strategy",
+            chunk_strategy_version="1",
+        )
+    storage.close()
 
     assert legacy_path.stat().st_ino == legacy_inode
     assert hashlib.sha256(legacy_path.read_bytes()).hexdigest() == legacy_digest

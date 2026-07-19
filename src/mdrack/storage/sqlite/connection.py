@@ -26,3 +26,12 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+def get_read_only_connection(db_path: Path) -> sqlite3.Connection:
+    """Open an existing SQLite database without permitting SQL writes."""
+    logger.debug("storage.sqlite.connection.opened_read_only")
+    conn = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn

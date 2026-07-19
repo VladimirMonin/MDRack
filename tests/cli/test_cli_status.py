@@ -140,6 +140,55 @@ def test_status_reports_configured_and_profile_embedding_metadata(tmp_path: Path
     assert "localhost" not in result.output
 
 
+def test_status_reads_verified_legacy_pointer_database_instead_of_clean_store(
+    tmp_path: Path,
+) -> None:
+    decoy_path = _setup_db(tmp_path)
+    decoy = get_connection(decoy_path)
+    try:
+        decoy.executemany(
+            "INSERT INTO files (id, relative_path, source_hash, indexed_at) VALUES (?, ?, ?, ?)",
+            [
+                ("decoy-1", "decoy-1.md", "hash-1", "2026-07-18T00:00:00Z"),
+                ("decoy-2", "decoy-2.md", "hash-2", "2026-07-18T00:00:00Z"),
+            ],
+        )
+        decoy.commit()
+    finally:
+        decoy.close()
+
+    manager = StoreGenerationManager(tmp_path / ".mdrack", runtime=SQLiteGenerationRuntime())
+    legacy_path = manager.database_path("legacy-status")
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy = get_connection(legacy_path)
+    try:
+        apply_migrations(legacy, _MIGRATIONS_DIR)
+        legacy.execute(
+            "INSERT INTO files (id, relative_path, source_hash, indexed_at) VALUES (?, ?, ?, ?)",
+            ("active-1", "active.md", "hash-active", "2026-07-18T00:00:00Z"),
+        )
+        legacy.commit()
+    finally:
+        legacy.close()
+    manager.register_legacy_generation(
+        "legacy-status",
+        retain_through_release="v0.3-compatibility",
+    )
+    manager.initialize_legacy_pointer("legacy-status")
+    legacy_bytes = legacy_path.read_bytes()
+
+    result = CliRunner().invoke(main, ["--root", str(tmp_path), "status"])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)["data"]
+    assert data["generation_state"] == "legacy_only"
+    assert data["files_count"] == 1
+    assert data["schema_version"] == "0006"
+    assert legacy_path.read_bytes() == legacy_bytes
+    assert "legacy-status" not in result.output
+    assert str(tmp_path) not in result.output
+
+
 def test_status_fails_closed_for_incomplete_generation_without_pointer_or_private_paths(
     tmp_path: Path,
 ) -> None:

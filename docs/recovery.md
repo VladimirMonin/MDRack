@@ -63,6 +63,18 @@ Rollback changes only the app-owned pointer:
 Rollback does not modify source files, rewrite schema, reverse migrations, or copy
 rows between generations.
 
+Normal application composition, `mdrack status`, and `mdrack doctor` resolve an
+existing managed store through the same verified active pointer. A legacy rollback
+target is opened read-only, while a resource generation must be verified `ready`.
+Diagnostics read the resolved generation database rather than the unselected
+`knowledge.db`; invalid or missing managed pointers fail closed without inspecting a
+fallback database.
+
+This is consumption of an already registered and verified pointer, not automatic
+adoption. A clean store with no pointer continues to use `knowledge.db`. MDRack does
+not discover, register, copy, rebuild, activate, roll back, or remove generations as
+a side effect of normal composition or diagnostics.
+
 ## Candidate or indexing failure
 
 - A failed candidate never becomes active and records only a stable reason code.

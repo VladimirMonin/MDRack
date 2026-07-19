@@ -31,6 +31,7 @@ from mdrack.domain.retrieval import (
     RetrievalMode,
     RetrievalResult,
 )
+from mdrack.storage.sqlite.connection import get_read_only_connection
 from mdrack.storage.sqlite.migrations import (
     EXPECTED_MIGRATION_MANIFEST_DIGEST,
     EXPECTED_MIGRATION_VERSION,
@@ -486,22 +487,43 @@ class CoreCompatibilityStorage:
 
 def create_application_storage(root: Path, config: Any) -> SQLiteIndexStorage | CoreCompatibilityStorage:
     """Open the legacy store or its fail-closed active resource generation."""
+    database_path, contract_kind = _resolve_application_database(root, config)
+    if contract_kind is None:
+        return create_sqlite_index_storage(root.resolve(), config)
+    if contract_kind is GenerationContractKind.LEGACY_V0_2:
+        return SQLiteIndexStorage(
+            get_read_only_connection(database_path),
+            owns_connection=True,
+        )
+    return CoreCompatibilityStorage(_get_atomic_projection_connection(database_path))
+
+
+def resolve_application_database_path(root: Path, config: Any) -> Path:
+    """Resolve the verified database used by normal application composition."""
+    return _resolve_application_database(root, config)[0]
+
+
+def _resolve_application_database(
+    root: Path,
+    config: Any,
+) -> tuple[Path, GenerationContractKind | None]:
     resolved_root = root.resolve()
     configured = Path(config.paths.store)
     store_dir = configured if configured.is_absolute() else resolved_root / configured
     pointer_path = store_dir / "active-generation.json"
     if not pointer_path.exists():
-        return create_sqlite_index_storage(resolved_root, config)
+        return store_dir / "knowledge.db", None
 
     manager = StoreGenerationManager(store_dir, runtime=SQLiteGenerationRuntime())
     pointer, generation, database_path = manager.resolve_active()
+    if pointer.contract_kind is GenerationContractKind.LEGACY_V0_2:
+        return database_path, pointer.contract_kind
     if (
-        pointer.contract_kind is not GenerationContractKind.RESOURCE_CORE_V1
-        or generation.contract_kind is not GenerationContractKind.RESOURCE_CORE_V1
+        generation.contract_kind is not GenerationContractKind.RESOURCE_CORE_V1
         or generation.state is not GenerationState.READY
     ):
         raise StoreGenerationManagerError("active_generation_not_ready")
-    return CoreCompatibilityStorage(_get_atomic_projection_connection(database_path))
+    return database_path, pointer.contract_kind
 
 
 def create_active_generation_rebuild_storage(root: Path, config: Any) -> CoreCompatibilityStorage:
@@ -633,4 +655,5 @@ __all__ = [
     "create_application_storage",
     "embedding_space_id",
     "prepared_file_to_resource_batch",
+    "resolve_application_database_path",
 ]

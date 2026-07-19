@@ -262,15 +262,24 @@ def status(ctx: click.Context) -> None:
 def _build_status_data(ctx: click.Context) -> dict[str, object]:
     """Build the allowlisted status payload or raise to the command boundary."""
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
-    db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
-
     store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
     from mdrack.diagnostics.integrity import get_generation_status
 
     generation_status = get_generation_status(store_dir)
+    pointer_failed = generation_status["generation_pointer_status"] == "invalid" or (
+        generation_status["generation_pointer_status"] == "missing"
+        and bool(generation_status["generation_metadata_count"])
+    )
+    if pointer_failed:
+        db_path = None
+    else:
+        from mdrack.application.compatibility import resolve_application_database_path
+
+        root: Path = ctx.obj.get(CTX_ROOT, Path("."))
+        db_path = resolve_application_database_path(root, config)
     configured_endpoint = config.embedding.endpoint if config is not None else None
 
-    if not db_path.is_file():
+    if db_path is None or not db_path.is_file():
         return {
             "generation_state": generation_status["generation_state"],
             "files_count": 0,
@@ -288,9 +297,9 @@ def _build_status_data(ctx: click.Context) -> dict[str, object]:
         }
 
     from mdrack.diagnostics.integrity import get_store_status
-    from mdrack.storage.sqlite.connection import get_connection
+    from mdrack.storage.sqlite.connection import get_read_only_connection
 
-    conn = get_connection(db_path)
+    conn = get_read_only_connection(db_path)
     try:
         status_data = get_store_status(conn)
     finally:
@@ -341,11 +350,39 @@ def doctor(ctx: click.Context) -> None:
 def _build_doctor_data(ctx: click.Context) -> dict[str, object]:
     """Build the allowlisted doctor payload or raise to the command boundary."""
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
-    db_path: Path = ctx.obj.get(CTX_DB_PATH, Path(".mdrack") / "knowledge.db")
     store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
 
     from mdrack.diagnostics.doctor import DoctorFinding, DoctorReport, report_to_dict, run_doctor
-    from mdrack.storage.sqlite.connection import get_connection
+    from mdrack.diagnostics.integrity import get_generation_status
+    from mdrack.storage.sqlite.connection import get_read_only_connection
+
+    generation_status = get_generation_status(store_dir)
+    pointer_status = generation_status["generation_pointer_status"]
+    pointer_missing = pointer_status == "missing" and bool(
+        generation_status["generation_metadata_count"]
+    )
+    if pointer_status == "invalid" or pointer_missing:
+        code = "GENERATION_POINTER_INVALID" if pointer_status == "invalid" else "GENERATION_POINTER_MISSING"
+        report = DoctorReport(
+            findings=[
+                DoctorFinding(
+                    severity="error",
+                    code=code,
+                    message="Generation pointer validation failed",
+                    details={
+                        "generation_state": "failed",
+                        "reason_code": "pointer_invalid" if pointer_status == "invalid" else "pointer_missing",
+                    },
+                )
+            ],
+            ok=False,
+        )
+        return report_to_dict(report)
+
+    from mdrack.application.compatibility import resolve_application_database_path
+
+    root: Path = ctx.obj.get(CTX_ROOT, Path("."))
+    db_path = resolve_application_database_path(root, config)
 
     if not db_path.is_file():
         report = DoctorReport(
@@ -361,7 +398,7 @@ def _build_doctor_data(ctx: click.Context) -> dict[str, object]:
         )
         return report_to_dict(report)
 
-    conn = get_connection(db_path)
+    conn = get_read_only_connection(db_path)
     try:
         report = run_doctor(
             conn,
