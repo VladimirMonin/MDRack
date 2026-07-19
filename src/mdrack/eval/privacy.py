@@ -32,6 +32,13 @@ class PrivacyFinding:
     location: str
 
 
+class PrivacyViolation(ValueError):
+    """A content-free failure raised before unsafe evidence is serialized."""
+
+    def __init__(self) -> None:
+        super().__init__("evidence contains private data")
+
+
 @dataclass
 class PrivacyScanResult:
     """Privacy scan verdict with safe finding metadata only."""
@@ -57,14 +64,26 @@ class PrivacyScanResult:
         }
 
 
-def scan_privacy(payload: Any, forbidden_values: list[str] | None = None) -> PrivacyScanResult:
+def scan_privacy(
+    payload: Any,
+    forbidden_values: list[str] | None = None,
+    forbidden_keys: list[str] | None = None,
+) -> PrivacyScanResult:
     """Scan a JSON-compatible payload without echoing matched private values."""
     findings: list[PrivacyFinding] = []
     forbidden = [value for value in (forbidden_values or []) if value]
+    forbidden_key_names = {key for key in (forbidden_keys or []) if key}
 
     def inspect(value: Any, location: str) -> None:
         if isinstance(value, dict):
             for index, (key, child) in enumerate(value.items()):
+                if isinstance(key, str) and key in forbidden_key_names:
+                    findings.append(
+                        PrivacyFinding(
+                            category="forbidden_key",
+                            location=f"{location}.key[{index}]",
+                        )
+                    )
                 inspect(str(key), f"{location}.key[{index}]")
                 inspect(child, f"{location}.value[{index}]")
             return
@@ -92,9 +111,44 @@ def scan_privacy(payload: Any, forbidden_values: list[str] | None = None) -> Pri
     return PrivacyScanResult(findings=findings)
 
 
-def scan_json_text(text: str, forbidden_values: list[str] | None = None) -> PrivacyScanResult:
+def scan_json_text(
+    text: str,
+    forbidden_values: list[str] | None = None,
+    forbidden_keys: list[str] | None = None,
+) -> PrivacyScanResult:
     """Parse and scan a JSON document."""
-    return scan_privacy(json.loads(text), forbidden_values=forbidden_values)
+    return scan_privacy(
+        json.loads(text),
+        forbidden_values=forbidden_values,
+        forbidden_keys=forbidden_keys,
+    )
+
+
+def serialize_safe_json(
+    payload: Any,
+    *,
+    forbidden_values: list[str] | None = None,
+    forbidden_keys: list[str] | None = None,
+) -> str:
+    """Validate evidence recursively, then return deterministic JSON text.
+
+    Callers can persist the returned text only after this function succeeds. The
+    exception and findings never contain the rejected keys or values.
+    """
+    result = scan_privacy(
+        payload,
+        forbidden_values=forbidden_values,
+        forbidden_keys=forbidden_keys,
+    )
+    if not result.safe:
+        raise PrivacyViolation
+    return json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+        allow_nan=False,
+    )
 
 
 def build_safe_diagnostic_record(
