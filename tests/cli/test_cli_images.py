@@ -318,9 +318,11 @@ def test_offline_installed_wheel_missing_and_unavailable_paths_are_privacy_safe(
     )
     wheels = tuple(wheel_dir.glob("mdrack-*.whl"))
     core_wheels = tuple(wheel_dir.glob("mdrack_core-*.whl"))
+    media_wheels = tuple(wheel_dir.glob("mdrack_media-*.whl"))
     sqlite_wheels = tuple(wheel_dir.glob("mdrack_sqlite-*.whl"))
     assert len(wheels) == 1
     assert len(core_wheels) == 1
+    assert len(media_wheels) == 1
     assert len(sqlite_wheels) == 1
 
     virtualenv = tmp_path / "venv"
@@ -341,6 +343,7 @@ def test_offline_installed_wheel_missing_and_unavailable_paths_are_privacy_safe(
             str(python),
             "--offline",
             str(core_wheels[0]),
+            str(media_wheels[0]),
             str(sqlite_wheels[0]),
             str(wheels[0]),
         ],
