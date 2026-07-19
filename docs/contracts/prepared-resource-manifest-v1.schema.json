@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mdrack.local/contracts/prepared-resource-manifest-v1.schema.json",
+  "title": "MDRack prepared-resource manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "version", "resource", "representations", "units", "spaces", "vectors", "facets"],
+  "properties": {
+    "contract": {"const": "mdrack.prepared-resource"},
+    "version": {"const": 1},
+    "resource": {"$ref": "#/$defs/resource"},
+    "representations": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/representation"}},
+    "units": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/unit"}},
+    "spaces": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/space"}},
+    "vectors": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/vector"}},
+    "facets": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/facetAssignment"}}
+  },
+  "x-mdrack-limits": {
+    "rawBytes": 16777216,
+    "jsonDepth": 32,
+    "metadataBytesPerRecord": 65536,
+    "textBytesPerField": 8388608,
+    "vectorDimensions": 8192,
+    "policy": "reject-not-truncate"
+  },
+  "$defs": {
+    "jsonObject": {"type": "object"},
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "payload"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "payload": {"$ref": "#/$defs/jsonObject"}
+      }
+    },
+    "metadata": {"$ref": "#/$defs/jsonObject"},
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "resource_kind", "media_type", "source_namespace", "locator"],
+      "properties": {
+        "resource_id": {"type": "string", "minLength": 1},
+        "resource_kind": {"type": "string", "minLength": 1},
+        "media_type": {"type": "string", "minLength": 1},
+        "source_namespace": {"type": "string", "minLength": 1},
+        "locator": {"$ref": "#/$defs/locator"},
+        "content_hash": {"type": ["string", "null"]},
+        "title": {"type": ["string", "null"]},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      }
+    },
+    "representation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["representation_id", "resource_id", "representation_kind", "modality"],
+      "properties": {
+        "representation_id": {"type": "string", "minLength": 1},
+        "resource_id": {"type": "string", "minLength": 1},
+        "representation_kind": {"type": "string", "minLength": 1},
+        "modality": {"type": "string", "minLength": 1},
+        "text": {"type": ["string", "null"]},
+        "language": {"type": ["string", "null"]},
+        "producer_fingerprint": {"type": ["string", "null"]},
+        "token_count": {"type": ["integer", "null"], "minimum": 0},
+        "token_count_kind": {"type": ["string", "null"], "enum": ["exact", "estimated", null]},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit_id", "resource_id", "representation_id", "unit_kind", "modality", "evidence_locator", "ordinal"],
+      "properties": {
+        "unit_id": {"type": "string", "minLength": 1},
+        "resource_id": {"type": "string", "minLength": 1},
+        "representation_id": {"type": "string", "minLength": 1},
+        "unit_kind": {"type": "string", "minLength": 1},
+        "modality": {"type": "string", "minLength": 1},
+        "text": {"type": ["string", "null"]},
+        "evidence_locator": {"$ref": "#/$defs/locator"},
+        "ordinal": {"type": "integer", "minimum": 0},
+        "token_count": {"type": ["integer", "null"], "minimum": 0},
+        "token_count_kind": {"type": ["string", "null"], "enum": ["exact", "estimated", null]},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      }
+    },
+    "space": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["space_id", "dimensions", "metric", "fingerprint"],
+      "properties": {
+        "space_id": {"type": "string", "minLength": 1},
+        "dimensions": {"type": "integer", "minimum": 1, "maximum": 8192},
+        "metric": {"enum": ["cosine", "dot", "l2"]},
+        "fingerprint": {"type": "string", "minLength": 1},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      }
+    },
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit_id", "space_id", "vector"],
+      "properties": {
+        "unit_id": {"type": "string", "minLength": 1},
+        "space_id": {"type": "string", "minLength": 1},
+        "vector": {"type": "array", "minItems": 1, "maxItems": 8192, "items": {"type": "number"}}
+      }
+    },
+    "facet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "value"],
+      "properties": {
+        "namespace": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "minLength": 1}
+      }
+    },
+    "facetAssignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "facet", "origin"],
+      "properties": {
+        "resource_id": {"type": "string", "minLength": 1},
+        "facet": {"$ref": "#/$defs/facet"},
+        "origin": {"type": "string", "minLength": 1},
+        "producer_fingerprint": {"type": ["string", "null"]},
+        "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}
