@@ -112,7 +112,11 @@ Live command registration exposes:
 | `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against a ready resource generation; never triggered by Markdown scan. |
 | `resource import`, `inspect`, `delete` | Provider-free prepared-resource lifecycle against one explicitly named clean standalone catalog. |
 | `resources duplicates`, `similar` | Provider-free exact hash and existing-vector discovery with typed/facet scope filters. |
+| `resources search`, `search` | Provider-free lexical search against the configured ready resource-core generation; `--target unit|resource` and scope filters are applied before limiting. |
+| `resources facets`, `facets` | Deterministic catalog facet listing, optionally narrowed by namespace. |
+| `benchmark` | Provider-free local catalog verification timing and aggregate counts; this is not retrieval-quality evidence. |
 | `model list`, `loaded`, `download`, `download-status`, `load`, `unload`, `switch` | LM Studio model discovery and lifecycle operations. |
+
 
 CLI responses use the JSON envelope documented in
 [CLI contracts](../cli-contracts.md). The CLI presentation layer also maps some
@@ -135,9 +139,10 @@ It does not expose CLI diagnostics, status, model lifecycle, rebuild, evaluation
 or legacy section listing methods.
 
 The separate Click-free `PreparedResourceCatalog` public facade opens one explicit
-clean standalone catalog path and provides manifest import plus redacted
-inspect/delete parity with the singular `resource` CLI. It does not use
-`MDRackEngine`, configured generations, providers, source files, or the network.
+clean standalone catalog path and provides manifest import, redacted inspect/delete,
+provider-free lexical/vector search with `unit|resource` targets, and deterministic
+facet listing. It does not use `MDRackEngine`, configured generations, providers,
+source files, or the network.
 
 The engine imports no Click modules. By default it composes
 `SQLiteIndexStorage`, while callers may inject compatible storage/read/search

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,9 @@ from mdrack.cli.commands.model import model as model_group
 from mdrack.cli.commands.read import read
 from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
 from mdrack.cli.commands.resource import resource as resource_group
+from mdrack.cli.commands.resources import facets as facets_command
 from mdrack.cli.commands.resources import resources as resources_group
+from mdrack.cli.commands.resources import similar as similar_command
 from mdrack.cli.commands.scan import cli_scan
 from mdrack.cli.commands.search import cli_search
 from mdrack.cli.commands.sections import sections as sections_group
@@ -212,6 +215,8 @@ main.add_command(cli_search, name="search")
 main.add_command(image_group)
 main.add_command(resource_group)
 main.add_command(resources_group)
+main.add_command(similar_command, name="similar")
+main.add_command(facets_command, name="facets")
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +433,45 @@ rebuild.add_command(rebuild_embeddings_cmd, name="embeddings")
 
 
 # ---------------------------------------------------------------------------
+# Command: benchmark
+# ---------------------------------------------------------------------------
+@main.command()
+@click.option("--catalog", "catalog_path", required=True, type=click.Path(exists=False, dir_okay=False))
+@click.pass_context
+def benchmark(ctx: click.Context, catalog_path: str) -> None:
+    """Run a provider-free local catalog health benchmark."""
+    command = "benchmark"
+    started = time.perf_counter()
+    catalog = None
+    try:
+        from mdrack_sqlite import SQLiteCatalog
+
+        catalog = SQLiteCatalog.open_readonly(catalog_path)
+        verification = catalog.verify()
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
+        _output(ctx, envelope_success({
+            "provider_free": True,
+            "operation": "catalog_verify",
+            "elapsed_ms": elapsed_ms,
+            "counts": {
+                "resources": verification.resources,
+                "representations": verification.representations,
+                "units": verification.units,
+                "vectors": verification.vectors,
+                "facets": verification.facets,
+                "fts_rows": verification.fts_rows,
+            },
+        }, command=command))
+    except Exception:
+        logger.error("cli.benchmark.failed", extra={"reason": "catalog_benchmark_failed"})
+        _output(ctx, envelope_error("Benchmark could not be completed", "BENCHMARK_ERROR", command))
+        ctx.exit(1)
+    finally:
+        if catalog is not None:
+            catalog.close()
+
+
+# ---------------------------------------------------------------------------
 # Group: eval
 # ---------------------------------------------------------------------------
 @main.group()
@@ -437,3 +481,4 @@ def eval_cmd(ctx: click.Context) -> None:
 
 
 eval_cmd.add_command(eval_retrieval, name="retrieval")
+main.add_command(eval_cmd, name="eval")

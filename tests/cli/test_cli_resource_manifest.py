@@ -97,6 +97,50 @@ def _create_catalog(path: Path) -> None:
         pass
 
 
+def test_benchmark_missing_catalog_returns_fixed_private_error_envelope(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "missing-catalog.sqlite3"
+
+    result = CliRunner().invoke(main, ["benchmark", "--catalog", str(catalog_path)])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == {
+        "ok": False,
+        "error": {
+            "message": "Benchmark could not be completed",
+            "code": "BENCHMARK_ERROR",
+        },
+        "meta": {"command": "benchmark"},
+    }
+    assert str(catalog_path) not in result.output
+
+
+def test_benchmark_unopenable_catalog_returns_fixed_private_error_envelope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog_path = tmp_path / "private-catalog.sqlite3"
+    _create_catalog(catalog_path)
+
+    def deny_open(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise PermissionError("caller-controlled private path")
+
+    monkeypatch.setattr(SQLiteCatalog, "open_readonly", deny_open)
+    result = CliRunner().invoke(main, ["benchmark", "--catalog", str(catalog_path)])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == {
+        "ok": False,
+        "error": {
+            "message": "Benchmark could not be completed",
+            "code": "BENCHMARK_ERROR",
+        },
+        "meta": {"command": "benchmark"},
+    }
+    assert "caller-controlled private path" not in result.output
+    assert str(catalog_path) not in result.output
+
+
 def _cli(*args: str):
     return CliRunner().invoke(main, ["resource", *args])
 

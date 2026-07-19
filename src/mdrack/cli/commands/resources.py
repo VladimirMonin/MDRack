@@ -14,6 +14,8 @@ from mdrack.application.resources import FacetFilter, ResourceQueryScope, Resour
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
+from mdrack_core.application.retrieval import RetrievalService
+from mdrack_core.domain import TARGET_RESOURCE, TARGET_UNIT, LexicalBranch, SearchRequest
 
 logger = logging.getLogger(__name__)
 _F = TypeVar("_F", bound=Callable[..., object])
@@ -104,6 +106,7 @@ def resources() -> None:
 @click.pass_context
 def duplicates(
     ctx: click.Context,
+    /,
     resource_id: str,
     limit: int,
     **filters: tuple[str, ...],
@@ -147,6 +150,7 @@ def duplicates(
 @click.pass_context
 def similar(
     ctx: click.Context,
+    /,
     query_unit_id: str,
     space_id: str,
     limit: int,
@@ -179,6 +183,102 @@ def similar(
             ctx,
             envelope_error("Resource similarity lookup failed", "RESOURCE_SIMILARITY_ERROR", command),
         )
+        ctx.exit(1)
+    finally:
+        if storage is not None:
+            storage.close()
+
+
+@resources.command(name="search")
+@click.argument("query")
+@click.option("--target", type=click.Choice(["unit", "resource"]), default="unit", show_default=True)
+@click.option("--limit", type=click.IntRange(min=1), default=20, show_default=True)
+@_scope_options
+@click.pass_context
+def search(
+    ctx: click.Context,
+    /,
+    query: str,
+    target: str,
+    limit: int,
+    **filters: tuple[str, ...],
+) -> None:
+    """Search the explicit clean catalog without embedding providers."""
+    command = "resources search"
+    storage = None
+    try:
+        storage, catalog = _open_catalog(ctx)
+        request = SearchRequest(
+            lexical_branches=(LexicalBranch("text", query, candidate_limit=max(limit, 100)),),
+            vector_branches=(),
+            scope=_scope(**filters).core(),
+            target=TARGET_RESOURCE if target == "resource" else TARGET_UNIT,
+            limit=limit,
+        )
+        result = RetrievalService(catalog).search(request)
+        reason = result.degradations[0].category.value if result.degradations else None
+        data = {
+            "query": query,
+            "target": target,
+            "results": [
+                {
+                    "logical_id": item.logical_id,
+                    "resource_id": item.resource_id,
+                    "unit_id": item.unit_id,
+                    "score": item.score,
+                    "rank": item.rank,
+                }
+                for item in result.items
+            ],
+            "total_count": len(result.items),
+            "degraded": reason is not None,
+            "degraded_reason": reason,
+        }
+        _output(ctx, envelope_success(data, command=command))
+    except Exception:
+        logger.error("cli.resources.search.failed", extra={"reason": "resource_search_error"})
+        _output(ctx, envelope_error("Resource search failed", "RESOURCE_SEARCH_ERROR", command))
+        ctx.exit(1)
+    finally:
+        if storage is not None:
+            storage.close()
+
+
+@resources.command(name="facets")
+@click.option("--namespace", default=None)
+@click.pass_context
+def facets(ctx: click.Context, namespace: str | None) -> None:
+    """List facet values from the explicit clean catalog."""
+    command = "resources facets"
+    storage = None
+    try:
+        storage, catalog = _open_catalog(ctx)
+        values = catalog.connection.execute(
+            "SELECT f.namespace, f.value, COUNT(DISTINCT rf.resource_id) AS resource_count "
+            "FROM core_facets f JOIN core_resource_facets rf ON rf.facet_id=f.facet_id "
+            + ("WHERE f.namespace=? " if namespace is not None else "")
+            + "GROUP BY f.namespace, f.value ORDER BY f.namespace, f.value",
+            ((namespace,) if namespace is not None else ()),
+        ).fetchall()
+        _output(
+            ctx,
+            envelope_success(
+                {
+                    "facets": [
+                        {
+                            "namespace": row["namespace"],
+                            "value": row["value"],
+                            "resource_count": int(row["resource_count"]),
+                        }
+                        for row in values
+                    ]
+                },
+                command=command,
+            ),
+        )
+    except Exception:
+        logger.error("cli.resources.facets.failed", extra={"reason": "facet_lookup_error"})
+        _output(ctx, envelope_error("Facet lookup failed", "RESOURCE_FACETS_ERROR", command))
         ctx.exit(1)
     finally:
         if storage is not None:

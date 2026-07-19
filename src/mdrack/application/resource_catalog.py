@@ -12,7 +12,16 @@ from types import TracebackType
 from typing import Literal
 
 from mdrack.application.manifest import MAX_MANIFEST_BYTES, PreparedResourceFacade
-from mdrack_core.domain import PreparedResourceBatch
+from mdrack_core.application.retrieval import RetrievalService
+from mdrack_core.domain import (
+    TARGET_RESOURCE,
+    TARGET_UNIT,
+    LexicalBranch,
+    PreparedResourceBatch,
+    SearchRequest,
+    SearchScope,
+    VectorBranch,
+)
 from mdrack_sqlite import SQLITE_CATALOG_SCHEMA_ID, SQLiteCatalog
 
 
@@ -81,6 +90,43 @@ class ResourceDeleteResult:
 
     def to_dict(self) -> dict[str, object]:
         return {"resource_id": self.resource_id, "deleted": self.deleted}
+
+
+@dataclass(frozen=True)
+class ResourceSearchResult:
+    """Safe provider-free result projection for the standalone catalog."""
+
+    query: str | None
+    target: str
+    results: tuple[dict[str, object], ...]
+    degraded: bool = False
+    degraded_reason: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "query": self.query,
+            "target": self.target,
+            "results": [dict(item) for item in self.results],
+            "total_count": len(self.results),
+            "degraded": self.degraded,
+            "degraded_reason": self.degraded_reason,
+        }
+
+
+@dataclass(frozen=True)
+class FacetValue:
+    """One explicitly requested catalog facet value."""
+
+    namespace: str
+    value: str
+    resource_count: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "namespace": self.namespace,
+            "value": self.value,
+            "resource_count": self.resource_count,
+        }
 
 
 def _safe_fingerprint(value: str) -> str:
@@ -243,6 +289,103 @@ class PreparedResourceCatalog:
         except Exception:
             raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
 
+    def search_text(
+        self,
+        query: str,
+        *,
+        scope: SearchScope | None = None,
+        target: str = TARGET_UNIT,
+        limit: int = 20,
+    ) -> ResourceSearchResult:
+        """Search indexed text without a provider or source access."""
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("query must be a non-empty string")
+        if target not in {TARGET_UNIT, TARGET_RESOURCE}:
+            raise ValueError("target must be unit or resource")
+        if type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive integer")
+        request = SearchRequest(
+            lexical_branches=(LexicalBranch("text", query, candidate_limit=max(limit, 100)),),
+            vector_branches=(),
+            scope=scope or SearchScope(),
+            target=target,
+            limit=limit,
+        )
+        result = RetrievalService(self._catalog).search(request)
+        reason = result.degradations[0].category.value if result.degradations else None
+        return ResourceSearchResult(
+            query=query,
+            target=target,
+            results=tuple(
+                {
+                    "logical_id": item.logical_id,
+                    "resource_id": item.resource_id,
+                    "unit_id": item.unit_id,
+                    "score": item.score,
+                    "rank": item.rank,
+                }
+                for item in result.items
+            ),
+            degraded=reason is not None,
+            degraded_reason=reason,
+        )
+
+    def search_vector(
+        self,
+        vector: tuple[float, ...],
+        space_id: str,
+        *,
+        scope: SearchScope | None = None,
+        target: str = TARGET_UNIT,
+        limit: int = 20,
+    ) -> ResourceSearchResult:
+        """Search using a caller-owned vector; no embedding provider is called."""
+        if target not in {TARGET_UNIT, TARGET_RESOURCE}:
+            raise ValueError("target must be unit or resource")
+        if type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive integer")
+        request = SearchRequest(
+            lexical_branches=(),
+            vector_branches=(VectorBranch("semantic", space_id, vector, candidate_limit=max(limit, 100)),),
+            scope=scope or SearchScope(),
+            target=target,
+            limit=limit,
+        )
+        result = RetrievalService(self._catalog).search(request)
+        reason = result.degradations[0].category.value if result.degradations else None
+        return ResourceSearchResult(
+            query=None,
+            target=target,
+            results=tuple(
+                {
+                    "logical_id": item.logical_id,
+                    "resource_id": item.resource_id,
+                    "unit_id": item.unit_id,
+                    "score": item.score,
+                    "rank": item.rank,
+                }
+                for item in result.items
+            ),
+            degraded=reason is not None,
+            degraded_reason=reason,
+        )
+
+    def facets(self, *, namespace: str | None = None) -> tuple[FacetValue, ...]:
+        """List explicit catalog facets in deterministic order."""
+        if namespace is not None and (not isinstance(namespace, str) or not namespace):
+            raise ValueError("namespace must be a non-empty string or None")
+        query = (
+            "SELECT f.namespace, f.value, COUNT(DISTINCT rf.resource_id) AS resource_count "
+            "FROM core_facets f JOIN core_resource_facets rf ON rf.facet_id=f.facet_id"
+        )
+        params: tuple[object, ...] = ()
+        if namespace is not None:
+            query += " WHERE f.namespace=?"
+            params = (namespace,)
+        query += " GROUP BY f.namespace, f.value ORDER BY f.namespace, f.value"
+        rows = self._catalog.connection.execute(query, params).fetchall()
+        return tuple(FacetValue(row["namespace"], row["value"], int(row["resource_count"])) for row in rows)
+
     def close(self) -> None:
         self._catalog.close()
 
@@ -266,4 +409,6 @@ __all__ = [
     "ResourceDeleteResult",
     "ResourceImportResult",
     "ResourceInspection",
+    "ResourceSearchResult",
+    "FacetValue",
 ]

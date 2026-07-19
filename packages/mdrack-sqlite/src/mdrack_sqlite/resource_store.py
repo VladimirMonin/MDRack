@@ -295,6 +295,7 @@ class SQLiteResourceStore:
             self._require_scope(scope)
             clauses, params = self._scope_clauses(scope)
             where = ["core_search_units_fts MATCH ?", *clauses]
+            tie_breaker = "u.unit_id ASC" if scope.media_types else "core_search_units_fts.rowid ASC"
             statement = (
                 "SELECT u.*, p.resource_id AS representation_resource_id, "
                 "p.modality AS representation_modality, "
@@ -304,7 +305,7 @@ class SQLiteResourceStore:
                 "JOIN core_representations p ON p.representation_id = u.representation_id "
                 "JOIN core_resources r ON r.resource_id = u.resource_id "
                 f"WHERE {' AND '.join(where)} "
-                "ORDER BY branch_score ASC, u.unit_id ASC LIMIT ?"
+                f"ORDER BY branch_score ASC, {tie_breaker} LIMIT ?"
             )
             try:
                 rows = self.connection.execute(

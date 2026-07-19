@@ -1570,6 +1570,26 @@ The Click-free Python-parity surface is
 
 ---
 
+## 15a. Standalone provider-free catalog UX
+
+The explicit clean catalog surface also provides:
+
+```text
+mdrack similar <unit_id> --space-id <space>
+mdrack facets [--namespace NAME]
+mdrack resources search <query> [--target unit|resource]
+mdrack resources facets [--namespace NAME]
+mdrack benchmark --catalog PATH
+```
+
+`similar`, `facets`, and `resources` query the configured ready resource-core
+generation and apply categorical and facet filters before limiting results.
+`benchmark` verifies an explicitly named local catalog and reports aggregate counts
+plus elapsed time; it makes no retrieval-quality, provider, live-network, or
+real-source claim. All commands return one JSON envelope and fixed error categories.
+
+---
+
 ## Database File Summary
 
 All commands read and write the same database file:
@@ -1592,7 +1612,9 @@ All commands read and write the same database file:
 | `doctor` | `<store>/knowledge.db` |
 | `image ingest/search/delete` | Ready resource-core generation selected by `<store>/active-generation.json` |
 | `resource import/inspect/delete` | Existing clean standalone database required by explicit `--catalog PATH` |
-| `resources duplicates/similar` | Ready resource-core generation selected by `<store>/active-generation.json` |
+| `resources duplicates/similar/search/facets` | Ready resource-core generation selected by `<store>/active-generation.json` |
+| `similar`, `facets` | Ready resource-core generation selected by `<store>/active-generation.json` |
+| `benchmark` | Explicit clean standalone database supplied by `--catalog PATH` |
 
 Relative store paths are resolved against the selected `--root`.
 
