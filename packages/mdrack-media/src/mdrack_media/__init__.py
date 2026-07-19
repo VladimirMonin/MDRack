@@ -1,5 +1,6 @@
 """Provider-, persistence-, and filesystem-neutral media contracts."""
 
+from .aggregation import weighted_centroid
 from .audio import build_audio_transcript_batch, build_video_transcript_batch
 from .builders import (
     MEDIA_RESOURCE_KINDS,
@@ -90,6 +91,13 @@ from .records import (
     TokenCount,
     TranscriptArtifact,
 )
+from .retrieval import (
+    MediaRetrievalEvidence,
+    MediaRetrievalItem,
+    MediaRetrievalResult,
+    RetrievalMode,
+    retrieve_media,
+)
 
 __all__ = [
     "AggregationFingerprint",
@@ -124,6 +132,9 @@ __all__ = [
     "MediaOperation",
     "MediaResourceDescriptor",
     "MediaResourceKind",
+    "MediaRetrievalEvidence",
+    "MediaRetrievalItem",
+    "MediaRetrievalResult",
     "NormalizationFingerprint",
     "OVERFLOW_CALLER_SPLIT",
     "OVERFLOW_REJECT",
@@ -133,6 +144,7 @@ __all__ = [
     "REPRESENTATION_TIMED_PASSAGE",
     "RESOURCE_AUDIO",
     "RESOURCE_VIDEO",
+    "RetrievalMode",
     "TOKEN_COUNT_ESTIMATED",
     "TOKEN_COUNT_EXACT",
     "TRACK_AUDIO",
@@ -165,8 +177,10 @@ __all__ = [
     "provisional_abc_policies",
     "representation_id",
     "resource_id",
+    "retrieve_media",
     "run_grouping_variants",
     "stable_media_id",
     "validate_media_id",
+    "weighted_centroid",
     "whole_resource_id",
 ]

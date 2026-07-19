@@ -6,6 +6,7 @@ import pytest
 
 from mdrack_core import Locator
 from mdrack_media import (
+    AggregationFingerprint,
     EmbeddingFingerprint,
     MediaResourceDescriptor,
     NormalizationFingerprint,
@@ -15,6 +16,7 @@ from mdrack_media import (
     TokenCounterFingerprint,
     TranscriptArtifact,
     TranscriptBatchBuilderInput,
+    WholeResourceTextPolicy,
     atom_id,
     build_audio_transcript_batch,
     build_video_transcript_batch,
@@ -199,3 +201,26 @@ def test_transcript_builders_reject_cross_kind_projection() -> None:
         build_video_transcript_batch(audio_input, token_counter=counter)
     with pytest.raises(ValueError, match="requires a audio resource"):
         build_audio_transcript_batch(video_input, token_counter=video_counter)
+
+
+@pytest.mark.parametrize(
+    "vectors_factory",
+    [lambda ids: {ids[0]: (1.0, 0.0)}, lambda ids: {"missing": (1.0, 0.0)}],
+)
+def test_audio_long_whole_resource_rejects_partial_or_mismatched_vectors(vectors_factory) -> None:
+    input_value, counter = _input()
+    passage_batch = build_audio_transcript_batch(
+        replace(input_value, embedding_fingerprint=None), token_counter=counter
+    )
+    long_input = replace(
+        input_value,
+        whole_text_policy=WholeResourceTextPolicy(max_tokens=1, overflow="caller_split"),
+        aggregation_fingerprint=AggregationFingerprint.from_payload({"policy": "long-v1"}),
+    )
+
+    with pytest.raises(ValueError, match="exactly one vector"):
+        build_audio_transcript_batch(
+            long_input,
+            token_counter=counter,
+            vectors=vectors_factory([unit.unit_id for unit in passage_batch.units]),
+        )

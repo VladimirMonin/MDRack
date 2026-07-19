@@ -45,6 +45,7 @@ from mdrack_core.domain import (
     RESOURCE_DOCUMENT,
     TARGET_UNIT,
     UNIT_TEXT_CHUNK,
+    UNIT_WHOLE_RESOURCE,
     EmbeddingSpaceRecord,
     Locator,
     PreparedResourceBatch,
@@ -56,6 +57,7 @@ from mdrack_core.domain import (
     SearchUnitRecord,
     VectorRecord,
 )
+from mdrack_media import AggregationFingerprint, WholeResourceTextPolicy, weighted_centroid
 
 _DOCUMENT_LOCATOR = "document"
 _DOCUMENT_SPAN_LOCATOR = "document_span"
@@ -68,12 +70,29 @@ def embedding_space_id(profile_name: str, fingerprint: str) -> str:
     return logical_id("embedding-space", profile_name, fingerprint)
 
 
-def prepared_file_to_resource_batch(prepared: PreparedFile) -> PreparedResourceBatch:
+def prepared_file_to_resource_batch(
+    prepared: PreparedFile,
+    *,
+    whole_text_policy: WholeResourceTextPolicy | None = None,
+    aggregation_fingerprint: AggregationFingerprint | None = None,
+    whole_vector: Sequence[float] | None = None,
+) -> PreparedResourceBatch:
     """Project one fully prepared Markdown document into one complete core graph.
 
     SQLite row IDs and run IDs deliberately stay on the legacy side of this edge.
     Resource, representation, and unit identities are caller-owned logical IDs.
     """
+    if not isinstance(prepared, PreparedFile):
+        raise TypeError("prepared must be a PreparedFile")
+    if whole_text_policy is not None and not isinstance(whole_text_policy, WholeResourceTextPolicy):
+        raise ValueError("whole_text_policy must be a WholeResourceTextPolicy or None")
+    if aggregation_fingerprint is not None and not isinstance(aggregation_fingerprint, AggregationFingerprint):
+        raise ValueError("aggregation_fingerprint must be an AggregationFingerprint or None")
+    if (whole_text_policy is None) != (aggregation_fingerprint is None):
+        raise ValueError("whole_text_policy and aggregation_fingerprint must be supplied together")
+    if whole_vector is not None and not isinstance(whole_vector, Sequence):
+        raise TypeError("whole_vector must be a sequence or None")
+
     resource_id = prepared.logical_id
     representation_id = logical_id(
         "representation",
@@ -183,9 +202,106 @@ def prepared_file_to_resource_batch(prepared: PreparedFile) -> PreparedResourceB
             for unit, vector in zip(units, prepared.vectors, strict=True)
         )
 
+    representations: tuple[RepresentationRecord, ...] = (representation,)
+    if whole_text_policy is not None:
+        assert aggregation_fingerprint is not None
+        token_weights = {
+            chunk.logical_id: max(1, len(chunk.embedding_text.split()))
+            for chunk in prepared.chunks
+        }
+        total_tokens = sum(token_weights.values())
+        is_long = total_tokens > whole_text_policy.max_tokens
+        if is_long and whole_text_policy.overflow == "reject":
+            raise ValueError("Markdown whole-resource text exceeds whole_text_policy.max_tokens")
+        whole_representation_id = logical_id(
+            "representation",
+            resource_id,
+            "whole_resource_text",
+            aggregation_fingerprint.value,
+            representation_id,
+        )
+        whole_unit_id = logical_id(
+            "whole-resource",
+            resource_id,
+            representation_id,
+            aggregation_fingerprint.value,
+        )
+        whole_representation = RepresentationRecord(
+            representation_id=whole_representation_id,
+            resource_id=resource_id,
+            representation_kind="whole_resource_text",
+            modality=MODALITY_TEXT,
+            text=representation.text,
+            producer_fingerprint=aggregation_fingerprint.value,
+            token_count=total_tokens,
+            token_count_kind="estimated",
+            metadata={
+                "aggregation_fingerprint": aggregation_fingerprint.value,
+                "similarity_basis": "markdown_retrieval_text",
+            },
+        )
+        whole_unit = SearchUnitRecord(
+            unit_id=whole_unit_id,
+            resource_id=resource_id,
+            representation_id=whole_representation_id,
+            unit_kind=UNIT_WHOLE_RESOURCE,
+            modality=MODALITY_TEXT,
+            text=representation.text,
+            evidence_locator=Locator(
+                "whole_resource",
+                {"relative_path": prepared.relative_path, "root_id": prepared.root_id},
+            ),
+            ordinal=0,
+            token_count=total_tokens,
+            token_count_kind="estimated",
+            metadata={
+                "aggregation_fingerprint": aggregation_fingerprint.value,
+                "similarity_basis": "markdown_retrieval_text",
+            },
+        )
+        units = units + (whole_unit,)
+        if is_long:
+            if not prepared.vectors:
+                raise ValueError("long Markdown whole-resource text requires chunk vectors")
+            whole_vector = weighted_centroid(
+                {
+                    chunk.logical_id: vector
+                    for chunk, vector in zip(prepared.chunks, prepared.vectors, strict=True)
+                },
+                token_weights,
+            )
+        if whole_vector is not None:
+            if prepared.embedding_profile is None:
+                raise ValueError("embedding profile is required for whole-resource vectors")
+            if not whole_vector:
+                raise ValueError("whole_vector must be a non-empty vector")
+            if spaces:
+                space = spaces[0]
+                if len(whole_vector) != space.dimensions:
+                    raise ValueError("whole_vector must match the chunk vector dimensions")
+                vectors = vectors + (VectorRecord(whole_unit_id, space.space_id, tuple(whole_vector)),)
+            else:
+                space_id = embedding_space_id(
+                    prepared.embedding_profile.name,
+                    prepared.embedding_profile.fingerprint,
+                )
+                spaces = (
+                    EmbeddingSpaceRecord(
+                        space_id=space_id,
+                        dimensions=prepared.embedding_profile.output_dimensions,
+                        metric=METRIC_COSINE,
+                        fingerprint=prepared.embedding_profile.fingerprint,
+                        metadata={"profile": prepared.embedding_profile.name},
+                    ),
+                )
+                if len(whole_vector) != spaces[0].dimensions:
+                    raise ValueError("whole_vector must match the embedding profile dimensions")
+                vectors = (VectorRecord(whole_unit_id, space_id, tuple(whole_vector)),)
+        representations = (representation, whole_representation)
+
     return PreparedResourceBatch(
         resource=resource,
-        representations=(representation,),
+        representations=representations,
         units=units,
         spaces=spaces,
         vectors=vectors,

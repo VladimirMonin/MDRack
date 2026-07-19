@@ -22,6 +22,10 @@ Frame-caption batches expose stable frame IDs as searchable units and preserve
 integer-millisecond `video_frame` evidence. They can be narrowed with core
 categorical branch scopes and fused with transcript branches using weighted RRF;
 these are experimental retrieval compositions, not default production behavior.
+`retrieve_media()` provides the corresponding provider-free prepared-batch
+retrieval helper with transcript-only, frame-only, and weighted hybrid modes,
+pre-limit categorical/facet filtering, deterministic IDs/order, and optional
+nearby-frame evidence kept outside the core result.
 
 Token counts always retain `exact` or `estimated` truthfulness together with the
 fingerprint of the counter. Producer, normalization, grouper, token-counter,

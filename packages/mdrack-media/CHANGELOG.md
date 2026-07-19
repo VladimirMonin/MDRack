@@ -19,3 +19,6 @@
   timestamp evidence, empty/replacement-safe identity behavior, and caller-owned
   optional vectors. Core categorical narrowing and weighted hybrid fusion remain
   experimental retrieval composition rather than a production-default claim.
+- Add deterministic prepared-batch transcript/frame retrieval with categorical
+  narrowing, weighted hybrid fusion, stable ordering, and optional nearby-frame
+  evidence outside the limited core result.

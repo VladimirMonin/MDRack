@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from mdrack_core import (
     BranchScopeOverride,
     LexicalBranch,
@@ -13,6 +15,7 @@ from mdrack_core import (
 from mdrack_core.application.retrieval import RetrievalService
 from mdrack_media import (
     TOKEN_COUNT_ESTIMATED,
+    AggregationFingerprint,
     EmbeddingFingerprint,
     FrameBatchBuilderInput,
     FrameCaptionArtifact,
@@ -23,6 +26,7 @@ from mdrack_media import (
     TokenCount,
     TokenCounterFingerprint,
     VideoFrameLocator,
+    WholeResourceTextPolicy,
     build_video_frame_caption_batch,
     frame_id,
     representation_id,
@@ -179,3 +183,17 @@ def test_frame_caption_and_transcript_branches_fuse_with_scope_and_evidence(tmp_
         assert all(item.evidence_locator.kind == "video_frame" for item in result.items[0].evidence)
     finally:
         catalog.close()
+
+
+def test_long_frame_caption_resource_rejects_partial_or_mismatched_vectors() -> None:
+    input_value = _input("one frame", "another frame")
+    frame_ids = [item.frame_id for item in input_value.frames.observations]
+    long_input = replace(
+        input_value,
+        whole_text_policy=WholeResourceTextPolicy(max_tokens=1, overflow="caller_split"),
+        aggregation_fingerprint=AggregationFingerprint.from_payload({"policy": "long-v1"}),
+    )
+
+    for vectors in ({frame_ids[0]: (1.0, 0.0)}, {"frame_missing": (1.0, 0.0)}):
+        with pytest.raises(ValueError, match="exactly one vector"):
+            build_video_frame_caption_batch(long_input, vectors=vectors)

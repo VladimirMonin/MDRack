@@ -64,9 +64,19 @@ artifacts as a resource/representation with no units, requires exact vector-key
 matching when vectors are supplied, and uses the same deterministic embedding
 space identity rules. The frame builder is provider-, filesystem-, and
 persistence-neutral; categorical narrowing and weighted transcript/frame
-hybrid fusion are performed by the core retrieval service.
+hybrid fusion are performed by the core retrieval service. `retrieve_media()` is the provider-free prepared-batch composition helper for offline retrieval. It
+supports transcript-only, frame-only, and weighted hybrid modes, applies
+categorical and facet filters before the result limit, and returns stable unit
+IDs. An explicit `nearby_frame_limit` adds nearby frame evidence outside the
+limited core result; empty queries return empty core and nearby results.
+`MediaRetrievalResult.to_dict()` exposes only privacy-safe public DTOs: every
+item includes stable unit/resource/representation IDs, source and unit type,
+integer-millisecond coordinates with `timestamp_unit: "ms"`, allow-listed
+replacement fingerprints, and branch/nearby provenance. Raw locators, paths,
+URLs, binary payloads, captions/transcript text, and arbitrary metadata do not
+cross this boundary.
 Artifact metadata is retained on the resource and representation; observation
-metadata, including content fingerprints, is retained on each frame unit. The
+metadata, including content fingerprints, is retained on each frame unit.
 resource content hash changes when caption/content evidence changes while the
 logical frame ID remains stable, so catalog replacement is deterministic rather
 than an accidental duplicate.

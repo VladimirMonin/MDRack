@@ -56,9 +56,7 @@ class MediaResourceDescriptor:
         data = expect_keys(
             value,
             "media resource descriptor",
-            frozenset(
-                {"locator", "media_type", "resource_id", "resource_kind", "source_namespace"}
-            ),
+            frozenset({"locator", "media_type", "resource_id", "resource_kind", "source_namespace"}),
         )
         locator = expect_keys(data["locator"], "locator", frozenset({"kind", "payload"}))
         return cls(
@@ -117,18 +115,12 @@ class TranscriptBatchBuilderInput:
                 "passage_representation_id must match resource, representation kind, "
                 "grouper fingerprint, and transcript normalization fingerprint"
             )
-        if self.embedding_fingerprint is not None and not isinstance(
-            self.embedding_fingerprint, EmbeddingFingerprint
-        ):
+        if self.embedding_fingerprint is not None and not isinstance(self.embedding_fingerprint, EmbeddingFingerprint):
             raise ValueError("embedding_fingerprint must be an EmbeddingFingerprint or None")
-        if self.whole_text_policy is not None and not isinstance(
-            self.whole_text_policy, WholeResourceTextPolicy
-        ):
+        if self.whole_text_policy is not None and not isinstance(self.whole_text_policy, WholeResourceTextPolicy):
             raise ValueError("whole_text_policy must be a WholeResourceTextPolicy or None")
         if (self.whole_text_policy is None) != (self.aggregation_fingerprint is None):
-            raise ValueError(
-                "whole_text_policy and aggregation_fingerprint must be supplied together"
-            )
+            raise ValueError("whole_text_policy and aggregation_fingerprint must be supplied together")
         if self.aggregation_fingerprint is not None and not isinstance(
             self.aggregation_fingerprint, AggregationFingerprint
         ):
@@ -140,17 +132,13 @@ class TranscriptBatchBuilderInput:
                 None if self.aggregation_fingerprint is None else self.aggregation_fingerprint.value
             ),
             "chunking_policy": self.chunking_policy.to_dict(),
-            "embedding_fingerprint": (
-                None if self.embedding_fingerprint is None else self.embedding_fingerprint.value
-            ),
+            "embedding_fingerprint": (None if self.embedding_fingerprint is None else self.embedding_fingerprint.value),
             "grouper_fingerprint": self.grouper_fingerprint.value,
             "passage_representation_id": self.passage_representation_id,
             "passage_representation_kind": self.passage_representation_kind,
             "resource": self.resource.to_dict(),
             "transcript": self.transcript.to_dict(),
-            "whole_text_policy": (
-                None if self.whole_text_policy is None else self.whole_text_policy.to_dict()
-            ),
+            "whole_text_policy": (None if self.whole_text_policy is None else self.whole_text_policy.to_dict()),
         }
 
     @classmethod
@@ -179,15 +167,9 @@ class TranscriptBatchBuilderInput:
             passage_representation_kind=cast(str, data["passage_representation_kind"]),
             chunking_policy=TimedChunkingPolicy.from_dict(data["chunking_policy"]),
             grouper_fingerprint=GrouperFingerprint.from_dict(data["grouper_fingerprint"]),
-            embedding_fingerprint=(
-                None if embedding is None else EmbeddingFingerprint.from_dict(embedding)
-            ),
-            whole_text_policy=(
-                None if whole_policy is None else WholeResourceTextPolicy.from_dict(whole_policy)
-            ),
-            aggregation_fingerprint=(
-                None if aggregation is None else AggregationFingerprint.from_dict(aggregation)
-            ),
+            embedding_fingerprint=(None if embedding is None else EmbeddingFingerprint.from_dict(embedding)),
+            whole_text_policy=(None if whole_policy is None else WholeResourceTextPolicy.from_dict(whole_policy)),
+            aggregation_fingerprint=(None if aggregation is None else AggregationFingerprint.from_dict(aggregation)),
         )
 
 
@@ -196,6 +178,8 @@ class FrameBatchBuilderInput:
     resource: MediaResourceDescriptor
     frames: FrameCaptionArtifact
     embedding_fingerprint: EmbeddingFingerprint | None = None
+    whole_text_policy: WholeResourceTextPolicy | None = None
+    aggregation_fingerprint: AggregationFingerprint | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.resource, MediaResourceDescriptor):
@@ -206,32 +190,41 @@ class FrameBatchBuilderInput:
             raise ValueError("frames must be a FrameCaptionArtifact")
         if self.frames.resource_id != self.resource.resource_id:
             raise ValueError("frames must belong to resource")
-        if self.embedding_fingerprint is not None and not isinstance(
-            self.embedding_fingerprint, EmbeddingFingerprint
-        ):
+        if self.embedding_fingerprint is not None and not isinstance(self.embedding_fingerprint, EmbeddingFingerprint):
             raise ValueError("embedding_fingerprint must be an EmbeddingFingerprint or None")
+        if self.whole_text_policy is not None and not isinstance(self.whole_text_policy, WholeResourceTextPolicy):
+            raise ValueError("whole_text_policy must be a WholeResourceTextPolicy or None")
+        if (self.whole_text_policy is None) != (self.aggregation_fingerprint is None):
+            raise ValueError("whole_text_policy and aggregation_fingerprint must be supplied together")
+        if self.aggregation_fingerprint is not None and not isinstance(
+            self.aggregation_fingerprint, AggregationFingerprint
+        ):
+            raise ValueError("aggregation_fingerprint must be an AggregationFingerprint or None")
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "embedding_fingerprint": (
-                None if self.embedding_fingerprint is None else self.embedding_fingerprint.value
+            "aggregation_fingerprint": (
+                None if self.aggregation_fingerprint is None else self.aggregation_fingerprint.value
             ),
+            "embedding_fingerprint": (None if self.embedding_fingerprint is None else self.embedding_fingerprint.value),
             "frames": self.frames.to_dict(),
             "resource": self.resource.to_dict(),
+            "whole_text_policy": (None if self.whole_text_policy is None else self.whole_text_policy.to_dict()),
         }
 
     @classmethod
     def from_dict(cls, value: object) -> FrameBatchBuilderInput:
-        data = expect_keys(
-            value,
-            "frame builder input",
-            frozenset({"embedding_fingerprint", "frames", "resource"}),
-        )
+        data = expect_mapping(value, "frame builder input")
+        allowed = {"embedding_fingerprint", "frames", "resource", "aggregation_fingerprint", "whole_text_policy"}
+        if set(data) not in (allowed - {"aggregation_fingerprint", "whole_text_policy"}, allowed):
+            raise ValueError("frame builder input has unsupported or incomplete keys")
         embedding = data["embedding_fingerprint"]
+        aggregation = data.get("aggregation_fingerprint")
+        whole_policy = data.get("whole_text_policy")
         return cls(
             resource=MediaResourceDescriptor.from_dict(data["resource"]),
             frames=FrameCaptionArtifact.from_dict(data["frames"]),
-            embedding_fingerprint=(
-                None if embedding is None else EmbeddingFingerprint.from_dict(embedding)
-            ),
+            embedding_fingerprint=(None if embedding is None else EmbeddingFingerprint.from_dict(embedding)),
+            whole_text_policy=(None if whole_policy is None else WholeResourceTextPolicy.from_dict(whole_policy)),
+            aggregation_fingerprint=(None if aggregation is None else AggregationFingerprint.from_dict(aggregation)),
         )

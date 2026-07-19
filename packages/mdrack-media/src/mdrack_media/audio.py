@@ -19,6 +19,7 @@ from mdrack_core import (
     VectorRecord,
 )
 
+from .aggregation import weighted_centroid
 from .builders import RESOURCE_AUDIO, RESOURCE_VIDEO, TranscriptBatchBuilderInput
 from .common import canonical_json
 from .grouper import group_timed_atoms
@@ -28,11 +29,12 @@ from .records import REPRESENTATION_TIMED_PASSAGE, TOKEN_COUNT_EXACT, TimedPassa
 
 
 def _space_id(fingerprint: str, dimensions: int, metric: str) -> str:
-    return "space_" + hashlib.sha256(
-        canonical_json(
-            {"dimensions": dimensions, "fingerprint": fingerprint, "metric": metric}
-        ).encode("utf-8")
-    ).hexdigest()
+    return (
+        "space_"
+        + hashlib.sha256(
+            canonical_json({"dimensions": dimensions, "fingerprint": fingerprint, "metric": metric}).encode("utf-8")
+        ).hexdigest()
+    )
 
 
 def _content_hash(input_value: TranscriptBatchBuilderInput) -> str:
@@ -111,9 +113,7 @@ def _build_transcript_batch(
             unit_kind=UNIT_TIME_SEGMENT,
             modality=MODALITY_TEXT,
             text=passage.text,
-            evidence_locator=TimeSegmentLocator(
-                passage.start_ms, passage.end_ms, track=track
-            ).to_core_locator(),
+            evidence_locator=TimeSegmentLocator(passage.start_ms, passage.end_ms, track=track).to_core_locator(),
             ordinal=passage.ordinal,
             token_count=passage.token_count.count,
             token_count_kind=passage.token_count.kind,
@@ -125,12 +125,12 @@ def _build_transcript_batch(
         for passage in grouped.passages
     ]
 
+    whole_vector: tuple[float, ...] | None = None
     if input_value.whole_text_policy is not None:
         total_tokens = sum(item.token_count.count for item in grouped.passages)
-        if total_tokens > input_value.whole_text_policy.max_tokens:
-            if input_value.whole_text_policy.overflow == "reject":
-                raise ValueError("whole transcript exceeds whole_text_policy.max_tokens")
-            raise ValueError("whole transcript caller_split policy is not implemented")
+        is_long = total_tokens > input_value.whole_text_policy.max_tokens
+        if is_long and input_value.whole_text_policy.overflow == "reject":
+            raise ValueError("whole transcript exceeds whole_text_policy.max_tokens")
         whole_id = whole_resource_id(
             resource_id,
             transcript.representation_id,
@@ -151,7 +151,7 @@ def _build_transcript_batch(
                 text=_whole_text(grouped.passages),
                 language=transcript.language,
                 producer_fingerprint=input_value.aggregation_fingerprint.value,  # type: ignore[union-attr]
-                token_count=sum(item.token_count.count for item in grouped.passages),
+                token_count=total_tokens,
                 token_count_kind=TOKEN_COUNT_EXACT,
             )
         )
@@ -165,56 +165,44 @@ def _build_transcript_batch(
                 text=_whole_text(grouped.passages),
                 evidence_locator=Locator("whole_media", {}),
                 ordinal=0,
-                token_count=sum(item.token_count.count for item in grouped.passages),
+                token_count=total_tokens,
                 token_count_kind=TOKEN_COUNT_EXACT,
                 metadata={"similarity_basis": "transcript_text"},
             )
         )
+        if is_long:
+            if vectors is None:
+                raise ValueError("long transcript requires passage vectors for centroid aggregation")
+            passage_units = units[:-1]
+            if set(vectors) != {unit.unit_id for unit in passage_units}:
+                raise ValueError("vectors must contain exactly one vector per indexed transcript unit")
+            whole_vector = weighted_centroid(
+                {unit.unit_id: vectors[unit.unit_id] for unit in passage_units},
+                {unit.unit_id: unit.token_count or 1 for unit in passage_units},
+                normalize=metric == "cosine",
+            )
 
     spaces: tuple[EmbeddingSpaceRecord, ...] = ()
     vector_records: list[VectorRecord] = []
     if vectors is not None:
         expected_ids = {unit.unit_id for unit in units if unit.unit_kind == UNIT_TIME_SEGMENT}
-        if input_value.whole_text_policy is not None:
+        if input_value.whole_text_policy is not None and whole_vector is None:
             expected_ids.add(units[-1].unit_id)
         if set(vectors) != expected_ids:
             raise ValueError("vectors must contain exactly one vector per indexed transcript unit")
-        if not expected_ids:
-            return PreparedResourceBatch(
-                resource=ResourceRecord(
-                    resource_id=resource_id,
-                    resource_kind=resource_kind,
-                    media_type=input_value.resource.media_type,
-                    source_namespace=input_value.resource.source_namespace,
-                    locator=input_value.resource.locator,
-                    content_hash=_content_hash(input_value),
-                    metadata={
-                        "producer_fingerprint": transcript.producer_fingerprint.value,
-                        "normalization_fingerprint": transcript.normalization_fingerprint.value,
-                        "grouper_fingerprint": grouped.grouper_fingerprint.value,
-                    },
-                ),
-                representations=tuple(representations),
-                units=tuple(units),
-                spaces=(),
-                vectors=(),
-                facets=(),
-            )
         dimensions = {len(vector) for vector in vectors.values()}
+        if whole_vector is not None:
+            dimensions.add(len(whole_vector))
         if len(dimensions) != 1:
             raise ValueError("vectors must have one shared dimension")
         dimension = dimensions.pop()
-        fingerprint = (
-            input_value.embedding_fingerprint.value
-            if input_value.embedding_fingerprint
-            else "unspecified"
-        )
+        fingerprint = input_value.embedding_fingerprint.value if input_value.embedding_fingerprint else "unspecified"
         space_id = _space_id(fingerprint, dimension, metric)
         spaces = (EmbeddingSpaceRecord(space_id, dimension, metric, fingerprint, {"modality": "text"}),)
-        vector_records = [
-            VectorRecord(unit.unit_id, space_id, tuple(vectors[unit.unit_id]))
-            for unit in units
-        ]
+        vector_map = dict(vectors)
+        if whole_vector is not None:
+            vector_map[units[-1].unit_id] = whole_vector
+        vector_records = [VectorRecord(unit.unit_id, space_id, tuple(vector_map[unit.unit_id])) for unit in units]
     elif input_value.embedding_fingerprint is not None:
         raise ValueError("embedding_fingerprint requires vectors")
 

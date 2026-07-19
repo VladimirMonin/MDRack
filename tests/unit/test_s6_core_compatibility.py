@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mdrack.application.compatibility import (
     CoreCompatibilityMapper,
     prepared_file_to_resource_batch,
@@ -9,6 +11,7 @@ from mdrack.application.compatibility import (
 from mdrack.domain.indexing import PreparedFile, StoredChunk, StoredSection
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack_core.domain import (
+    UNIT_WHOLE_RESOURCE,
     Degradation,
     DegradationCategory,
     Locator,
@@ -16,6 +19,7 @@ from mdrack_core.domain import (
     SearchResult,
     SearchResultItem,
 )
+from mdrack_media import AggregationFingerprint, WholeResourceTextPolicy
 
 
 def _profile() -> EmbeddingProfile:
@@ -180,3 +184,41 @@ def test_compatibility_mapper_preserves_legacy_scores_ranks_locator_and_degradat
     assert item.source_locator.to_dict()["heading_path"] == ["Guide", "Heading"]
     assert mapped.degraded is True
     assert mapped.degraded_reason == "adapter_timeout"
+
+
+def test_prepared_file_projects_short_whole_resource_with_explicit_basis() -> None:
+    batch = prepared_file_to_resource_batch(
+        _prepared(),
+        whole_text_policy=WholeResourceTextPolicy(max_tokens=100),
+        aggregation_fingerprint=AggregationFingerprint.from_payload({"policy": "short-v1"}),
+        whole_vector=(0.0, 1.0),
+    )
+
+    whole = [unit for unit in batch.units if unit.unit_kind == UNIT_WHOLE_RESOURCE]
+    assert len(whole) == 1
+    assert len(batch.representations) == 2
+    assert whole[0].metadata["similarity_basis"] == "markdown_retrieval_text"
+    assert batch.vectors[-1].unit_id == whole[0].unit_id
+
+
+def test_prepared_file_projects_long_whole_resource_by_weighted_centroid() -> None:
+    batch = prepared_file_to_resource_batch(
+        _prepared(),
+        whole_text_policy=WholeResourceTextPolicy(max_tokens=1, overflow="caller_split"),
+        aggregation_fingerprint=AggregationFingerprint.from_payload({"policy": "long-v1"}),
+    )
+
+    whole = [unit for unit in batch.units if unit.unit_kind == UNIT_WHOLE_RESOURCE]
+    assert len(whole) == 1
+    assert batch.vectors[-1].unit_id == whole[0].unit_id
+    assert batch.vectors[-1].vector == (1.0, 0.0)
+
+
+def test_prepared_file_rejects_long_whole_resource_without_vectors() -> None:
+    prepared = PreparedFile(**{**_prepared().__dict__, "vectors": ()})
+    with pytest.raises(ValueError, match="requires chunk vectors"):
+        prepared_file_to_resource_batch(
+            prepared,
+            whole_text_policy=WholeResourceTextPolicy(max_tokens=1, overflow="caller_split"),
+            aggregation_fingerprint=AggregationFingerprint.from_payload({"policy": "reject-v1"}),
+        )
