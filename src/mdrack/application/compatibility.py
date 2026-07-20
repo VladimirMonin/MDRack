@@ -17,6 +17,11 @@ from mdrack.application.generation_manager import (
     StoreGenerationManager,
     StoreGenerationManagerError,
 )
+from mdrack.application.metadata_projection import (
+    DEFAULT_METADATA_PROJECTION_POLICY,
+    MetadataProjectionPolicy,
+    metadata_projection_policy_from_config,
+)
 from mdrack.application.store_generations import (
     ActiveGenerationPointer,
     GenerationContractKind,
@@ -51,6 +56,7 @@ from mdrack_core.domain import (
     PreparedResourceBatch,
     RankedCandidate,
     RepresentationRecord,
+    ResourceFacet,
     ResourceRecord,
     SearchRequest,
     SearchResult,
@@ -76,6 +82,7 @@ def prepared_file_to_resource_batch(
     whole_text_policy: WholeResourceTextPolicy | None = None,
     aggregation_fingerprint: AggregationFingerprint | None = None,
     whole_vector: Sequence[float] | None = None,
+    metadata_policy: MetadataProjectionPolicy | None = None,
 ) -> PreparedResourceBatch:
     """Project one fully prepared Markdown document into one complete core graph.
 
@@ -94,6 +101,10 @@ def prepared_file_to_resource_batch(
         raise TypeError("whole_vector must be a sequence or None")
 
     resource_id = prepared.logical_id
+    projection = (metadata_policy or DEFAULT_METADATA_PROJECTION_POLICY).project(
+        prepared.source_metadata,
+        fallback_title=prepared.title,
+    )
     representation_id = logical_id(
         "representation",
         resource_id,
@@ -121,7 +132,7 @@ def prepared_file_to_resource_batch(
             },
         ),
         content_hash=f"sha256:{prepared.source_hash}",
-        title=prepared.title,
+        title=projection.canonical_title,
         metadata={
             "source": dict(prepared.source_metadata),
             "ingestion": {
@@ -132,6 +143,7 @@ def prepared_file_to_resource_batch(
                 "normalization_policy_fingerprint": (
                     prepared.metadata_policy_fingerprint or None
                 ),
+                "projection_policy_fingerprint": projection.policy_fingerprint,
                 "parser_name": prepared.parser_name,
                 "parser_version": prepared.parser_version,
                 "chunk_strategy_name": prepared.chunk_strategy_name,
@@ -330,7 +342,15 @@ def prepared_file_to_resource_batch(
         units=units,
         spaces=spaces,
         vectors=vectors,
-        facets=(),
+        facets=tuple(
+            ResourceFacet(
+                resource_id,
+                facet,
+                "source",
+                producer_fingerprint=projection.policy_fingerprint,
+            )
+            for facet in projection.facets
+        ),
     )
 
 
@@ -468,12 +488,18 @@ def _optional_int(payload: Mapping[str, object], key: str) -> int | None:
 class CoreCompatibilityStorage:
     """One active-generation composition for core writes/search and legacy reads."""
 
-    def __init__(self, connection: _AtomicProjectionConnection) -> None:
+    def __init__(
+        self,
+        connection: _AtomicProjectionConnection,
+        *,
+        metadata_policy: MetadataProjectionPolicy | None = None,
+    ) -> None:
         self.connection = connection
         self.legacy = SQLiteIndexStorage(connection)
         self.resource_store = SQLiteResourceStore(connection)
         self.core_indexing = CoreIndexingService(self.resource_store)
         self.core_retrieval = CoreRetrievalService(self.resource_store)
+        self.metadata_policy = metadata_policy or DEFAULT_METADATA_PROJECTION_POLICY
         self._closed = False
 
     def start_run(self, **kwargs: Any) -> str:
@@ -497,7 +523,9 @@ class CoreCompatibilityStorage:
 
     def replace_file(self, prepared: PreparedFile) -> None:
         with self.connection.atomic_projection():
-            self.core_indexing.index(prepared_file_to_resource_batch(prepared))
+            self.core_indexing.index(
+                prepared_file_to_resource_batch(prepared, metadata_policy=self.metadata_policy)
+            )
             self.legacy.replace_file(prepared)
 
     def delete_file(self, relative_path: str) -> None:
@@ -636,7 +664,10 @@ def create_application_storage(root: Path, config: Any) -> SQLiteIndexStorage | 
             get_read_only_connection(database_path),
             owns_connection=True,
         )
-    return CoreCompatibilityStorage(_get_atomic_projection_connection(database_path))
+    return CoreCompatibilityStorage(
+        _get_atomic_projection_connection(database_path),
+        metadata_policy=metadata_projection_policy_from_config(config.metadata),
+    )
 
 
 def resolve_application_database_path(root: Path, config: Any) -> Path:
@@ -718,7 +749,10 @@ def create_active_generation_rebuild_storage(root: Path, config: Any) -> CoreCom
         if isinstance(exc, StoreGenerationManagerError):
             raise
         raise StoreGenerationManagerError("active_generation_invalid") from exc
-    return CoreCompatibilityStorage(connection)
+    return CoreCompatibilityStorage(
+        connection,
+        metadata_policy=metadata_projection_policy_from_config(config.metadata),
+    )
 
 
 class _AtomicProjectionConnection(sqlite3.Connection):

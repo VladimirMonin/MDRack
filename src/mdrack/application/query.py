@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from mdrack.application.metadata_filters import (
+    MetadataFilter,
+    MetadataFilters,
+    compile_metadata_filters,
+)
 from mdrack.application.retrieval import RetrievalService
 from mdrack.domain.indexing import SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
@@ -52,3 +57,12 @@ class ReadService:
 
     def get_chunk_source_locator(self, chunk_id: str) -> SourceLocator:
         return self.storage.get_chunk_source_locator(chunk_id)
+
+
+__all__ = [
+    "MetadataFilter",
+    "MetadataFilters",
+    "ReadService",
+    "SearchService",
+    "compile_metadata_filters",
+]

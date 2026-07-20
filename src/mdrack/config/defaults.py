@@ -6,6 +6,7 @@ from mdrack.config.models import (
     ChunkingConfig,
     EmbeddingConfig,
     MDRackConfig,
+    MetadataConfig,
     ParsingConfig,
     PathsConfig,
     ProfilingConfig,
@@ -16,6 +17,7 @@ from mdrack.config.models import (
 DEFAULT_PATHS = PathsConfig()
 DEFAULT_SCAN = ScanConfig()
 DEFAULT_PARSING = ParsingConfig()
+DEFAULT_METADATA = MetadataConfig()
 DEFAULT_CHUNKING = ChunkingConfig()
 DEFAULT_EMBEDDING = EmbeddingConfig()
 DEFAULT_SEARCH = SearchConfig()
@@ -25,6 +27,7 @@ DEFAULT_CONFIG = MDRackConfig(
     paths=DEFAULT_PATHS,
     scan=DEFAULT_SCAN,
     parsing=DEFAULT_PARSING,
+    metadata=DEFAULT_METADATA,
     chunking=DEFAULT_CHUNKING,
     embedding=DEFAULT_EMBEDDING,
     search=DEFAULT_SEARCH,

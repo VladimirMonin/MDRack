@@ -16,6 +16,7 @@ from mdrack.config.models import (
     ChunkingConfig,
     EmbeddingConfig,
     MDRackConfig,
+    MetadataConfig,
     ParsingConfig,
     PathsConfig,
     ProfilingConfig,
@@ -30,6 +31,7 @@ _SECTION_MAP: dict[str, type[BaseModel]] = {
     "paths": PathsConfig,
     "scan": ScanConfig,
     "parsing": ParsingConfig,
+    "metadata": MetadataConfig,
     "chunking": ChunkingConfig,
     "embedding": EmbeddingConfig,
     "search": SearchConfig,
@@ -178,6 +180,7 @@ def _build_config(raw: dict[str, Any]) -> MDRackConfig:
         paths=PathsConfig(**raw.get("paths", {})),  # type: ignore[arg-type]
         scan=ScanConfig(**raw.get("scan", {})),  # type: ignore[arg-type]
         parsing=ParsingConfig(**raw.get("parsing", {})),  # type: ignore[arg-type]
+        metadata=MetadataConfig(**raw.get("metadata", {})),  # type: ignore[arg-type]
         chunking=ChunkingConfig(**raw.get("chunking", {})),  # type: ignore[arg-type]
         embedding=EmbeddingConfig(**raw.get("embedding", {})),  # type: ignore[arg-type]
         search=SearchConfig(**raw.get("search", {})),  # type: ignore[arg-type]

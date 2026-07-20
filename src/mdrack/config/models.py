@@ -62,6 +62,74 @@ class ParsingConfig(BaseModel):
     model_config = {"frozen": True}
 
 
+MetadataProjectionMode = Literal[
+    "store_only",
+    "canonical_title",
+    "facet",
+    "facet_many",
+    "lexical_text",
+    "ignore",
+]
+
+
+class MetadataProjectionConfig(BaseModel):
+    """One deterministic JSON Pointer projection rule."""
+
+    path: str = Field(min_length=1)
+    mode: MetadataProjectionMode
+    namespace: str | None = None
+
+    @model_validator(mode="after")
+    def validate_projection(self) -> "MetadataProjectionConfig":
+        if not self.path.startswith("/"):
+            raise ValueError("metadata projection path must start with '/'")
+        index = 0
+        while index < len(self.path):
+            if self.path[index] != "~":
+                index += 1
+                continue
+            if index + 1 >= len(self.path) or self.path[index + 1] not in {"0", "1"}:
+                raise ValueError("metadata projection path contains an invalid JSON Pointer escape")
+            index += 2
+        needs_namespace = self.mode in {"facet", "facet_many"}
+        if needs_namespace and not self.namespace:
+            raise ValueError("facet projections require a namespace")
+        if not needs_namespace and self.namespace is not None:
+            raise ValueError("namespace is only valid for facet projections")
+        return self
+
+    model_config = {"frozen": True}
+
+
+def _default_metadata_projections() -> list[MetadataProjectionConfig]:
+    return [
+        MetadataProjectionConfig(path="/title", mode="canonical_title"),
+        MetadataProjectionConfig(path="/tags", mode="facet_many", namespace="tag"),
+        MetadataProjectionConfig(path="/aliases", mode="lexical_text"),
+    ]
+
+
+class MetadataConfig(BaseModel):
+    """Bounded normalization settings and explicit metadata projections."""
+
+    max_serialized_bytes: int = Field(default=65_536, ge=1)
+    max_depth: int = Field(default=8, ge=1)
+    max_object_keys: int = Field(default=1_000, ge=1)
+    max_array_items: int = Field(default=1_000, ge=1)
+    max_string_bytes: int = Field(default=16_384, ge=1)
+    invalid_policy: Literal["warn_and_continue", "fail_resource"] = "warn_and_continue"
+    projections: list[MetadataProjectionConfig] = Field(default_factory=_default_metadata_projections)
+
+    @model_validator(mode="after")
+    def validate_unique_projection_paths(self) -> "MetadataConfig":
+        paths = [item.path for item in self.projections]
+        if len(paths) != len(set(paths)):
+            raise ValueError("metadata projection paths must be unique")
+        return self
+
+    model_config = {"frozen": True}
+
+
 class EmbeddingConfig(BaseModel):
     """Embedding provider configuration."""
 
@@ -118,6 +186,7 @@ class MDRackConfig(BaseModel):
     paths: PathsConfig = Field(default_factory=PathsConfig)
     scan: ScanConfig = Field(default_factory=ScanConfig)
     parsing: ParsingConfig = Field(default_factory=ParsingConfig)
+    metadata: MetadataConfig = Field(default_factory=MetadataConfig)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
