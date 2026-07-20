@@ -22,6 +22,8 @@ from mdrack.output.envelope import success as envelope_success
 from mdrack_core.observability import SafeEvent, emit_event
 from tests.privacy_oracle import EvidenceOracle, SentinelMatrix, exception_chain_payload
 
+pytestmark = pytest.mark.privacy
+
 
 def _safe_eval_report(sentinels: SentinelMatrix, *, status: str) -> EvalReport:
     conditions_met = status == "success"

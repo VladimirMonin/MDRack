@@ -13,8 +13,8 @@
   "artifact_count": 8,
   "installed_smoke": "ok",
   "artifacts": [
-    {"distribution": "mdrack", "kind": "wheel", "sha256": "sha256:c201af3e255880db1dbd43a446f609d37dd1a20a489b2ef6c6d5a2a113dba1ad"},
-    {"distribution": "mdrack", "kind": "sdist", "sha256": "sha256:3d04979d60f232fa0ca84e826d2bba3ab78b89854d332c3df0ea793f9f118d44"},
+    {"distribution": "mdrack", "kind": "wheel", "sha256": "sha256:05530092206de46094d71d3d05de6dc78eaeee459b0d30c1de84af4a6ee136d2"},
+    {"distribution": "mdrack", "kind": "sdist", "sha256": "sha256:bfe3a6883527d6ca34bc5ca70e66205f7632fd73f20a25f473613d6b8270c338"},
     {"distribution": "mdrack-core", "kind": "wheel", "sha256": "sha256:bc204b4d9d2c7d2bfed8533db67952745b99c01606a69f0b6187aee1fcd343aa"},
     {"distribution": "mdrack-core", "kind": "sdist", "sha256": "sha256:584b1790ae98dde866826783d2df67c6dcc2f6faf497c2732242698544dcaf66"},
     {"distribution": "mdrack-media", "kind": "wheel", "sha256": "sha256:89434862bf2ce14be2cd6a47e3a4ac1e7e5fb770222d581b26051e6635e2beba"},

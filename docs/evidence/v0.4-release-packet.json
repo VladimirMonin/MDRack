@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "packet_kind": "v0.4-offline-release-candidate-evidence",
+  "candidate_snapshot": {
+    "committed_base_revision": "7859c55a096c2acc20d91181a3df459d8181bc89",
+    "verification_scope": "committed_base_plus_content_addressed_build_inputs",
+    "build_input_status": "uncommitted",
+    "artifact_identity_contract": "publication_outputs_excluded_from_candidate_bytes",
+    "build_inputs": [
+      {"path": ".github/workflows/offline-release-matrix.yml", "sha256": "facad88feaf646f97ea18a4c0d22ecb86c14bff383b41b8f8caa4eade8b0788c"},
+      {"path": "docs/windows-exe-build.md", "sha256": "9cd2409c698a1ebe3b9cd9453769e4be8ee1704797423b14997641bc478b488e"},
+      {"path": "scripts/offline_release_matrix.py", "sha256": "5b04b347e738924ccbbf064a80f2d62dd404b9e91fc6fdc10bce1ca14216c65f"},
+      {"path": "scripts/verify.ps1", "sha256": "938ba7bef2ed791b24289976fca95154939b000bd4f3f267ea933ec1149cbe45"},
+      {"path": "scripts/verify.sh", "sha256": "9bd0983ff2693bba26cf7982e59b8fa0c4479acb10a4c41c8ad9dce52297793b"},
+      {"path": "tests/cli/test_cli_resource_manifest.py", "sha256": "8a2abe7347b2a256af2fc686acb74f885b184809b157fd1aa729bcc3701b7f41"},
+      {"path": "tests/e2e/conftest.py", "sha256": "f8aaee8fc47f18bbbaad22512053b06905b95a534fcc0414caea738c0b4f59f0"},
+      {"path": "tests/unit/conftest.py", "sha256": "fb40934028aaf76809b277c296e5c416e95f32fe602da7e8da26e29b2458f5b5"},
+      {"path": "tests/unit/test_eval_privacy.py", "sha256": "1d0af27ec2cb906019ed128d916492511c17f3ab34d33aa0e87645ec6a20a4d9"},
+      {"path": "tests/unit/test_live_lmstudio_eval.py", "sha256": "9a82c7b7eb0b6054ba080db3ed501ffca6bac5b6b8724dd256df04a280d4f762"},
+      {"path": "tests/unit/test_offline_release_matrix.py", "sha256": "3842c98ff9a03034e0adc7d95b74f19b7d23c4093ed9e004a61d6978198a697f"},
+      {"path": "tests/unit/test_privacy_evidence_oracle.py", "sha256": "543d16ce79dd32f81f6222cf702c5d24f855b2ecb394235d8bd17344e5cce9e5"},
+      {"path": "tests/unit/test_s8_failure_matrix.py", "sha256": "28983242d7fcc6d3a7ea14ddfea0061458b37773fac3c4cf641c01d46295246e"},
+      {"path": "tests/unit/test_s8_privacy_contracts.py", "sha256": "0d808d4ed270f28fa171349c4698800c65107bd876200375f9fff9c8b915e969"}
+    ],
+    "publication_outputs": [
+      "README.md",
+      "docs/current-architecture/README.md",
+      "docs/current-architecture/public-interfaces.md",
+      "docs/compatibility/v0.4-public-surface-ledger.json",
+      "docs/evidence/w5-offline-release-matrix.json",
+      "docs/evidence/v0.4-release-packet.md",
+      "docs/evidence/v0.4-release-packet.json",
+      "docs/offline-release-verification.md",
+      "scripts/check_release_docs.py",
+      "tests/unit/test_release_publication.py",
+      "docs/decisions/0005-timed-text-granularity.md",
+      "docs/decisions/0006-temporal-locator-specification.md",
+      "docs/decisions/0007-no-overlap-default.md",
+      "docs/decisions/0008-whole-resource-text-aggregation.md",
+      "docs/decisions/0009-text-only-media-capability.md",
+      "docs/decisions/0010-clean-standalone-sqlite-catalog.md"
+    ],
+    "excluded_paths": [
+      "docs/plans/2026-07-20-v1.1-implementation-plan.md"
+    ],
+    "note": "Artifact hashes describe only the committed base plus build_inputs. Publication outputs are generated and validated after the build and cannot affect artifact identity."
+  },
+  "source_plan": {
+    "path": "docs/plans/2026-07-18-v0.4-text-media-development-plan.md",
+    "sha256": "c0ab53dac1a58d1700f4bbabde60a994e989ccc1084357125489ff94b4565924"
+  },
+  "classification": {
+    "linux_offline_release_candidate": "ready_for_independent_review",
+    "published_release": false,
+    "windows": "not_run",
+    "python_3_12": "not_run",
+    "live_providers": "not_run_optional",
+    "real_source": "not_run"
+  },
+  "verification": {
+    "candidate_full_pytest": "1637 passed",
+    "focused_release_tests": "18 passed",
+    "deterministic_double_rebuild": "8 of 8 artifact filename, size, and SHA-256 rows identical",
+    "installed_artifact_smoke": "8 of 8 passed in each clean rebuild",
+    "release_docs_validator": "passed",
+    "ruff_repaired_python_paths": "passed",
+    "git_diff_check": "passed"
+  },
+  "fingerprints": {
+    "corpus_manifest_file_sha256": "1daf570be4d1705736cbc06ebef23803eb8552469b56ec49dee2a66f55123133",
+    "corpus_contract_ref": "sha256:2183e11b7e80b660e178322ae1305392c3311a801a749064e1845aeb3b78a534",
+    "query_set_file_sha256": "325fc7da801d52d1df3c5d10fc14ea4daa7a168fa758ae2231a2829ce3ed7a85",
+    "query_set_contract_ref": "sha256:91dd1b7e8b2531702069bdc83c442170881c72843413bb0853d17388bb42b1a7",
+    "benchmark_config_file_sha256": "f05f33bde59ef661cd6c26ab2bf5d144c8e1cc5393fbe13f933d13fcaaa69570",
+    "quality_runner_ref": "sha256:58e495f594c7e929dcaf2fa219e6ca101a122d7b860085087f58f0bb27c9d7d9",
+    "sqlite_report_file_sha256": "225640ce9f3947c01d9c51805bd6aacf3035175d0d1d94147cd5362e2603e94d",
+    "release_matrix_manifest_file_sha256": "08153c1bdd611fc93a79ddb35c2d6f89edac6f03b2187edc8ea16aa83d4192c9",
+    "prepared_manifest_schema_file_sha256": "e017cbb0f9731bf88c9648efab9e07c925ae8f146481d9e5acdbaee9d1821fb7",
+    "sqlite_migration_manifest_sha256": "bc0e36bd47ed2fab4a1a0614c431a35ac0e70d23f1f27a222ea4bd72bb997b4c"
+  },
+  "decision_records": [
+    {"topic": "timed_text_granularity", "status": "accepted", "path": "docs/decisions/0005-timed-text-granularity.md", "sha256": "c9d84472250507e43505e21a34457c9ab75d80874189b3e1a654d8c0e4dce37f"},
+    {"topic": "temporal_locator_specification", "status": "accepted", "path": "docs/decisions/0006-temporal-locator-specification.md", "sha256": "7ad49d13c62a477ecceb999d20164d6b944041834d65f27d4311d19ac25c24c0"},
+    {"topic": "no_overlap_default", "status": "accepted", "path": "docs/decisions/0007-no-overlap-default.md", "sha256": "3a02be6cbd8d71baf4b736f5b06a3f45a3fafc6337ed0db5fc2fb07919b1912e"},
+    {"topic": "whole_resource_text_aggregation", "status": "accepted", "path": "docs/decisions/0008-whole-resource-text-aggregation.md", "sha256": "bb874c3d5a9bea81c1d14aebba3a4e064cde55a27589a061ddf172ae454b32b1"},
+    {"topic": "text_only_media_capability", "status": "accepted", "path": "docs/decisions/0009-text-only-media-capability.md", "sha256": "0b5708ddc7cb365d72c59ab2e3cb625614e0bcae3efe459b20a5b472ba29652f"},
+    {"topic": "clean_standalone_sqlite", "status": "accepted", "path": "docs/decisions/0010-clean-standalone-sqlite-catalog.md", "sha256": "1a22de0e1afc96d1e800c1a2838b1110859d1b9b7f5d80a772591a126f3f3214"}
+  ],
+  "package_artifacts": [
+    {"distribution": "mdrack", "kind": "wheel", "sha256": "05530092206de46094d71d3d05de6dc78eaeee459b0d30c1de84af4a6ee136d2"},
+    {"distribution": "mdrack", "kind": "sdist", "sha256": "bfe3a6883527d6ca34bc5ca70e66205f7632fd73f20a25f473613d6b8270c338"},
+    {"distribution": "mdrack-core", "kind": "wheel", "sha256": "bc204b4d9d2c7d2bfed8533db67952745b99c01606a69f0b6187aee1fcd343aa"},
+    {"distribution": "mdrack-core", "kind": "sdist", "sha256": "584b1790ae98dde866826783d2df67c6dcc2f6faf497c2732242698544dcaf66"},
+    {"distribution": "mdrack-media", "kind": "wheel", "sha256": "89434862bf2ce14be2cd6a47e3a4ac1e7e5fb770222d581b26051e6635e2beba"},
+    {"distribution": "mdrack-media", "kind": "sdist", "sha256": "81fe5b7c5b412eae5da6d190476c158290db56e8e82a05f4d0dc4274ac8f550e"},
+    {"distribution": "mdrack-sqlite", "kind": "wheel", "sha256": "33e919c4f5177059d94de065e745d1775094890d8f6d012e9526a27c57f4c92a"},
+    {"distribution": "mdrack-sqlite", "kind": "sdist", "sha256": "a05afdc9410f26538947e01a23718be5d34ce6e9c7136374066164f6f532098b"}
+  ],
+  "stage_coverage": [
+    {"stage": 0, "status": "passed", "revision": "afbea342fe8fb976ac787fa0c3fa884b469f6b36", "evidence": ["docs/evidence/v0.3.1-release-gate.json", "tests/core/test_retrieval.py"]},
+    {"stage": 1, "status": "passed_rc", "revision": "cbcf0086a9429f09f88a6571b9b556ac37249b16", "evidence": ["docs/decisions/0003-core-1.0-rc-contract.md", "tests/core/test_contract_freeze.py"]},
+    {"stage": 2, "status": "passed", "revision": "4a9809cf1a148bbb94432a8c49f1f2c7b1ddb002", "evidence": ["packages/mdrack-core/pyproject.toml", "tests/packaging/test_core_distribution.py"]},
+    {"stage": 3, "status": "passed", "revision": "2dc45f8fc07582fbc4e7f30d07be201da4a43f6a", "evidence": ["packages/mdrack-sqlite/API.md", "tests/integration/test_sqlite_clean_migrations.py"]},
+    {"stage": 4, "status": "passed", "revision": "0d74d81b6491c1f8d7ae4e513e8d3ef0bd205f5a", "evidence": ["docs/contracts/prepared-resource-manifest-v1.md", "tests/cli/test_cli_resource_manifest.py"]},
+    {"stage": 5, "status": "passed_rc", "revision": "60d27d5c7140aa58f509fa96f06c71ecf413b6cf", "evidence": ["packages/mdrack-media/API.md", "tests/media/test_media_contracts.py"]},
+    {"stage": 6, "status": "passed_provisional_quality", "revision": "f4afbd3033b2982b306c0e236a2474d2173a5553", "evidence": ["tests/media/test_timed_grouper.py", "docs/evaluation/w4-quality-evidence.md"]},
+    {"stage": 7, "status": "passed_offline", "revision": "080aa44dcb567a42ee96b486704dd85e62f7cf07", "evidence": ["tests/core/test_audio_retrieval_evidence.py", "tests/media/test_audio_builder.py"]},
+    {"stage": 8, "status": "passed_offline", "revision": "b7cf6de206ff5402c059c6d7c39bf534ebd7dbaf", "evidence": ["tests/media/test_media_retrieval.py", "tests/media/test_audio_builder.py"]},
+    {"stage": 9, "status": "experimental_offline", "revision": "4b2b72806a2db818a655360809b969900cc7f1ba", "evidence": ["tests/media/test_frame_builder.py", "tests/media/test_media_retrieval.py"], "nonclaim": "No production-default or live visual-quality claim."},
+    {"stage": 10, "status": "passed_textual_only", "revision": "4b2b72806a2db818a655360809b969900cc7f1ba", "evidence": ["tests/media/test_whole_resource_similarity.py", "src/mdrack/application/compatibility.py"]},
+    {"stage": 11, "status": "passed_offline", "revision": "692e97b833aff6d9a66d5e24344b900d83859b8b", "evidence": ["docs/current-architecture/public-interfaces.md", "tests/cli/test_cli_resources.py"]},
+    {"stage": 12, "status": "contracts_passed_live_not_run", "revision": "7859c55a096c2acc20d91181a3df459d8181bc89", "evidence": ["docs/optional-provider-contracts.md", "tests/unit/test_optional_provider_contracts.py"]},
+    {"stage": 13, "status": "measured_bounded", "revision": "55d94a668126a313f1abac550c3393b07ea47d7d", "evidence": ["docs/evaluation/w5-sqlite-envelope.json", "docs/decisions/0004-sqlite-operating-envelope.md"]},
+    {"stage": 14, "status": "passed_installed_linux", "revision": "65ecc724fac6be28f670c916c8e7e0c4004d6f77", "evidence": ["docs/compatibility/v0.4-future-host-consumer-ledger.md", "tests/packaging/test_future_host_consumer.py"]}
+  ],
+  "release_coverage": [
+    {"release": "0.3.1", "status": "criteria_met_offline", "evidence": "docs/evidence/v0.3.1-release-gate.json"},
+    {"release": "0.4", "status": "criteria_met_offline_linux", "evidence": "Stages 1-4 and 14 in this packet"},
+    {"release": "0.5", "status": "criteria_met_offline_linux", "evidence": "Stages 5-8 and 10 in this packet"},
+    {"release": "0.6", "status": "offline_contracts_met_with_experimental_frame_and_optional_provider_nonclaims", "evidence": "Stages 9, 11, 12 and W4 quality evidence"},
+    {"release": "1.0", "status": "not_ready", "evidence": "Contracts remain 1.0.0rc1 and Windows installation is not run"}
+  ],
+  "definition_of_done": [
+    {"row": 1, "status": "passed", "evidence": "mdrack_media.TimedTextAtom and manifest/provider-neutral builders"},
+    {"row": 2, "status": "passed", "evidence": "tests/media/test_timed_grouper.py"},
+    {"row": 3, "status": "passed", "evidence": "TimeSegmentLocator and timed grouper tests"},
+    {"row": 4, "status": "passed", "evidence": "mdrack_core CoreIndexingService and package boundaries"},
+    {"row": 5, "status": "passed", "evidence": "SQLite adapter atomic replace/conformance tests"},
+    {"row": 6, "status": "passed_offline", "evidence": "audio/video retrieval evidence tests"},
+    {"row": 7, "status": "passed_offline_ready_vectors", "evidence": "semantic branch media tests; no live embedding provider claim"},
+    {"row": 8, "status": "passed_offline_ready_vectors", "evidence": "weighted hybrid media tests; no live embedding provider claim"},
+    {"row": 9, "status": "passed", "evidence": "resource grouping and rank-renumbering regressions"},
+    {"row": 10, "status": "passed", "evidence": "frame-caption timestamp DTO and retrieval tests"},
+    {"row": 11, "status": "passed_textual_only", "evidence": "whole-resource textual similarity tests and explicit basis"},
+    {"row": 12, "status": "passed", "evidence": "media/package boundaries and SQLite schema; binary/source bytes excluded"},
+    {"row": 13, "status": "passed_offline_oracle", "evidence": "docs/evaluation/privacy-evidence-oracle.md and privacy tests"},
+    {"row": 14, "status": "partial", "evidence": "Linux offline E2E passed; Windows not_run by owner decision"},
+    {"row": 15, "status": "passed_linux_3_11", "evidence": "W5 installed smoke and future-host wheel consumer"},
+    {"row": 16, "status": "passed_baseline_only", "evidence": "170-case frozen synthetic corpus report; not production semantic-quality evidence"},
+    {"row": 17, "status": "passed_local_components", "evidence": "prepared artifacts, replacement, generation recovery, and future-host rebuild tests"},
+    {"row": 18, "status": "passed_installed_linux", "evidence": "tests/packaging/test_future_host_consumer.py"},
+    {"row": 19, "status": "passed", "evidence": "typed embedding fingerprints and mismatch regressions"},
+    {"row": 20, "status": "passed", "evidence": "bounded input policies fail closed; no implicit provider/re-embedding path"},
+    {"row": 21, "status": "passed_documentation", "evidence": "capability docs and this packet enumerate non-claims"},
+    {"row": 22, "status": "passed_documentation", "evidence": "docs/recovery.md; destructive cleanup remains separately authorized"}
+  ],
+  "quality_baseline": {
+    "command": "uv run python scripts/media_quality_eval.py --root tests/evaluation --output <temporary-path>",
+    "cases": 170,
+    "units": 120,
+    "ranker": "lexical-token-overlap-v1",
+    "summary": {
+      "recall_at_5": 0.191176470588,
+      "recall_at_10": 0.320588235294,
+      "mrr": 0.15858076564,
+      "ndcg": 0.166446628192,
+      "duplicate_rate": 0.0,
+      "temporal_cases": 70,
+      "interval_hit_at_k": 0.628571428571
+    },
+    "nonclaim": "This is a deterministic provider-free orchestration baseline, not production semantic-provider quality or a default-selection result."
+  },
+  "compatibility_ledger": "docs/compatibility/v0.4-public-surface-ledger.json",
+  "non_claims": [
+    "No commands were executed on Windows.",
+    "No Python 3.12 cell was executed in this run.",
+    "No live LM Studio or OpenRouter provider was contacted.",
+    "No real source, private vault, OCR, Whisper, VLM, visual, or acoustic quality was exercised.",
+    "No package was published, no Git push was performed, and this packet is not a release publication record.",
+    "Frame-caption retrieval remains experimental and non-default pending stronger quality evidence.",
+    "The 1.0 release milestone is not ready: contracts are release candidates and Windows installed-package evidence is absent."
+  ]
+}

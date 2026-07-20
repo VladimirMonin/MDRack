@@ -137,11 +137,14 @@ only to make a gate green.
 ```bash
 uv run python scripts/offline_release_matrix.py \
   --output-dir "${TMPDIR:-/tmp}/mdrack-release-artifacts" \
+  --candidate-packet docs/evidence/v0.4-release-packet.json \
   --smoke \
   --expected-manifest docs/evidence/w5-offline-release-matrix.json
 ```
 
-The harness must build and audit all four distributions as wheel and sdist,
+The harness first materializes only the packet's committed base plus its
+content-addressed `candidate_snapshot.build_inputs`; publication outputs are not
+copied into that candidate. It then builds and audits all four distributions as wheel and sdist,
 verify metadata and package isolation, run isolated smoke cells, and record zero
 network attempts. A build error, hash mismatch, install error, source-tree
 import, missing artifact, or non-zero smoke command fails. The output directory

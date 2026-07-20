@@ -180,3 +180,7 @@ remain under `mdrack_core`.
 - Image API DTOs: `src/mdrack/ingestion/images.py`
 - Resource discovery DTOs: `src/mdrack/application/resources.py`
 - Pure core exports: `packages/mdrack-core/src/mdrack_core/__init__.py`
+
+The machine-readable owner/version/deprecation/removal/install inventory for the
+v0.4 development surface is
+[`docs/compatibility/v0.4-public-surface-ledger.json`](../compatibility/v0.4-public-surface-ledger.json).

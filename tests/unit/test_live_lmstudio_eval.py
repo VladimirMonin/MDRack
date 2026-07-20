@@ -2,7 +2,45 @@
 
 from __future__ import annotations
 
+import json
+import socket
+import sys
+
+import pytest
+
 from scripts.live_lmstudio_eval import build_capability_report
+from scripts.live_lmstudio_eval import main as live_eval_main
+
+pytestmark = [pytest.mark.unit, pytest.mark.no_live_default]
+
+
+def test_live_evaluator_requires_confirmation_before_any_live_stage() -> None:
+    original_argv = sys.argv
+    sys.argv = ["live_lmstudio_eval.py"]
+    try:
+        assert live_eval_main() == 2
+    finally:
+        sys.argv = original_argv
+
+
+def test_live_evaluator_default_response_is_provider_free(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_network(*args: object, **kwargs: object) -> None:
+        raise AssertionError("default live evaluator path attempted network access")
+
+    monkeypatch.setattr(socket, "socket", fail_network)
+    monkeypatch.setattr(socket, "create_connection", fail_network)
+    original_argv = sys.argv
+    sys.argv = ["live_lmstudio_eval.py"]
+    try:
+        assert live_eval_main() == 2
+    finally:
+        sys.argv = original_argv
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"calls_attempted": 0, "status": "live_confirmation_required"}
 
 
 def test_report_resolves_real_catalog_key_variants_for_all_targets() -> None:

@@ -53,7 +53,7 @@ jobs:
           uv run python -m compileall -q scripts src packages/mdrack-core/src packages/mdrack-media/src packages/mdrack-sqlite/src
       - name: Build and audit all distributions offline
         shell: bash
-        run: uv run python scripts/offline_release_matrix.py --output-dir "${{ runner.temp }}/mdrack-release-artifacts" --smoke --expected-manifest docs/evidence/w5-offline-release-matrix.json
+        run: uv run python scripts/offline_release_matrix.py --output-dir "${{ runner.temp }}/mdrack-release-artifacts" --candidate-packet docs/evidence/v0.4-release-packet.json --smoke --expected-manifest docs/evidence/w5-offline-release-matrix.json
       - name: Documentation and whitespace gates
         shell: bash
         run: |

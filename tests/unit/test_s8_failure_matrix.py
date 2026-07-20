@@ -18,6 +18,8 @@ from mdrack.output.errors import EmbeddingError
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations
 
+pytestmark = pytest.mark.privacy
+
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "src" / "mdrack" / "storage" / "sqlite" / "migrations"
 SENTINELS = [
     "QUERY_SENTINEL",

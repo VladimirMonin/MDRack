@@ -467,13 +467,21 @@ def test_installed_wheels_explicit_catalog_manifest_e2e_outside_source_tree(tmp_
             "-c",
             (
                 "import json,mdrack; "
-                "from mdrack_core.domain import LexicalBranch,SearchScope; "
-                "from mdrack_sqlite import SQLiteCatalog; "
-                f"catalog=SQLiteCatalog.open_readonly({str(catalog_path)!r}); "
-                "items=catalog.search_lexical(LexicalBranch('e2e','needle'),scope=SearchScope()); "
-                "print(json.dumps({'origin':mdrack.__file__,'resource_id':items[0].resource_id,"
-                "'unit_id':items[0].unit_id,'locator_kind':items[0].evidence_locator.kind})); "
-                "catalog.close()"
+                "from mdrack.application.resource_catalog import ("
+                "FacetValue,PreparedResourceCatalog,ResourceCatalogError,"
+                "ResourceCatalogErrorCode,ResourceDeleteResult,ResourceImportResult,"
+                "ResourceInspection,ResourceSearchResult); "
+                f"catalog=PreparedResourceCatalog.open({str(catalog_path)!r}); "
+                "result=catalog.search_text('needle'); item=result.results[0]; "
+                "assert FacetValue('ns','value',1).to_dict()['resource_count']==1; "
+                "assert ResourceDeleteResult('r',False).to_dict()['deleted'] is False; "
+                "assert ResourceImportResult('r','document',{}).to_dict()['resource_kind']=='document'; "
+                "assert ResourceInspection('r','document','text/plain',{}, {}, {}, {}).to_dict()['resource_id']=='r'; "
+                "assert ResourceSearchResult(None,'unit',()).to_dict()['total_count']==0; "
+                "assert ResourceCatalogError("
+                "ResourceCatalogErrorCode.RESOURCE_NOT_FOUND).code.value=='resource_not_found'; "
+                "print(json.dumps({'origin':mdrack.__file__,'resource_id':item['resource_id'],"
+                "'unit_id':item['unit_id'],'target':result.target})); catalog.close()"
             ),
         ],
         cwd=tmp_path,
@@ -513,7 +521,7 @@ def test_installed_wheels_explicit_catalog_manifest_e2e_outside_source_tree(tmp_
     probe_data = json.loads(probe.stdout)
     assert probe_data["resource_id"] == "resource-1"
     assert probe_data["unit_id"] == "unit-1"
-    assert probe_data["locator_kind"] == "span"
+    assert probe_data["target"] == "unit"
     assert "site-packages" in probe_data["origin"]
     assert str(repository) not in probe_data["origin"]
     captured = "".join(

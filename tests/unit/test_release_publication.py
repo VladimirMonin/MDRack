@@ -341,3 +341,93 @@ def test_v031_revision_evidence_has_consistent_provenance_and_counts() -> None:
     assert checks["mermaid"]["status"] == "ok"
     assert checks["mermaid"]["counts"]["rendered"] == 5
     assert scan_privacy(payload).safe
+
+
+def test_release_docs_rejects_stale_markdown_manifest_reference(
+    tmp_path: Path,
+) -> None:
+    module = runpy.run_path(str(REPO_ROOT / "scripts" / "check_release_docs.py"))
+    manifest_digest = hashlib.sha256(
+        (REPO_ROOT / "docs/evidence/w5-offline-release-matrix.json").read_bytes()
+    ).hexdigest()
+    packet_markdown = (
+        REPO_ROOT / "docs/evidence/v0.4-release-packet.md"
+    ).read_text(encoding="utf-8")
+    stale_markdown = tmp_path / "stale-release-packet.md"
+    stale_markdown.write_text(
+        packet_markdown.replace(manifest_digest, "0" * 64),
+        encoding="utf-8",
+    )
+    module["main"].__globals__["PACKET_MARKDOWN"] = stale_markdown
+    module["main"].__globals__["_relative_links_exist"] = lambda _path: True
+
+    assert module["main"]() == 1
+
+
+def test_release_docs_rejects_markdown_verification_count_mismatch(
+    tmp_path: Path,
+) -> None:
+    module = runpy.run_path(str(REPO_ROOT / "scripts" / "check_release_docs.py"))
+    packet_markdown = (
+        REPO_ROOT / "docs/evidence/v0.4-release-packet.md"
+    ).read_text(encoding="utf-8")
+    stale_markdown = tmp_path / "stale-release-packet.md"
+    stale_markdown.write_text(
+        packet_markdown.replace("1,637 tests passed", "1,633 tests passed"),
+        encoding="utf-8",
+    )
+    module["main"].__globals__["PACKET_MARKDOWN"] = stale_markdown
+    module["main"].__globals__["_relative_links_exist"] = lambda _path: True
+
+    assert module["main"]() == 1
+
+
+def test_release_docs_rejects_query_contract_mismatch(tmp_path: Path) -> None:
+    module = runpy.run_path(str(REPO_ROOT / "scripts" / "check_release_docs.py"))
+    packet = json.loads(
+        (REPO_ROOT / "docs/evidence/v0.4-release-packet.json").read_text(encoding="utf-8")
+    )
+    packet["fingerprints"]["query_set_contract_ref"] = "sha256:" + "0" * 64
+    invalid_packet = tmp_path / "invalid-release-packet.json"
+    invalid_packet.write_text(json.dumps(packet), encoding="utf-8")
+    module["main"].__globals__["PACKET"] = invalid_packet
+
+    assert module["main"]() == 1
+
+
+def test_release_docs_rejects_stale_artifact_hash_across_full_matrix(
+    tmp_path: Path,
+) -> None:
+    module = runpy.run_path(str(REPO_ROOT / "scripts" / "check_release_docs.py"))
+    packet = json.loads(
+        (REPO_ROOT / "docs/evidence/v0.4-release-packet.json").read_text(encoding="utf-8")
+    )
+    for index in range(len(packet["package_artifacts"])):
+        stale_packet = json.loads(json.dumps(packet))
+        stale_packet["package_artifacts"][index]["sha256"] = "0" * 64
+        invalid_packet = tmp_path / f"invalid-release-packet-{index}.json"
+        invalid_packet.write_text(json.dumps(stale_packet), encoding="utf-8")
+        module["main"].__globals__["PACKET"] = invalid_packet
+
+        assert module["main"]() == 1
+
+
+def test_release_docs_rejects_publication_output_as_build_input(
+    tmp_path: Path,
+) -> None:
+    module = runpy.run_path(str(REPO_ROOT / "scripts" / "check_release_docs.py"))
+    packet = json.loads(
+        (REPO_ROOT / "docs/evidence/v0.4-release-packet.json").read_text(encoding="utf-8")
+    )
+    publication_path = "docs/evidence/w5-offline-release-matrix.json"
+    packet["candidate_snapshot"]["build_inputs"].append(
+        {
+            "path": publication_path,
+            "sha256": hashlib.sha256((REPO_ROOT / publication_path).read_bytes()).hexdigest(),
+        }
+    )
+    invalid_packet = tmp_path / "self-referential-release-packet.json"
+    invalid_packet.write_text(json.dumps(packet), encoding="utf-8")
+    module["main"].__globals__["PACKET"] = invalid_packet
+
+    assert module["main"]() == 1

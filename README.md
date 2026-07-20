@@ -54,6 +54,10 @@ LM Studio model-management commands. Host applications can use
 - [ADR-0001: reranking deferred](docs/decisions/0001-reranking-deferred.md)
 - [ADR-0002: provider/storage-neutral core](docs/decisions/0002-provider-storage-neutral-core.md)
 - [ADR-0004: SQLite operating envelope](docs/decisions/0004-sqlite-operating-envelope.md)
+- [Offline release verification](docs/offline-release-verification.md) — supported distribution cells, matrix evidence, and strict no-live gates
+- [v0.4 W5-CI contract](docs/contracts/v0.4-w5-ci-contract.md)
+- [v0.4 offline release-candidate packet](docs/evidence/v0.4-release-packet.md) — exact stage/release/DoD evidence and non-claims
+- [v0.4 public-surface compatibility ledger](docs/compatibility/v0.4-public-surface-ledger.json)
 - [v0.3 release evidence](docs/evidence/v0.3-release-gate.md)
 
 Files under `docs/plans/` and the legacy architecture/design documents are
@@ -87,9 +91,12 @@ See the complete [limitations ledger](docs/current-architecture/limitations.md).
 ## Verification and recovery
 
 Run the complete offline verification suite with `scripts/verify.sh` on Linux or
-`scripts/verify.ps1` on Windows. Release acceptance additionally builds wheel and
-sdist and runs `scripts/check_installed_package.py` from an isolated installed
-wheel outside the source tree. Migration, generation cutover, rollback, and
+`scripts/verify.ps1` on Windows. The release-specific cells and strict gates are
+documented in [offline release verification](docs/offline-release-verification.md):
+they cover `mdrack`, `mdrack-core`, `mdrack-media`, and `mdrack-sqlite` as wheel
+and sdist, Linux/Windows × Python 3.11/3.12 evidence, offline E2E/privacy lanes,
+and installed smoke. Provider calls, network fallback, and remote execution are
+not part of the default path. Migration, generation cutover, rollback, and
 retention procedures are documented in [recovery](docs/recovery.md).
 
 For a reproducible Windows executable build, see

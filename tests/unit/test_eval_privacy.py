@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mdrack.eval.privacy import scan_privacy
+
+pytestmark = pytest.mark.privacy
 
 
 def test_privacy_scan_detects_private_content_and_paths() -> None:

@@ -14,6 +14,8 @@ from mdrack.cli import main
 from mdrack.diagnostics.doctor import DoctorFinding, DoctorReport, report_to_dict
 from mdrack.eval.privacy import build_safe_diagnostic_record, scan_privacy
 
+pytestmark = pytest.mark.privacy
+
 PRIVATE_SENTINELS = [
     "QUERY_SENTINEL",
     "CONTENT_SENTINEL",

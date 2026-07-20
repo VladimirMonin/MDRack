@@ -29,11 +29,21 @@ When sources disagree, use this order:
 - [CLI contracts](../cli-contracts.md)
 - [ADR-0001: reranking deferred](../decisions/0001-reranking-deferred.md)
 - [ADR-0002: provider/storage-neutral core](../decisions/0002-provider-storage-neutral-core.md)
+- [ADR-0003: core 1.0 RC contract](../decisions/0003-core-1.0-rc-contract.md)
+- [ADR-0004: SQLite operating envelope](../decisions/0004-sqlite-operating-envelope.md)
+- [ADR-0005: timed-text granularity](../decisions/0005-timed-text-granularity.md)
+- [ADR-0006: temporal locator specification](../decisions/0006-temporal-locator-specification.md)
+- [ADR-0007: no-overlap default](../decisions/0007-no-overlap-default.md)
+- [ADR-0008: whole-resource text aggregation](../decisions/0008-whole-resource-text-aggregation.md)
+- [ADR-0009: text-only media capability](../decisions/0009-text-only-media-capability.md)
+- [ADR-0010: clean standalone SQLite catalog](../decisions/0010-clean-standalone-sqlite-catalog.md)
 - [v0.3 compatibility registry](../compatibility/v0.3-compatibility-registry.md)
 - [v0.3 release evidence](../evidence/v0.3-release-gate.md)
-- [W5-B13 SQLite envelope](../evaluation/w5-sqlite-envelope.md) and [ADR-0004](../decisions/0004-sqlite-operating-envelope.md)
+- [W5-B13 SQLite envelope](../evaluation/w5-sqlite-envelope.md)
 - [Recovery and migration procedures](../recovery.md)
 - [Windows executable build](../windows-exe-build.md)
+- [Offline release verification](../offline-release-verification.md) and [W5-CI contract](../contracts/v0.4-w5-ci-contract.md)
+- [v0.4 offline release-candidate packet](../evidence/v0.4-release-packet.md) and [public-surface compatibility ledger](../compatibility/v0.4-public-surface-ledger.json)
 
 ## Historical material
 
