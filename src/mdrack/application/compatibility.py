@@ -69,6 +69,7 @@ _DOCUMENT_LOCATOR = "document"
 _DOCUMENT_SPAN_LOCATOR = "document_span"
 _TEXT_BRANCH = "text"
 _SEMANTIC_BRANCH = "semantic"
+_METADATA_REPRESENTATION = "metadata_text"
 
 
 def embedding_space_id(profile_name: str, fingerprint: str) -> str:
@@ -240,6 +241,51 @@ def prepared_file_to_resource_batch(
         )
 
     representations: tuple[RepresentationRecord, ...] = (representation,)
+    if projection.lexical_values:
+        metadata_text = "\n".join(projection.lexical_values)
+        metadata_representation_id = logical_id(
+            "representation",
+            resource_id,
+            _METADATA_REPRESENTATION,
+            projection.policy_fingerprint,
+        )
+        metadata_unit_id = logical_id(
+            "whole-resource",
+            resource_id,
+            metadata_representation_id,
+        )
+        metadata_token_count = len(metadata_text.split())
+        representations = representations + (
+            RepresentationRecord(
+                representation_id=metadata_representation_id,
+                resource_id=resource_id,
+                representation_kind=_METADATA_REPRESENTATION,
+                modality=MODALITY_TEXT,
+                text=metadata_text,
+                producer_fingerprint=projection.policy_fingerprint,
+                token_count=metadata_token_count,
+                token_count_kind="estimated",
+                metadata={"projection_policy_fingerprint": projection.policy_fingerprint},
+            ),
+        )
+        units = units + (
+            SearchUnitRecord(
+                unit_id=metadata_unit_id,
+                resource_id=resource_id,
+                representation_id=metadata_representation_id,
+                unit_kind=UNIT_WHOLE_RESOURCE,
+                modality=MODALITY_TEXT,
+                text=metadata_text,
+                evidence_locator=Locator(
+                    "whole_resource",
+                    {"relative_path": prepared.relative_path, "root_id": prepared.root_id},
+                ),
+                ordinal=0,
+                token_count=metadata_token_count,
+                token_count_kind="estimated",
+                metadata={"projection_policy_fingerprint": projection.policy_fingerprint},
+            ),
+        )
     if whole_text_policy is not None:
         assert aggregation_fingerprint is not None
         token_weights = {
@@ -334,7 +380,7 @@ def prepared_file_to_resource_batch(
                 if len(whole_vector) != spaces[0].dimensions:
                     raise ValueError("whole_vector must match the embedding profile dimensions")
                 vectors = (VectorRecord(whole_unit_id, space_id, tuple(whole_vector)),)
-        representations = (representation, whole_representation)
+        representations = representations + (whole_representation,)
 
     return PreparedResourceBatch(
         resource=resource,

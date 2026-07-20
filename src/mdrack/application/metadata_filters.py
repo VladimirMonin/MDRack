@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mdrack.application.metadata_projection import FACET_SCALAR_CODEC, MetadataScalar
+from mdrack.application.metadata_projection import (
+    FACET_SCALAR_CODEC,
+    MetadataProjectionPolicy,
+    MetadataScalar,
+)
 from mdrack_core.domain import Facet, SearchScope
 
 
@@ -63,8 +67,51 @@ def compile_metadata_filters(
     )
 
 
+def metadata_filters_from_cli(
+    policy: MetadataProjectionPolicy,
+    *,
+    tags: tuple[str, ...] = (),
+    all_values: tuple[str, ...] = (),
+    any_values: tuple[str, ...] = (),
+    none_values: tuple[str, ...] = (),
+) -> MetadataFilters:
+    """Parse exact PATH=JSON_SCALAR values using the ingest projection codec."""
+
+    if not isinstance(policy, MetadataProjectionPolicy):
+        raise TypeError("policy must be a MetadataProjectionPolicy")
+    namespaces = {
+        projection.path: projection.namespace
+        for projection in policy.projections
+        if projection.mode in {"facet", "facet_many"}
+    }
+
+    def parse(values: tuple[str, ...]) -> tuple[MetadataFilter, ...]:
+        parsed = []
+        for item in values:
+            path, separator, raw_value = item.partition("=")
+            namespace = namespaces.get(path)
+            if not separator or not path or namespace is None:
+                raise ValueError("metadata filter path must name a projected facet")
+            parsed.append(MetadataFilter(namespace, FACET_SCALAR_CODEC.parse_display(raw_value)))
+        return tuple(parsed)
+
+    return MetadataFilters(
+        any=parse(any_values),
+        all=(
+            *(MetadataFilter("tag", value) for value in tags),
+            *parse(all_values),
+        ),
+        none=parse(none_values),
+    )
+
+
 def _deduplicate(facets: tuple[Facet, ...]) -> tuple[Facet, ...]:
     return tuple(dict.fromkeys(facets))
 
 
-__all__ = ["MetadataFilter", "MetadataFilters", "compile_metadata_filters"]
+__all__ = [
+    "MetadataFilter",
+    "MetadataFilters",
+    "compile_metadata_filters",
+    "metadata_filters_from_cli",
+]

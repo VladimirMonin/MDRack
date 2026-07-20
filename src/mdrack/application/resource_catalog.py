@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -12,10 +13,13 @@ from types import TracebackType
 from typing import Literal
 
 from mdrack.application.manifest import MAX_MANIFEST_BYTES, PreparedResourceFacade
+from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
+from mdrack.application.metadata_projection import FACET_SCALAR_CODEC, MetadataScalar
 from mdrack_core.application.retrieval import RetrievalService
 from mdrack_core.domain import (
     TARGET_RESOURCE,
     TARGET_UNIT,
+    BranchScopeOverride,
     LexicalBranch,
     PreparedResourceBatch,
     SearchRequest,
@@ -129,6 +133,44 @@ class FacetValue:
         }
 
 
+@dataclass(frozen=True)
+class MetadataFacetValue:
+    """One decoded source-projection facet in an intentional public payload."""
+
+    namespace: str
+    value: MetadataScalar
+    value_type: str
+    resource_count: int | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "namespace": self.namespace,
+            "value": self.value,
+            "value_type": self.value_type,
+        }
+        if self.resource_count is not None:
+            payload["resource_count"] = self.resource_count
+        return payload
+
+
+@dataclass(frozen=True)
+class MetadataInspection:
+    """Exact metadata returned only by an explicit resource inspection call."""
+
+    resource_id: str
+    title: str | None
+    source: dict[str, object]
+    facets: tuple[MetadataFacetValue, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "resource_id": self.resource_id,
+            "title": self.title,
+            "source": _plain_json(self.source),
+            "facets": [item.to_dict() for item in self.facets],
+        }
+
+
 def _safe_fingerprint(value: str) -> str:
     return "sha256:" + hashlib.sha256(value.encode("utf-8", "strict")).hexdigest()
 
@@ -160,6 +202,174 @@ def _batch_counts(batch: PreparedResourceBatch) -> dict[str, int]:
         "vectors": len(batch.vectors),
         "facets": len(batch.facets),
     }
+
+
+def _metadata_type(value: MetadataScalar) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if type(value) is int:
+        return "integer"
+    if isinstance(value, float):
+        return "float"
+    return "string"
+
+
+class MetadataCatalogService:
+    """Provider-free metadata inspection and resource-target lexical search."""
+
+    def __init__(self, catalog: object) -> None:
+        if not callable(getattr(catalog, "read_resource", None)):
+            raise TypeError("catalog must support resource reads")
+        if not callable(getattr(catalog, "search_lexical", None)):
+            raise TypeError("catalog must support lexical search")
+        if getattr(catalog, "connection", None) is None:
+            raise TypeError("catalog must expose its verified SQLite connection")
+        self._catalog = catalog
+
+    def inspect(self, resource_id: str) -> MetadataInspection:
+        try:
+            resource = self._catalog.read_resource(resource_id)  # type: ignore[attr-defined]
+            if resource is None:
+                raise ResourceCatalogError(ResourceCatalogErrorCode.RESOURCE_NOT_FOUND)
+            source = resource.metadata.get("source", {})
+            if not isinstance(source, Mapping):
+                raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED)
+            rows = self._catalog.connection.execute(  # type: ignore[attr-defined]
+                "SELECT f.namespace,f.value FROM core_facets f "
+                "JOIN core_resource_facets rf ON rf.facet_id=f.facet_id "
+                "WHERE rf.resource_id=? AND rf.origin='source' "
+                "ORDER BY f.namespace,f.value",
+                (resource_id,),
+            ).fetchall()
+            facets = []
+            for row in rows:
+                value = FACET_SCALAR_CODEC.decode(str(row["value"]))
+                facets.append(
+                    MetadataFacetValue(
+                        str(row["namespace"]),
+                        value,
+                        _metadata_type(value),
+                    )
+                )
+            return MetadataInspection(
+                resource_id=resource.resource_id,
+                title=resource.title,
+                source={str(key): _plain_json(value) for key, value in source.items()},
+                facets=tuple(facets),
+            )
+        except ResourceCatalogError:
+            raise
+        except Exception:
+            raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
+
+    def facets(self, *, namespace: str | None = None) -> tuple[MetadataFacetValue, ...]:
+        if namespace is not None and (not isinstance(namespace, str) or not namespace):
+            raise ValueError("namespace must be a non-empty string or None")
+        query = (
+            "SELECT f.namespace,f.value,COUNT(DISTINCT rf.resource_id) AS resource_count "
+            "FROM core_facets f JOIN core_resource_facets rf ON rf.facet_id=f.facet_id "
+            "WHERE rf.origin='source'"
+        )
+        params: tuple[object, ...] = ()
+        if namespace is not None:
+            query += " AND f.namespace=?"
+            params = (namespace,)
+        query += " GROUP BY f.namespace,f.value ORDER BY f.namespace,f.value"
+        try:
+            rows = self._catalog.connection.execute(query, params).fetchall()  # type: ignore[attr-defined]
+            values = []
+            for row in rows:
+                value = FACET_SCALAR_CODEC.decode(str(row["value"]))
+                values.append(
+                    MetadataFacetValue(
+                        str(row["namespace"]),
+                        value,
+                        _metadata_type(value),
+                        int(row["resource_count"]),
+                    )
+                )
+            return tuple(values)
+        except Exception:
+            raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
+
+    def search(
+        self,
+        query: str,
+        *,
+        metadata_filters: MetadataFilters | None = None,
+        body_weight: float = 1.0,
+        metadata_weight: float = 0.2,
+        limit: int = 20,
+    ) -> ResourceSearchResult:
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("query must be a non-empty string")
+        if type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive integer")
+        for value in (body_weight, metadata_weight):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("search weights must be finite non-negative numbers")
+            if not math.isfinite(float(value)) or value < 0.0:
+                raise ValueError("search weights must be finite non-negative numbers")
+        if body_weight == 0.0 and metadata_weight == 0.0:
+            raise ValueError("at least one search weight must be positive")
+
+        branches = []
+        candidate_limit = max(limit * 10, 100)
+        if body_weight > 0.0:
+            branches.append(
+                LexicalBranch(
+                    "body",
+                    query,
+                    weight=float(body_weight),
+                    candidate_limit=candidate_limit,
+                    scope_override=BranchScopeOverride(
+                        representation_kinds=("retrieval_text",),
+                        unit_kinds=("text_chunk",),
+                    ),
+                )
+            )
+        if metadata_weight > 0.0:
+            branches.append(
+                LexicalBranch(
+                    "metadata",
+                    query,
+                    weight=float(metadata_weight),
+                    candidate_limit=candidate_limit,
+                    scope_override=BranchScopeOverride(
+                        representation_kinds=("metadata_text",),
+                        unit_kinds=("whole_resource",),
+                    ),
+                )
+            )
+        scope = compile_metadata_filters(metadata_filters or MetadataFilters())
+        result = RetrievalService(self._catalog).search(  # type: ignore[arg-type]
+            SearchRequest(
+                lexical_branches=tuple(branches),
+                vector_branches=(),
+                scope=scope,
+                target=TARGET_RESOURCE,
+                limit=limit,
+            )
+        )
+        reason = result.degradations[0].category.value if result.degradations else None
+        return ResourceSearchResult(
+            query=query,
+            target=TARGET_RESOURCE,
+            results=tuple(
+                {
+                    "logical_id": item.logical_id,
+                    "resource_id": item.resource_id,
+                    "unit_id": item.unit_id,
+                    "score": item.score,
+                    "rank": item.rank,
+                }
+                for item in result.items
+            ),
+            degraded=reason is not None,
+            degraded_reason=reason,
+        )
 
 
 class PreparedResourceCatalog:
@@ -386,6 +596,33 @@ class PreparedResourceCatalog:
         rows = self._catalog.connection.execute(query, params).fetchall()
         return tuple(FacetValue(row["namespace"], row["value"], int(row["resource_count"])) for row in rows)
 
+    def metadata(self, resource_id: str) -> MetadataInspection:
+        return MetadataCatalogService(self._catalog).inspect(resource_id)
+
+    def metadata_facets(
+        self,
+        *,
+        namespace: str | None = None,
+    ) -> tuple[MetadataFacetValue, ...]:
+        return MetadataCatalogService(self._catalog).facets(namespace=namespace)
+
+    def search_metadata(
+        self,
+        query: str,
+        *,
+        metadata_filters: MetadataFilters | None = None,
+        body_weight: float = 1.0,
+        metadata_weight: float = 0.2,
+        limit: int = 20,
+    ) -> ResourceSearchResult:
+        return MetadataCatalogService(self._catalog).search(
+            query,
+            metadata_filters=metadata_filters,
+            body_weight=body_weight,
+            metadata_weight=metadata_weight,
+            limit=limit,
+        )
+
     def close(self) -> None:
         self._catalog.close()
 
@@ -403,6 +640,10 @@ class PreparedResourceCatalog:
 
 
 __all__ = [
+    "FacetValue",
+    "MetadataCatalogService",
+    "MetadataFacetValue",
+    "MetadataInspection",
     "PreparedResourceCatalog",
     "ResourceCatalogError",
     "ResourceCatalogErrorCode",
@@ -410,5 +651,4 @@ __all__ = [
     "ResourceImportResult",
     "ResourceInspection",
     "ResourceSearchResult",
-    "FacetValue",
 ]

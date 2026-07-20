@@ -7,7 +7,14 @@ from typing import Any
 
 from mdrack.application.compatibility import create_application_storage, embedding_space_id
 from mdrack.application.indexing import IndexingService
+from mdrack.application.metadata_filters import MetadataFilters
 from mdrack.application.query import ReadService
+from mdrack.application.resource_catalog import (
+    MetadataCatalogService,
+    MetadataFacetValue,
+    MetadataInspection,
+    ResourceSearchResult,
+)
 from mdrack.application.resources import (
     DuplicateResourceResult,
     ResourceQueryScope,
@@ -87,11 +94,33 @@ class MDRackEngine:
         )
         return service.scan(force_reindex=force_reindex)
 
-    def search_text(self, query: str, *, limit: int = 20, offset: int = 0) -> RetrievalResult:
-        return self.search_service.search_text(query, limit=limit, offset=offset)
+    def search_text(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        metadata_filters: MetadataFilters | None = None,
+    ) -> RetrievalResult:
+        return self.search_service.search_text(
+            query,
+            limit=limit,
+            offset=offset,
+            metadata_filters=metadata_filters,
+        )
 
-    async def search_semantic(self, query: str, *, limit: int = 20) -> RetrievalResult:
-        return await self.search_service.search_semantic(query, limit=limit)
+    async def search_semantic(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        metadata_filters: MetadataFilters | None = None,
+    ) -> RetrievalResult:
+        return await self.search_service.search_semantic(
+            query,
+            limit=limit,
+            metadata_filters=metadata_filters,
+        )
 
     async def search_hybrid(
         self,
@@ -99,8 +128,41 @@ class MDRackEngine:
         *,
         limit: int = 20,
         reranker: None = None,
+        metadata_filters: MetadataFilters | None = None,
     ) -> RetrievalResult:
-        return await self.search_service.search_hybrid(query, limit=limit, reranker=reranker)
+        return await self.search_service.search_hybrid(
+            query,
+            limit=limit,
+            reranker=reranker,
+            metadata_filters=metadata_filters,
+        )
+
+    def get_resource_metadata(self, resource_id: str) -> MetadataInspection:
+        return self._metadata_service().inspect(resource_id)
+
+    def list_metadata_facets(
+        self,
+        *,
+        namespace: str | None = None,
+    ) -> tuple[MetadataFacetValue, ...]:
+        return self._metadata_service().facets(namespace=namespace)
+
+    def search_resources_text(
+        self,
+        query: str,
+        *,
+        metadata_filters: MetadataFilters | None = None,
+        body_weight: float = 1.0,
+        metadata_weight: float = 0.2,
+        limit: int = 20,
+    ) -> ResourceSearchResult:
+        return self._metadata_service().search(
+            query,
+            metadata_filters=metadata_filters,
+            body_weight=body_weight,
+            metadata_weight=metadata_weight,
+            limit=limit,
+        )
 
     async def ingest_image(
         self,
@@ -216,6 +278,12 @@ class MDRackEngine:
         if catalog is None:
             raise RuntimeError("active resource-core generation is required for resource operations")
         return ResourceQueryService(catalog)
+
+    def _metadata_service(self) -> MetadataCatalogService:
+        catalog = getattr(self.storage, "resource_store", None)
+        if catalog is None:
+            raise RuntimeError("active resource-core generation is required for metadata operations")
+        return MetadataCatalogService(catalog)
 
     def close(self) -> None:
         self.storage.close()

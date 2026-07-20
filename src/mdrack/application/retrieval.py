@@ -6,6 +6,7 @@ import logging
 import math
 
 from mdrack.application.compatibility import CoreCompatibilityMapper
+from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 from mdrack.domain.retrieval import (
     RetrievalCandidate,
@@ -19,6 +20,7 @@ from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalS
 from mdrack_core.domain import (
     TARGET_UNIT,
     BranchExecutionError,
+    BranchScopeOverride,
     LexicalBranch,
     RankedCandidate,
     SearchRequest,
@@ -177,18 +179,34 @@ class RetrievalService:
         self.semantic_weight = float(semantic_weight)
         self.compatibility_mapper = CoreCompatibilityMapper()
 
-    def search_text(self, query: str, *, limit: int = 20, offset: int = 0) -> RetrievalResult:
+    def search_text(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        metadata_filters: MetadataFilters | None = None,
+    ) -> RetrievalResult:
         self._validate_page(limit, offset)
+        scope = compile_metadata_filters(metadata_filters or MetadataFilters())
         search_core = getattr(self.storage, "search_core", None)
         if callable(search_core):
             try:
                 core = self.storage.search_core(
                     SearchRequest(
                         lexical_branches=(
-                            LexicalBranch("text", query, candidate_limit=limit + offset),
+                            LexicalBranch(
+                                "text",
+                                query,
+                                candidate_limit=limit + offset,
+                                scope_override=BranchScopeOverride(
+                                    representation_kinds=("retrieval_text",),
+                                    unit_kinds=("text_chunk",),
+                                ),
+                            ),
                         ),
                         vector_branches=(),
-                        scope=SearchScope(),
+                        scope=scope,
                         target=TARGET_UNIT,
                         limit=limit + offset,
                         rrf_k=self.rrf_k,
@@ -203,6 +221,8 @@ class RetrievalService:
                 offset=offset,
                 limit=limit,
             )
+        if metadata_filters is not None:
+            raise ValueError("metadata filters require an active resource-core generation")
         candidates = self.storage.retrieve_text_candidates(query, limit=limit, offset=offset)
         items = tuple(
             self._candidate_item(candidate, text_rank=rank)
@@ -210,8 +230,15 @@ class RetrievalService:
         )
         return RetrievalResult(query=query, mode="text", results=items, total_count=len(items))
 
-    async def search_semantic(self, query: str, *, limit: int = 20) -> RetrievalResult:
+    async def search_semantic(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        metadata_filters: MetadataFilters | None = None,
+    ) -> RetrievalResult:
         self._validate_page(limit, 0)
+        scope = compile_metadata_filters(metadata_filters or MetadataFilters())
         if callable(getattr(self.storage, "search_core", None)):
             vector, degraded_reason = await self._prepare_query_vector(query)
             if vector is None:
@@ -236,7 +263,7 @@ class RetrievalService:
                                 expected_fingerprint=self.profile_fingerprint,
                             ),
                         ),
-                        scope=SearchScope(),
+                        scope=scope,
                         target=TARGET_UNIT,
                         limit=limit,
                         rrf_k=self.rrf_k,
@@ -249,6 +276,8 @@ class RetrievalService:
                 mode="semantic",
                 result=core,
             )
+        if metadata_filters is not None:
+            raise ValueError("metadata filters require an active resource-core generation")
         candidates, degraded_reason = await self._semantic_candidates(query, limit=limit)
         items = tuple(
             self._candidate_item(candidate, semantic_rank=rank)
@@ -269,11 +298,13 @@ class RetrievalService:
         *,
         limit: int = 20,
         reranker: None = None,
+        metadata_filters: MetadataFilters | None = None,
     ) -> RetrievalResult:
         """Fuse text and semantic ranks with RRF; production reranking is deferred."""
         if reranker is not None:
             raise ValueError("reranking is not supported in v0.2")
         self._validate_page(limit, 0)
+        scope = compile_metadata_filters(metadata_filters or MetadataFilters())
         if callable(getattr(self.storage, "search_core", None)):
             if not query.strip():
                 raise InvalidTextSearchError("invalid_text_query")
@@ -305,13 +336,17 @@ class RetrievalService:
                             query,
                             weight=self.text_weight,
                             candidate_limit=limit * 2,
+                            scope_override=BranchScopeOverride(
+                                representation_kinds=("retrieval_text",),
+                                unit_kinds=("text_chunk",),
+                            ),
                         ),
                     )
                     if self.text_weight > 0.0
                     else ()
                 ),
                 vector_branches=vector_branches,
-                scope=SearchScope(),
+                scope=scope,
                 target=TARGET_UNIT,
                 limit=limit,
                 rrf_k=self.rrf_k,
@@ -342,6 +377,8 @@ class RetrievalService:
                 result=core,
                 degraded_reason=degraded_reason,
             )
+        if metadata_filters is not None:
+            raise ValueError("metadata filters require an active resource-core generation")
         candidate_limit = limit * 2
         text_candidates = (
             self.storage.retrieve_text_candidates(query, limit=candidate_limit, offset=0)

@@ -13,6 +13,9 @@ from mdrack.application.compatibility import (
     StoreGenerationManagerError,
     create_application_storage,
 )
+from mdrack.application.metadata_filters import MetadataFilters, metadata_filters_from_cli
+from mdrack.application.metadata_projection import metadata_projection_policy_from_config
+from mdrack.application.resource_catalog import MetadataCatalogService
 from mdrack.application.retrieval import InvalidTextSearchError, RetrievalService
 from mdrack.embeddings.runtime import (
     close_async_resource,
@@ -27,6 +30,10 @@ from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.storage.sqlite.fts import FTSQueryError
 
 logger = logging.getLogger(__name__)
+
+
+class MetadataSearchInputError(ValueError):
+    """One fixed, payload-free metadata search usage failure."""
 
 
 def _open_storage(root: Path, config: Any, db_path: Path) -> Any:
@@ -56,6 +63,29 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
 )
 @click.option("--limit", type=int, default=None, help="Maximum number of results (default from config).")
 @click.option(
+    "--target",
+    type=click.Choice(["unit", "resource"]),
+    default="unit",
+    show_default=True,
+)
+@click.option("--tag", "tags", multiple=True, help="Exact projected tag value.")
+@click.option(
+    "--meta",
+    "metadata_all",
+    multiple=True,
+    metavar="PATH=JSON_SCALAR",
+    help="Require an exact value from a configured facet projection.",
+)
+@click.option("--meta-any", "metadata_any", multiple=True, metavar="PATH=JSON_SCALAR")
+@click.option("--meta-none", "metadata_none", multiple=True, metavar="PATH=JSON_SCALAR")
+@click.option(
+    "--metadata-weight",
+    type=click.FloatRange(min=0.0),
+    default=0.2,
+    show_default=True,
+    help="Resource-target lexical weight for allowlisted metadata text; no embedding is used.",
+)
+@click.option(
     "--provider",
     "embedding_provider",
     type=click.Choice(["lmstudio", "fake"]),
@@ -68,6 +98,12 @@ def cli_search(
     query: str,
     search_mode: str | None,
     limit: int | None,
+    target: str,
+    tags: tuple[str, ...],
+    metadata_all: tuple[str, ...],
+    metadata_any: tuple[str, ...],
+    metadata_none: tuple[str, ...],
+    metadata_weight: float,
     embedding_provider: str | None,
 ) -> None:
     """Search indexed chunks by text, semantic meaning, or hybrid."""
@@ -96,6 +132,35 @@ def cli_search(
         limit_value,
     )
     try:
+        try:
+            metadata_filters = metadata_filters_from_cli(
+                metadata_projection_policy_from_config(config.metadata),
+                tags=tags,
+                all_values=metadata_all,
+                any_values=metadata_any,
+                none_values=metadata_none,
+            )
+        except ValueError:
+            raise MetadataSearchInputError from None
+        application_filters = (
+            metadata_filters
+            if metadata_filters.any or metadata_filters.all or metadata_filters.none
+            else None
+        )
+        if target == "resource":
+            if mode != "text":
+                raise MetadataSearchInputError
+            catalog = getattr(storage, "resource_store", None)
+            if catalog is None:
+                raise ValueError("resource target requires an active resource-core generation")
+            result = MetadataCatalogService(catalog).search(
+                query,
+                metadata_filters=metadata_filters,
+                metadata_weight=metadata_weight,
+                limit=limit_value,
+            )
+            _emit_success(ctx, result.to_dict(), command)
+            return
         if mode == "semantic" or (mode == "hybrid" and config.search.semantic_weight > 0.0):
             provider_name: str = embedding_provider or config.embedding.provider
             provider = create_embedding_provider(provider_name, config)
@@ -113,11 +178,40 @@ def cli_search(
             semantic_weight=config.search.semantic_weight,
         )
         if mode == "text":
-            _run_text_search(service, query, limit_value, ctx, command)
+            _run_text_search(service, query, limit_value, application_filters, ctx, command)
         elif mode == "semantic":
-            asyncio.run(_run_semantic_search(service, query, limit_value, ctx, command))
+            asyncio.run(
+                _run_semantic_search(
+                    service,
+                    query,
+                    limit_value,
+                    application_filters,
+                    ctx,
+                    command,
+                )
+            )
         else:
-            asyncio.run(_run_hybrid_search(service, query, limit_value, ctx, command))
+            asyncio.run(
+                _run_hybrid_search(
+                    service,
+                    query,
+                    limit_value,
+                    application_filters,
+                    ctx,
+                    command,
+                )
+            )
+    except MetadataSearchInputError:
+        logger.error("cli.search.failed status=failed reason=metadata_search_options_invalid")
+        _output(
+            ctx,
+            envelope_error(
+                "Metadata search options are invalid",
+                "VALIDATION_ERROR",
+                command,
+            ),
+        )
+        ctx.exit(1)
     except (FTSQueryError, InvalidTextSearchError):
         _output(ctx, envelope_error("Invalid text search query", "FTS_ERROR", command))
     except Exception:
@@ -136,10 +230,15 @@ def _run_text_search(
     service: RetrievalService,
     query: str,
     limit_value: int,
+    metadata_filters: MetadataFilters | None,
     ctx: click.Context,
     command: str,
 ) -> None:
-    result = service.search_text(query, limit=limit_value)
+    result = service.search_text(
+        query,
+        limit=limit_value,
+        metadata_filters=metadata_filters,
+    )
     _emit_success(ctx, result.to_dict(), command)
 
 
@@ -147,10 +246,15 @@ async def _run_semantic_search(
     service: RetrievalService,
     query: str,
     limit_value: int,
+    metadata_filters: MetadataFilters | None,
     ctx: click.Context,
     command: str,
 ) -> None:
-    result = await service.search_semantic(query, limit=limit_value)
+    result = await service.search_semantic(
+        query,
+        limit=limit_value,
+        metadata_filters=metadata_filters,
+    )
     if result.degraded:
         details = {"reason": result.degraded_reason} if result.degraded_reason else None
         _output(
@@ -165,10 +269,16 @@ async def _run_hybrid_search(
     service: RetrievalService,
     query: str,
     limit_value: int,
+    metadata_filters: MetadataFilters | None,
     ctx: click.Context,
     command: str,
 ) -> None:
-    result = await service.search_hybrid(query, limit=limit_value, reranker=None)
+    result = await service.search_hybrid(
+        query,
+        limit=limit_value,
+        reranker=None,
+        metadata_filters=metadata_filters,
+    )
     if result.degraded and not result.results:
         details = {"reason": result.degraded_reason} if result.degraded_reason else None
         _output(

@@ -1543,6 +1543,57 @@ The Click-free Python-parity surface is
 
 ---
 
+## 19. `mdrack metadata` and exact resource-target search
+
+Metadata commands use the configured ready resource-core generation:
+
+```text
+mdrack metadata show <resource-id>
+mdrack metadata facets [--namespace NAME]
+mdrack metadata projection-check <markdown-file>
+```
+
+`metadata show` is an intentional payload: it returns the logical resource ID,
+canonical title, exact normalized `source` metadata, and decoded typed source facets.
+Those values remain absent from logs, status/doctor data, ordinary resource
+inspection, and search result payloads. `metadata facets` returns deterministic
+`namespace`, JSON scalar `value`, `value_type`, and `resource_count` records.
+
+`projection-check` does not write the catalog. It returns canonical title,
+configured lexical/facet/store-only/ignored paths, safe diagnostic categories/counts,
+and the projection-policy fingerprint. Store-only values are never returned by this
+preview. Failures use fixed `METADATA_SHOW_ERROR`, `METADATA_FACETS_ERROR`, or
+`METADATA_PROJECTION_ERROR` envelopes.
+
+The main `search` command additionally accepts:
+
+```text
+--target unit|resource
+--tag VALUE
+--meta PATH=JSON_SCALAR
+--meta-any PATH=JSON_SCALAR
+--meta-none PATH=JSON_SCALAR
+--metadata-weight FLOAT
+```
+
+The default `unit` target preserves the existing result contract and searches body
+`retrieval_text` units. `resource` currently requires `--mode text`; it fuses a body
+branch with the separately scoped `metadata_text` branch (default weight `0.2`) and
+returns logical resource IDs without metadata values. Exact filters use configured
+facet paths and the same typed scalar codec as ingestion, before branch candidate
+limits. JSON strings must retain JSON quotes, for example
+`--meta '/status="ready"'`; arbitrary JSONPath and range comparisons are unsupported.
+Invalid or unconfigured metadata filter paths and non-text resource-target modes fail
+with the fixed `VALIDATION_ERROR` message `Metadata search options are invalid`; raw
+filter paths and values are not echoed.
+
+The embedded parity surfaces are `mdrack.public_api.models.MetadataFilter`,
+`MetadataFilters`, `MDRackEngine.get_resource_metadata`, `list_metadata_facets`,
+`search_resources_text`, and the optional `metadata_filters` argument on the existing
+unit-target search methods.
+
+---
+
 ## Error Code Reference
 
 | Code | Typical cause |
@@ -1564,6 +1615,9 @@ The Click-free Python-parity surface is
 | `RESOURCE_MANIFEST_UNAVAILABLE` | The explicit manifest file could not be read. |
 | `RESOURCE_CATALOG_UNAVAILABLE` | The explicit path is missing, unreadable, invalid, or not a clean catalog. |
 | `RESOURCE_NOT_FOUND` | Explicit-catalog inspection did not find the logical resource. |
+| `METADATA_SHOW_ERROR` | Exact metadata inspection could not complete. |
+| `METADATA_FACETS_ERROR` | Decoded source-facet listing could not complete. |
+| `METADATA_PROJECTION_ERROR` | Read-only projection preview could not complete. |
 | `IMAGE_DELETE_ERROR` | Direct image graph deletion could not complete. |
 | `VALIDATION_ERROR` | Invalid argument value (e.g. negative page number). |
 | `INTERNAL_ERROR` | Unhandled exception during command execution. |
@@ -1613,6 +1667,7 @@ All commands read and write the same database file:
 | `image ingest/search/delete` | Ready resource-core generation selected by `<store>/active-generation.json` |
 | `resource import/inspect/delete` | Existing clean standalone database required by explicit `--catalog PATH` |
 | `resources duplicates/similar/search/facets` | Ready resource-core generation selected by `<store>/active-generation.json` |
+| `metadata show/facets/projection-check` | Ready resource-core generation for reads; source file only for read-only projection preview |
 | `similar`, `facets` | Ready resource-core generation selected by `<store>/active-generation.json` |
 | `benchmark` | Explicit clean standalone database supplied by `--catalog PATH` |
 
