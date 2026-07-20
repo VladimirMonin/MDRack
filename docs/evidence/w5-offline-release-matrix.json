@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "generated_for": "offline-release-matrix",
+  "status": "ok",
+  "provenance": {
+    "platform": "linux",
+    "python": "3.11",
+    "network_allowed": false,
+    "network_attempts": 0
+  },
+  "distributions": ["mdrack", "mdrack-core", "mdrack-media", "mdrack-sqlite"],
+  "artifact_kinds": ["wheel", "sdist"],
+  "artifact_count": 8,
+  "installed_smoke": "ok",
+  "artifacts": [
+    {"distribution": "mdrack", "kind": "wheel", "sha256": "sha256:c201af3e255880db1dbd43a446f609d37dd1a20a489b2ef6c6d5a2a113dba1ad"},
+    {"distribution": "mdrack", "kind": "sdist", "sha256": "sha256:3d04979d60f232fa0ca84e826d2bba3ab78b89854d332c3df0ea793f9f118d44"},
+    {"distribution": "mdrack-core", "kind": "wheel", "sha256": "sha256:bc204b4d9d2c7d2bfed8533db67952745b99c01606a69f0b6187aee1fcd343aa"},
+    {"distribution": "mdrack-core", "kind": "sdist", "sha256": "sha256:584b1790ae98dde866826783d2df67c6dcc2f6faf497c2732242698544dcaf66"},
+    {"distribution": "mdrack-media", "kind": "wheel", "sha256": "sha256:89434862bf2ce14be2cd6a47e3a4ac1e7e5fb770222d581b26051e6635e2beba"},
+    {"distribution": "mdrack-media", "kind": "sdist", "sha256": "sha256:81fe5b7c5b412eae5da6d190476c158290db56e8e82a05f4d0dc4274ac8f550e"},
+    {"distribution": "mdrack-sqlite", "kind": "wheel", "sha256": "sha256:33e919c4f5177059d94de065e745d1775094890d8f6d012e9526a27c57f4c92a"},
+    {"distribution": "mdrack-sqlite", "kind": "sdist", "sha256": "sha256:a05afdc9410f26538947e01a23718be5d34ce6e9c7136374066164f6f532098b"}
+  ],
+  "non_claims": [
+    "Windows commands were not executed in this Linux run.",
+    "Python 3.12 commands were not executed in this Linux run.",
+    "The offline dependency cache is supplied by the runner and is not vendored."
+  ]
+}

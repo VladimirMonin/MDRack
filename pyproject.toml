@@ -49,12 +49,27 @@ strict = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Reproducible offline lanes:
+#   pytest -m unit; pytest -m e2e; pytest -m privacy;
+#   pytest -m no_live_default; pytest -m 'not e2e and not privacy'
+markers = [
+    "unit: deterministic unit tests using local fixtures and fakes",
+    "e2e: offline end-to-end tests using local components and fakes",
+    "privacy: privacy and evidence-surface contract tests",
+    "no_live_default: tests enforcing that live/provider execution is never the default",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mdrack"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/docs/evidence/*.json", "/docs/evidence/*.md", "/packages"]
+exclude = [
+    "/.hermes",
+    "/.release-artifacts",
+    "/docs/evidence/*.json",
+    "/docs/evidence/*.md",
+    "/packages",
+]
 
 [tool.uv.sources]
 mdrack-core = { workspace = true }

@@ -1,0 +1,68 @@
+name: offline-release-matrix
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.11', '3.12']
+    env:
+      UV_OFFLINE: '1'
+      UV_NO_PROGRESS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Install development environment from lock
+        shell: bash
+        run: uv sync --all-extras --frozen --offline
+      - name: Ruff gate
+        shell: bash
+        run: uv run ruff check src/ tests/ packages/mdrack-core/src/ packages/mdrack-media/src/ packages/mdrack-sqlite/src/
+      - name: Mypy gate
+        shell: bash
+        run: uv run mypy packages/mdrack-core/src/mdrack_core packages/mdrack-sqlite/src/mdrack_sqlite
+      - name: Unit and integration gate
+        shell: bash
+        run: uv run pytest -m 'not e2e and not privacy'
+      - name: Offline E2E gate
+        shell: bash
+        run: uv run pytest -m e2e
+      - name: Privacy gate
+        shell: bash
+        run: uv run pytest -m privacy
+      - name: Dependency and architecture gates
+        shell: bash
+        run: |
+          uv run python scripts/check_no_forbidden_deps.py
+          uv run python scripts/check_core_boundaries.py
+          uv run python scripts/check_sqlite_boundaries.py
+          uv run python scripts/check_media_boundaries.py
+          uv run python -m compileall -q scripts src packages/mdrack-core/src packages/mdrack-media/src packages/mdrack-sqlite/src
+      - name: Build and audit all distributions offline
+        shell: bash
+        run: uv run python scripts/offline_release_matrix.py --output-dir "${{ runner.temp }}/mdrack-release-artifacts" --smoke --expected-manifest docs/evidence/w5-offline-release-matrix.json
+      - name: Documentation and whitespace gates
+        shell: bash
+        run: |
+          test -s docs/evidence/w5-offline-release-matrix.md
+          test -s docs/evidence/w5-offline-release-matrix.json
+          uv run python scripts/check_release_docs.py
+          git diff --check
+      - name: Upload release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: ${{ runner.temp }}/mdrack-release-artifacts/
