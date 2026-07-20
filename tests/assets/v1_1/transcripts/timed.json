@@ -1,0 +1,10 @@
+{
+  "schema": "mdrack.timed-transcript.v1",
+  "resource_ref": "external:video:42",
+  "language": "ru",
+  "producer_fingerprint": "fixture-producer-v1",
+  "atoms": [
+    {"atom_id": "7", "start_ms": 1000, "end_ms": 2501, "text": " Первая фраза. ", "speaker": null, "confidence": 0.93, "timing_precision": "segment"},
+    {"atom_id": "8", "start_ms": 3000, "end_ms": 4250, "text": "Вторая\nфраза.", "speaker": "speaker-1", "confidence": 0.87, "timing_precision": "segment"}
+  ]
+}
