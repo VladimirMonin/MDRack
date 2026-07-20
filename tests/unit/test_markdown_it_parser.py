@@ -79,6 +79,19 @@ graph TD
     assert diagram.source_span.end_line == 14
 
 
+def test_repeated_metadata_diagnostics_preserve_aggregate_counts_deterministically() -> None:
+    content = "---\nfirst: .nan\nsecond: .inf\n---\n# Body\n\nVisible body."
+
+    first = _parse(content)
+    second = _parse(content)
+
+    assert [
+        (diagnostic.category, diagnostic.count)
+        for diagnostic in first.metadata_diagnostics
+    ] == [("METADATA_NON_FINITE_NUMBER", 2)]
+    assert first.metadata_diagnostics == second.metadata_diagnostics
+
+
 def test_lists_task_lists_blockquotes_callouts_tables_and_image_prose() -> None:
     content = """# Structures
 

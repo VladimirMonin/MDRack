@@ -5,8 +5,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import Literal
+from types import MappingProxyType
+from typing import Literal, Mapping
 
+from mdrack.domain.blocks import JSONValue
+from mdrack.domain.documents import MetadataDiagnostic, canonical_metadata_diagnostics
 from mdrack.domain.profiles import EmbeddingProfile
 
 IndexStatus = Literal["success", "partial_success", "failed"]
@@ -133,6 +136,19 @@ class PreparedFile:
     embedding_model: str | None = None
     embedding_dimensions: int | None = None
     embedding_endpoint: str | None = None
+    source_metadata: Mapping[str, JSONValue] = field(default_factory=dict)
+    metadata_diagnostics: tuple[MetadataDiagnostic, ...] = ()
+    metadata_fingerprint: str = ""
+    metadata_policy_fingerprint: str = ""
+    metadata_normalizer_version: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "source_metadata", MappingProxyType(dict(self.source_metadata)))
+        object.__setattr__(
+            self,
+            "metadata_diagnostics",
+            canonical_metadata_diagnostics(self.metadata_diagnostics),
+        )
 
 
 @dataclass(frozen=True)

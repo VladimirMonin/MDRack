@@ -14,6 +14,7 @@ from typing import Any
 
 from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
+from mdrack.application.metadata_normalization import normalize_metadata
 from mdrack.domain.blocks import BlockType
 from mdrack.domain.chunks import RetrievalChunk
 from mdrack.domain.documents import Document
@@ -247,6 +248,7 @@ class IndexingService:
         existing = self.storage.get_file_by_path(relative) or identity_source
         file_record_id = str(existing["id"]) if existing is not None else str(uuid.uuid4())
         parsed = parse_markdown(self.root / relative_path)
+        normalized_metadata = normalize_metadata(parsed.frontmatter)
         sections = build_sections(parsed.blocks, file_id=file_record_id)
         chunks = build_chunks(
             parsed.blocks,
@@ -373,6 +375,11 @@ class IndexingService:
             index_run_id=run_id,
             sections=stored_sections,
             chunks=tuple(stored_chunks),
+            source_metadata=normalized_metadata.source,
+            metadata_diagnostics=normalized_metadata.diagnostics,
+            metadata_fingerprint=normalized_metadata.fingerprint,
+            metadata_policy_fingerprint=normalized_metadata.policy_fingerprint,
+            metadata_normalizer_version=normalized_metadata.normalizer_version,
             vectors=vectors,
             embedding_profile=self._embedding_profile() if vectors else None,
             embedding_model=self._provider_attr("model_name", "_model_name", default="default") if vectors else None,
@@ -554,6 +561,11 @@ class IndexingService:
             index_run_id=run_id,
             sections=tuple(stored_sections),
             chunks=stored_chunks,
+            source_metadata=parsed.frontmatter,
+            metadata_diagnostics=parsed.metadata_diagnostics,
+            metadata_fingerprint=parsed.metadata_fingerprint,
+            metadata_policy_fingerprint=parsed.metadata_policy_fingerprint,
+            metadata_normalizer_version=parsed.metadata_normalizer_version,
             vectors=vectors,
             embedding_profile=self._embedding_profile() if vectors else None,
             embedding_model=self._provider_attr("model_name", "_model_name", default="default") if vectors else None,

@@ -104,6 +104,10 @@ def prepared_file_to_resource_batch(
         prepared.chunk_strategy_version,
     )
     sections = {section.record_id: section for section in prepared.sections}
+    diagnostic_counts = {
+        diagnostic.category: diagnostic.count
+        for diagnostic in prepared.metadata_diagnostics
+    }
     resource = ResourceRecord(
         resource_id=resource_id,
         resource_kind=RESOURCE_DOCUMENT,
@@ -119,6 +123,27 @@ def prepared_file_to_resource_batch(
         content_hash=f"sha256:{prepared.source_hash}",
         title=prepared.title,
         metadata={
+            "source": dict(prepared.source_metadata),
+            "ingestion": {
+                "adapter": "markdown",
+                "adapter_version": "1.1",
+                "normalizer_version": prepared.metadata_normalizer_version or "legacy",
+                "metadata_fingerprint": prepared.metadata_fingerprint or None,
+                "normalization_policy_fingerprint": (
+                    prepared.metadata_policy_fingerprint or None
+                ),
+                "parser_name": prepared.parser_name,
+                "parser_version": prepared.parser_version,
+                "chunk_strategy_name": prepared.chunk_strategy_name,
+                "chunk_strategy_version": prepared.chunk_strategy_version,
+            },
+            "derived": {
+                "metadata_key_count": len(prepared.source_metadata),
+                "diagnostic_count": sum(diagnostic_counts.values()),
+                "diagnostic_categories": tuple(diagnostic_counts),
+                "diagnostic_counts": diagnostic_counts,
+            },
+            # Frozen v0.3 compatibility keys; source values never live here.
             "chunk_strategy_name": prepared.chunk_strategy_name,
             "chunk_strategy_version": prepared.chunk_strategy_version,
             "parser_name": prepared.parser_name,

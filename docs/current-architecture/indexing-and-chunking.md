@@ -67,6 +67,19 @@ normal scans already perform change detection.
 
 `MarkdownItParser` reads UTF-8, computes a SHA-256 source hash, parses YAML
 frontmatter, and emits parser-independent `Document` and `SourceBlock` values.
+Frontmatter passes through the bounded `metadata-json-v1` normalizer. Supported
+JSON values retain their types; YAML dates become ISO strings and sets use
+canonical ordering. Unsupported or oversized fields produce value-free
+diagnostic categories with deterministic aggregate counts and are omitted by
+default. Repeated failures in one category retain their count through
+`Document`, both `PreparedFile` paths, the resource envelope, and SQLite.
+Malformed or duplicate-key
+frontmatter likewise leaves metadata empty while the body still indexes;
+explicit strict parsing rejects the resource. Normalized metadata and stable
+content/policy fingerprints travel through both `PreparedFile` paths into the
+resource-level `source/ingestion/derived` metadata envelope. They are not copied
+to chunks, representations, embedding inputs, snippets, or logs. The detailed
+contract is [`v1.1-metadata.md`](../contracts/v1.1-metadata.md).
 The parser recognizes H1–H6 headings, paragraphs, lists, blockquotes and
 callouts, fenced and indented code, Mermaid, tables, thematic breaks, Markdown
 images, Obsidian embeds, and HTML `img`. Image syntax is projected to ordinary
@@ -128,6 +141,7 @@ the prior complete graph visible.
 - Scanner: `src/mdrack/indexing/scanner.py`
 - Atomic handoff: `src/mdrack/adapters/sqlite/index_storage.py`
 - Core projection: `src/mdrack/application/compatibility.py`
+- Metadata normalization: `src/mdrack/application/metadata_normalization.py`
 - Provider-free validation:
   `packages/mdrack-core/src/mdrack_core/application/indexing.py`
 - Domain records: `src/mdrack/domain/blocks.py`,

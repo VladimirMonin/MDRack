@@ -16,8 +16,13 @@ from markdown_it.rules_inline.image import image as markdown_image_rule
 from markdown_it.rules_inline.state_inline import StateInline
 from markdown_it.token import Token
 
+from mdrack.application.metadata_normalization import (
+    MetadataInvalidPolicy,
+    MetadataNormalizationError,
+    normalize_metadata,
+)
 from mdrack.domain.blocks import BlockType, JSONValue, SourceBlock, SourceSpan
-from mdrack.domain.documents import Document
+from mdrack.domain.documents import Document, MetadataDiagnostic
 from mdrack.domain.identifiers import content_fingerprint, logical_id
 
 _OBSIDIAN_EMBED = re.compile(r"^!\[\[([^\]]+)\]\]$", re.DOTALL)
@@ -31,27 +36,48 @@ _HTML_RAW_TEXT_TAG = re.compile(
 )
 
 
-def _json_value(value: Any) -> JSONValue:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, Mapping):
-        return {str(key): _json_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_value(item) for item in value]
-    return str(value)
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate object keys."""
 
 
-def _frontmatter(content: str) -> tuple[dict[str, JSONValue], int | None]:
+def _construct_unique_mapping(
+    loader: _UniqueKeySafeLoader,
+    node: yaml.MappingNode,
+    deep: bool = False,
+) -> dict[object, object]:
+    loader.flatten_mapping(node)
+    result: dict[object, object] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in result:
+            raise yaml.constructor.ConstructorError(
+                "while constructing metadata",
+                node.start_mark,
+                "duplicate metadata key",
+                key_node.start_mark,
+            )
+        result[key] = loader.construct_object(value_node, deep=deep)
+    return result
+
+
+_UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
+def _frontmatter(content: str) -> tuple[object, int | None, tuple[MetadataDiagnostic, ...]]:
     lines = content.splitlines()
     if not lines or lines[0].strip() != "---":
-        return {}, None
+        return {}, None, ()
     closing = next((index for index, line in enumerate(lines[1:], start=1) if line.strip() == "---"), None)
     if closing is None:
-        return {}, None
-    loaded = yaml.safe_load("\n".join(lines[1:closing]))
-    if not isinstance(loaded, Mapping):
-        return {}, closing
-    return {str(key): _json_value(value) for key, value in loaded.items()}, closing
+        return {}, None, ()
+    try:
+        loaded = yaml.load("\n".join(lines[1:closing]), Loader=_UniqueKeySafeLoader)
+    except (TypeError, yaml.YAMLError):
+        return {}, closing, (MetadataDiagnostic("METADATA_PARSE_FAILED"),)
+    return ({} if loaded is None else loaded), closing, ()
 
 
 def _line_offsets(content: str) -> list[int]:
@@ -265,7 +291,12 @@ class MarkdownItParser:
     name = "markdown_it"
     version = version("markdown-it-py")
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        metadata_invalid_policy: MetadataInvalidPolicy = "warn_and_continue",
+    ) -> None:
+        self.metadata_invalid_policy: MetadataInvalidPolicy = metadata_invalid_policy
         self._parser = MarkdownIt(
             "commonmark",
             {"html": True, "store_labels": True},
@@ -325,7 +356,15 @@ class MarkdownItParser:
         if content is None:
             content = path.read_text(encoding="utf-8")
         source_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        metadata, frontmatter_end = _frontmatter(content)
+        raw_metadata, frontmatter_end, parse_diagnostics = _frontmatter(content)
+        if parse_diagnostics and self.metadata_invalid_policy == "fail_resource":
+            raise MetadataNormalizationError(parse_diagnostics)
+        normalized_metadata = normalize_metadata(
+            raw_metadata,
+            policy=self.metadata_invalid_policy,
+        )
+        metadata = normalized_metadata.source
+        metadata_diagnostics = parse_diagnostics + normalized_metadata.diagnostics
         source_lines = content.splitlines()
         body_start = frontmatter_end + 1 if frontmatter_end is not None else 0
         body = "\n".join(source_lines[body_start:])
@@ -447,6 +486,10 @@ class MarkdownItParser:
             source_hash=source_hash,
             parser_name=self.name,
             parser_version=self.version,
+            metadata_diagnostics=metadata_diagnostics,
+            metadata_fingerprint=normalized_metadata.fingerprint,
+            metadata_policy_fingerprint=normalized_metadata.policy_fingerprint,
+            metadata_normalizer_version=normalized_metadata.normalizer_version,
         )
 
     def _project_image_syntax(
