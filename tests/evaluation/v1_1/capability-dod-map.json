@@ -1,0 +1,36 @@
+{
+  "capabilities": [
+    {"id": "C01", "name": "source_metadata_round_trip", "fixtures": ["tests/evaluation/corpus-v1/manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C02", "name": "configurable_metadata_projection", "fixtures": ["configs/eval-v11.toml"], "downstream_gate": "Q1"},
+    {"id": "C03", "name": "typed_exact_metadata_filters", "fixtures": ["configs/eval-v11.toml"], "downstream_gate": "Q1"},
+    {"id": "C04", "name": "frontmatter_isolated_from_body_text", "fixtures": ["tests/evaluation/corpus-v1/manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C05", "name": "timed_atoms_and_passages", "fixtures": ["tests/assets/v1_1/transcripts", "tests/evaluation/corpus-v1/manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C06", "name": "whisper_vtt_srt_generic_timed_import", "fixtures": ["tests/assets/v1_1/transcripts"], "downstream_gate": "Q1"},
+    {"id": "C07", "name": "audio_video_transcript_search", "fixtures": ["tests/evaluation/queries-v1/queries.json"], "downstream_gate": "Q1"},
+    {"id": "C08", "name": "frame_caption_text_units", "fixtures": ["tests/evaluation/corpus-v1/manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C09", "name": "branch_specific_scopes_and_weights", "fixtures": ["configs/eval-v11.toml", "tests/evaluation/queries-v1/queries.json"], "downstream_gate": "Q1"},
+    {"id": "C10", "name": "resource_grouping_without_crowding_bonus", "fixtures": ["tests/evaluation/queries-v1/queries.json"], "downstream_gate": "Q1"},
+    {"id": "C11", "name": "whole_resource_textual_similarity", "fixtures": ["tests/evaluation/queries-v1/queries.json"], "downstream_gate": "Q1"},
+    {"id": "C12", "name": "python_api", "fixtures": ["tests/evaluation/corpus-v1/manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C13", "name": "cli", "fixtures": ["tests/evaluation/corpus-v1/manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C14", "name": "prepared_resource_manifest", "fixtures": ["tests/evaluation/corpus-v1/manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C15", "name": "static_providers_and_ready_vectors", "fixtures": ["configs/eval-v11.toml"], "downstream_gate": "Q1"},
+    {"id": "C16", "name": "reference_openai_compatible_embedding_adapter", "fixtures": ["configs/eval-v11.toml"], "downstream_gate": "REL", "non_claim": "not executed by F1 or Q1"},
+    {"id": "C17", "name": "offline_e2e", "fixtures": ["tests/evaluation/v1_1/freeze-manifest.json"], "downstream_gate": "Q1"},
+    {"id": "C18", "name": "curated_query_evaluation", "fixtures": ["tests/evaluation/queries-v1/queries.json"], "downstream_gate": "Q1", "non_claim": "public synthetic judgments are frozen; private or live quality is not claimed"},
+    {"id": "C19", "name": "installed_package_linux_windows", "fixtures": ["tests/evaluation/v1_1/freeze-manifest.json"], "downstream_gate": "REL", "non_claim": "F1 performs no installed-package or Windows execution"}
+  ],
+  "contract": "mdrack.v11-capability-dod-map",
+  "dod_sections": [
+    {"id": "29.1", "name": "independence", "fixture_support": ["C12", "C13", "C14", "C15", "C16"], "downstream_gates": ["Q1", "REL"]},
+    {"id": "29.2", "name": "metadata", "fixture_support": ["C01", "C02", "C03", "C04"], "downstream_gates": ["Q1"]},
+    {"id": "29.3", "name": "timed_media", "fixture_support": ["C05", "C06", "C07"], "downstream_gates": ["Q1"]},
+    {"id": "29.4", "name": "frame_captions", "fixture_support": ["C08", "C09", "C10"], "downstream_gates": ["Q1"]},
+    {"id": "29.5", "name": "similarity", "fixture_support": ["C11"], "downstream_gates": ["Q1"]},
+    {"id": "29.6", "name": "ux", "fixture_support": ["C12", "C13", "C14"], "downstream_gates": ["Q1", "REL"]},
+    {"id": "29.7", "name": "quality", "fixture_support": ["C17", "C18", "C19"], "downstream_gates": ["Q1", "P1", "REL"]},
+    {"id": "29.8", "name": "recovery_release", "fixture_support": ["C14", "C17", "C19"], "downstream_gates": ["REL", "E1", "CLOSE"]}
+  ],
+  "evidence_boundary": "input fixtures only; mapping is not completion evidence",
+  "schema_version": 1
+}

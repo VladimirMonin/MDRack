@@ -1,0 +1,62 @@
+schema_version = 1
+phase = "input_freeze"
+seed = 20260721
+candidate_results_allowed = false
+network_allowed = false
+private_corpus_allowed = false
+provider = "deterministic_static"
+corpus_manifest = "tests/evaluation/corpus-v1/manifest.json"
+queries = "tests/evaluation/queries-v1/queries.json"
+benchmark_manifest = "tests/evaluation/benchmark-v1/manifest.json"
+privacy_sentinels = "tests/privacy/v1_1/sentinels.json"
+freeze_manifest = "tests/evaluation/v1_1/freeze-manifest.json"
+
+[execution]
+repeats = 2
+fresh_disposable_catalog_each_run = true
+query_order = "query_id"
+result_order = "score_desc_then_logical_id"
+report_payload = "aggregate_ids_and_digests_only"
+
+[metrics]
+recall_cutoffs = [5, 10]
+mrr_cutoff = 10
+ndcg_cutoff = 10
+timestamp_hit_rate = true
+timestamp_distance_ms = true
+duplicate_resource_rate = true
+empty_result_rate = true
+degradation_rate = true
+
+[ablations]
+chunk_profiles = ["compact", "balanced", "large"]
+frame_profiles = ["transcript_only", "speech_first", "balanced"]
+metadata_profiles = ["body_only", "body_title", "body_title_aliases", "selected_metadata_text"]
+hybrid_profiles = ["lexical_only", "semantic_only", "equal", "configured"]
+
+[weights]
+lexical = 0.4
+semantic = 0.6
+transcript = 1.0
+frame_caption = 0.5
+metadata_text = 0.25
+
+[provisional_thresholds]
+markdown_recall_at_5_max_regression_points = 2.0
+hybrid_recall_at_5_max_regression_points = 2.0
+timed_hit_rate_min = 0.85
+median_timestamp_distance_ms_max = 30000
+metadata_filter_precision_min = 1.0
+metadata_filter_recall_min = 1.0
+speech_first_max_regression_points = 2.0
+duplicate_resources_top_10_max = 0
+privacy_violations_max = 0
+
+[non_claims]
+real_provider = true
+private_corpus = true
+windows = true
+python_3_12 = true
+visual_similarity = true
+acoustic_similarity = true
+universal_quality = true

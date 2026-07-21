@@ -1,0 +1,36 @@
+{
+  "classification": "synthetic",
+  "contract": "mdrack.v11-privacy-sentinels",
+  "forbidden_keys": [
+    "V11_PRIVATE_METADATA_KEY_4F2C",
+    "V11_PRIVATE_PROVIDER_KEY_9A61",
+    "V11_PRIVATE_CREDENTIAL_KEY_C3D8"
+  ],
+  "forbidden_values": {
+    "absolute_path": "/private/v11-freeze-7a31/note.md",
+    "content": "V11_PRIVATE_CONTENT_7A31",
+    "credential": "Authorization: Bearer V11_PRIVATE_TOKEN_7A31",
+    "exception": "V11_PRIVATE_EXCEPTION_7A31",
+    "facet": "V11_PRIVATE_FACET_7A31",
+    "metadata": "V11_PRIVATE_METADATA_7A31",
+    "provider_body": "V11_PRIVATE_PROVIDER_BODY_7A31",
+    "query": "V11_PRIVATE_QUERY_7A31",
+    "relative_path": "private/v11-freeze-7a31/note.md",
+    "root": "V11_PRIVATE_ROOT_7A31",
+    "url": "https://v11-private-7a31.invalid/api",
+    "vector": "[0.731,0.269]"
+  },
+  "generator": "scripts/build_v11_test_assets.py",
+  "license_spdx": "CC0-1.0",
+  "pii_status": "synthetic_sentinel_not_personal_data",
+  "schema_version": 1,
+  "surfaces": [
+    "api",
+    "cache",
+    "cli_stderr",
+    "cli_stdout",
+    "eval",
+    "log",
+    "provider"
+  ]
+}

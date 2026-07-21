@@ -1,0 +1,130 @@
+{
+  "candidate_output_policy": {
+    "allowed": false,
+    "required_consumer_check": "freeze contract and byte digests must match before evaluation"
+  },
+  "contract": "mdrack.v11-evaluation-input-freeze",
+  "contract_digest": "sha256:8e75cc894c8cc373e70b7f9778a8e806daca65922c471ae9efd965b4d99f780b",
+  "evidence_boundary": {
+    "non_claims": [
+      "candidate relevance or thresholds",
+      "application offline E2E",
+      "latency or capacity",
+      "installed packages",
+      "live providers or private corpus",
+      "Windows or Python 3.12",
+      "visual or acoustic similarity",
+      "universal quality"
+    ],
+    "proves": "public licensed provider-free input identity only"
+  },
+  "generator_contract": {
+    "aggregate_freeze": "scripts/build_v11_test_assets.py",
+    "deterministic": true,
+    "public_corpus": "tests/evaluation/generate_fixture.py",
+    "seed": 20260721
+  },
+  "input_sha256": {
+    "configs/eval-v11.toml": "sha256:84e160169853ea8f98f9152fe33f4248a838c9d7b52a88101eee5950c0975c8f",
+    "scripts/build_v11_test_assets.py": "sha256:a6ad5ae51c279b76fa83cffe0c92d4941bd27f6e85d0c7a60a8608ac5b11ee52",
+    "tests/assets/v1_1/transcripts/sample.srt": "sha256:bdcf3e69a5c816fc2e57519596431f57b720b089672b135c120ca3b0e36a5342",
+    "tests/assets/v1_1/transcripts/sample.vtt": "sha256:5cd3dc224c5a68254044ceaecf1724d236f9a24dc9bb2432d251830acb687bb7",
+    "tests/assets/v1_1/transcripts/timed.json": "sha256:ce781d1597c7752cd61982cf02df8be49d0f4756f7e68183b0c309bacd26db94",
+    "tests/assets/v1_1/transcripts/whisper.json": "sha256:5a1305d5bd3c09bf4f8f68cd7ae15a58525cc83680e55c0541b15eeb5605ea88",
+    "tests/evaluation/benchmark-v1/manifest.json": "sha256:f05f33bde59ef661cd6c26ab2bf5d144c8e1cc5393fbe13f933d13fcaaa69570",
+    "tests/evaluation/contract_validator.py": "sha256:949df8abf4f0766790095559d4e5e273794cd8e0927111158ea87423bf727584",
+    "tests/evaluation/corpus-v1/artifacts/audio-31.json": "sha256:f8d7c939350233f992307460d27152997af85fe5d744bb3d1a6272009e13d2de",
+    "tests/evaluation/corpus-v1/artifacts/audio-32.json": "sha256:88c46572cd3a6e357a1cad60d126d71645a72ac41e7d19b81fe529b25248a025",
+    "tests/evaluation/corpus-v1/artifacts/audio-33.json": "sha256:4220e82eaa054cf5e8972dcf4e8d7f3e99adaa50c5d812123b626ba369c2686e",
+    "tests/evaluation/corpus-v1/artifacts/audio-34.json": "sha256:983bfd876ee0a432323ab0605397cb763954a66bd96f64f1f7410d93743b2b82",
+    "tests/evaluation/corpus-v1/artifacts/audio-35.json": "sha256:6bcb8e3b32f68a58afd40c57807344696bb41d6f86e30d858e1d0244e645018f",
+    "tests/evaluation/corpus-v1/artifacts/audio-36.json": "sha256:5d98202d23923fa53b0ea7ee52bb303dc9ff66cc4766b4d1ff8fc9f9e58abaf2",
+    "tests/evaluation/corpus-v1/artifacts/audio-37.json": "sha256:9ff29aa82208aeb07d1e1ad5922b28f33c7ff55c965ae909ebcf5783090e173c",
+    "tests/evaluation/corpus-v1/artifacts/audio-38.json": "sha256:dacb2e3b396d38f991120f725b8eed7920a02a2d5ede48ae3d64fba18a865510",
+    "tests/evaluation/corpus-v1/artifacts/audio-39.json": "sha256:fff75af57c05e96b02dc36e679b2993ae6c999cf91266097667a525919a740be",
+    "tests/evaluation/corpus-v1/artifacts/audio-40.json": "sha256:a28f9de52d4b4e5002f693c1e3f97ea8cec287ea881b1480fb634e7ca6c61c5e",
+    "tests/evaluation/corpus-v1/artifacts/document-01.md": "sha256:0a231209b7349304aaa67d71adf77ac39a774a399fdb9d2f2cfd28a90988d380",
+    "tests/evaluation/corpus-v1/artifacts/document-02.md": "sha256:2aa77f0c6e695fc5fe617b883af411a4d146188cd0b10b53fdb341e9cbd8d048",
+    "tests/evaluation/corpus-v1/artifacts/document-03.md": "sha256:cf0391bd18ca7441f19de3aa91655ec2511c94f7993c5016018bb6ccda8fed17",
+    "tests/evaluation/corpus-v1/artifacts/document-04.md": "sha256:f80ad3b0cfe9ed4eabd62a773497a0761bc3200d1df737b0f7acafd85ec34d40",
+    "tests/evaluation/corpus-v1/artifacts/document-05.md": "sha256:247ba095e72f9ce7179cf97b012b8ae4dd746782001383e16cd6778211e4b37f",
+    "tests/evaluation/corpus-v1/artifacts/document-06.md": "sha256:85aa4ceb9730d85a3ac8195126678fb54e3f62dde2e3d12705b3f6d880927eea",
+    "tests/evaluation/corpus-v1/artifacts/document-07.md": "sha256:8c53fe5061f47a56fe0fd70188e77fa0de4a87d853bb45b4f3778dcd57886277",
+    "tests/evaluation/corpus-v1/artifacts/document-08.md": "sha256:97bca5af5a5eee6b69ffe2e62a3430abb8a04989af2418d6065eac16941e7e92",
+    "tests/evaluation/corpus-v1/artifacts/document-09.md": "sha256:98c38253e9a6a79e1a4c44296352d9b3dbe124b31d64103e883d619f628f8504",
+    "tests/evaluation/corpus-v1/artifacts/document-10.md": "sha256:74de001cf26ddd4d30b1eeaa16e32c76991ee29f23ac7d6e8c2bc728cbb34185",
+    "tests/evaluation/corpus-v1/artifacts/document-11.md": "sha256:8d5bbd6e1aad6b010342c66e8c6012e0121ea6b3e980656d5327a9326b9dc701",
+    "tests/evaluation/corpus-v1/artifacts/document-12.md": "sha256:98e9b7b10f152057c7b918ed5a2adc3113ee23ac3b8890d71e36ba30375e4484",
+    "tests/evaluation/corpus-v1/artifacts/document-13.md": "sha256:78b04cc9cc02b50f86e9eaf7ea270281105be079a41800ed978e78bf9bc41349",
+    "tests/evaluation/corpus-v1/artifacts/document-14.md": "sha256:16d371a107aa824cd729cc6d529d6078dd20c8b88781cd11799650cae9eca4d0",
+    "tests/evaluation/corpus-v1/artifacts/document-15.md": "sha256:58352a9897392a186456a7e0c095ea5b92dcbe25bfe101ae123342db23c8c3a8",
+    "tests/evaluation/corpus-v1/artifacts/document-16.md": "sha256:bec4053483a2af64dc40edc53d45070d38fcccc432a47a5e907368f5dcb9b0a3",
+    "tests/evaluation/corpus-v1/artifacts/document-17.md": "sha256:af8d3c3a8c1ccccafaa1fd62c5ef9f84dc89e00b3825b939d110946c0c8e86af",
+    "tests/evaluation/corpus-v1/artifacts/document-18.md": "sha256:ee05fa2ef4391009b8118390fa979a8f5a2fb0d2af6bf9c9791774718ab3898c",
+    "tests/evaluation/corpus-v1/artifacts/document-19.md": "sha256:187bb57b3f4720ec61c75e9bd99dd3a2eededa84f7d3a88ec0dfc5af39d725eb",
+    "tests/evaluation/corpus-v1/artifacts/document-20.md": "sha256:f9222897872157c6c0e607e0a07635d0fc3a86f4af27d865f3959340ee6a075f",
+    "tests/evaluation/corpus-v1/artifacts/image-21.json": "sha256:3353eedbd6a76a18bade8a3af5239f6719987078ee2ab475f89620044a78492c",
+    "tests/evaluation/corpus-v1/artifacts/image-22.json": "sha256:ee92656037acc419981ecc1e3b863c93d9bbb1abaa0fdaa0a37a9fdd08a144e9",
+    "tests/evaluation/corpus-v1/artifacts/image-23.json": "sha256:79cce3b4e1505cde4468a8f7a75158a7b10162493f52b2a0c6f1bededd16e882",
+    "tests/evaluation/corpus-v1/artifacts/image-24.json": "sha256:0887d445145666df7917439bd7c230db2073e2d54ed0ade144783325358f5727",
+    "tests/evaluation/corpus-v1/artifacts/image-25.json": "sha256:0526fb0dd971561a6ef0f0a25fd7d538c5d56eee803d86010e1d667a590a08f5",
+    "tests/evaluation/corpus-v1/artifacts/image-26.json": "sha256:f60c396aecc4041138a7647ab7c0fd72c324379f814d8b32aaad415461c71315",
+    "tests/evaluation/corpus-v1/artifacts/image-27.json": "sha256:1229545d10c6ed65fab06c72354935d8979fd0bd766fdbe6b75b850c078296c4",
+    "tests/evaluation/corpus-v1/artifacts/image-28.json": "sha256:9e575bee6040a51d3286189664656b368c87416c9ea146a5b39e1d577dd4abd7",
+    "tests/evaluation/corpus-v1/artifacts/image-29.json": "sha256:190e8b095736b6355c531eb827c899920ad8ef0ead416f9de41fb4895e935074",
+    "tests/evaluation/corpus-v1/artifacts/image-30.json": "sha256:7c5b8bedc9651821d8d2026ada2999e0179851ffae98132f3f64fdd509f989f0",
+    "tests/evaluation/corpus-v1/artifacts/video-41.json": "sha256:e3a034fa9988b9defad99982ec304cd58516550cc85d3f7a2f4ce1d17a51e761",
+    "tests/evaluation/corpus-v1/artifacts/video-42.json": "sha256:c216afa743cb2a588b98645546b54882ddd6d6757fe31645ae17764d2ee33320",
+    "tests/evaluation/corpus-v1/artifacts/video-43.json": "sha256:1bfc61769820ac6281b0c0d1cffb69811771b3dbd9bb6e0a930f393fff017900",
+    "tests/evaluation/corpus-v1/artifacts/video-44.json": "sha256:0a50b206463e7c9a6e65ec5ab6ff91ebaa3a2fd59963a97c3796ac0c3082bc67",
+    "tests/evaluation/corpus-v1/artifacts/video-45.json": "sha256:3cb3980f7327f066a4946f93975dce836ee0125495683b3e895f87ac08d1aa1b",
+    "tests/evaluation/corpus-v1/artifacts/video-46.json": "sha256:da13c3fcec333965cc24f217094ea2da558bc27256629c2ba5bbb0ae0261c174",
+    "tests/evaluation/corpus-v1/artifacts/video-47.json": "sha256:cb5622b16d99867d8b32850323e7dbc9d075bf537ab6d1b199e010fe0cdfbe19",
+    "tests/evaluation/corpus-v1/artifacts/video-48.json": "sha256:c720d9cee0da3b28337595baebcf8be27ae54eb72cbbeb4fd3be6a64b155ceda",
+    "tests/evaluation/corpus-v1/artifacts/video-49.json": "sha256:1fe14875cdf86e3dc130c0c42b330ce8e43f37a0d6045866d46dc787918758d0",
+    "tests/evaluation/corpus-v1/artifacts/video-50.json": "sha256:b3d4a387a95f8567b05bc27c4543a360d6988771426e15b3be478800ad01d76b",
+    "tests/evaluation/corpus-v1/manifest.json": "sha256:1daf570be4d1705736cbc06ebef23803eb8552469b56ec49dee2a66f55123133",
+    "tests/evaluation/generate_fixture.py": "sha256:041830bd387102515ccaac7ad2c2bfb3b4a02ae153a8132396bcebe477df70f1",
+    "tests/evaluation/queries-v1/queries.json": "sha256:325fc7da801d52d1df3c5d10fc14ea4daa7a168fa758ae2231a2829ce3ed7a85",
+    "tests/evaluation/schemas/benchmark-v1.schema.json": "sha256:4cf5035ea0ba3057df7a916f5413e0ffd26cea91ccbcf079efc842370c2f4647",
+    "tests/evaluation/schemas/corpus-v1.schema.json": "sha256:2f067b04321c2baa24ffbf113d569a0968f9d7c29b3f394b6fafdaf8002f0263",
+    "tests/evaluation/schemas/queries-v1.schema.json": "sha256:a48797f01e6ad0ac64423318b4d930a0cc553f3565ed91011f321af30666f9d0",
+    "tests/evaluation/v1_1/capability-dod-map.json": "sha256:8bbe46433f8e94cd52783f5854bb3a0a7c3fc94b2087591a6201f533ddee4d8b",
+    "tests/privacy/v1_1/sentinels.json": "sha256:54e6c5be09cc6a513aae8221b25ee84be1df0347e924b885dd3d5654a917c07c"
+  },
+  "inventory": {
+    "capabilities": 19,
+    "classifications": {
+      "synthetic": 50
+    },
+    "dod_sections": 8,
+    "licenses": {
+      "CC0-1.0": 50
+    },
+    "privacy_sentinel_keys": 3,
+    "privacy_sentinel_values": 12,
+    "queries": 170,
+    "query_kinds": {
+      "hybrid": 30,
+      "lexical": 50,
+      "resource_similarity": 20,
+      "semantic": 50,
+      "timestamp": 20
+    },
+    "resource_kinds": {
+      "audio": 10,
+      "document": 20,
+      "image": 10,
+      "video": 10,
+      "videos_with_frames": 5
+    },
+    "resources": 50
+  },
+  "phase": "input_freeze",
+  "schema_version": 1,
+  "source_contracts": {
+    "benchmark": "sha256:1a2df8d9c85fc4ebe0ac1b1645d56ee58fafe0880b0cb3a76f92a473b9c4614d",
+    "corpus": "sha256:2183e11b7e80b660e178322ae1305392c3311a801a749064e1845aeb3b78a534",
+    "queries": "sha256:91dd1b7e8b2531702069bdc83c442170881c72843413bb0853d17388bb42b1a7"
+  }
+}
