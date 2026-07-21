@@ -171,7 +171,7 @@ async def test_explicit_image_create_search_replace_delete_and_source_immutabili
     assert first.content_hash == f"sha256:{source_hash}"
     assert first.text_space_id == "image-text-space"
     assert first.visual_space_id == "image-visual-space"
-    assert len(first.representation_ids) == len(first.unit_ids) == 3
+    assert len(first.representation_ids) == len(first.unit_ids) == 4
     assert list(
         map(
             tuple,
@@ -182,6 +182,7 @@ async def test_explicit_image_create_search_replace_delete_and_source_immutabili
         )
     ) == [
         ("caption_text", "complete caption needle"),
+        ("image_text_aggregate", "complete caption needle\n\ncomplete OCR sentinel text"),
         ("ocr_text", "complete OCR sentinel text"),
         ("visual", None),
     ]
@@ -234,7 +235,7 @@ async def test_explicit_image_create_search_replace_delete_and_source_immutabili
     ]
     assert connection.execute(
         "SELECT COUNT(*) FROM core_representations WHERE resource_id='image-logical-1'"
-    ).fetchone()[0] == 1
+    ).fetchone()[0] == 2
 
     assert image.read_bytes() == source_bytes
     assert hashlib.sha256(image.read_bytes()).hexdigest() == source_hash

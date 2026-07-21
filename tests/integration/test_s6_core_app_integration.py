@@ -13,6 +13,7 @@ from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
 from mdrack.application.compatibility import CoreCompatibilityStorage, create_application_storage
 from mdrack.application.generation_manager import StoreGenerationManagerError
+from mdrack.application.resources import ResourceQueryService
 from mdrack.application.retrieval import RetrievalService
 from mdrack.application.store_generations import (
     ActiveGenerationPointer,
@@ -151,6 +152,11 @@ def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(t
     assert hybrid.results[0].rrf_rank == 1
     assert hybrid.results[0].text_rank == 1
     assert hybrid.results[0].semantic_rank is not None
+    resource_id = str(storage.connection.execute("SELECT resource_id FROM core_resources").fetchone()[0])
+    projections = storage.resolve_textual_whole_resource_units(resource_id)
+    assert len(projections) == 1
+    assert projections[0].resource_id == resource_id
+    assert projections[0].space.fingerprint == profile.fingerprint
     storage.close()
 
     moved = root / "moved.md"
@@ -162,8 +168,8 @@ def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(t
     connection = get_connection(database_path)
     try:
         assert connection.execute("SELECT COUNT(*) FROM core_resources").fetchone()[0] == 1
-        assert connection.execute("SELECT COUNT(*) FROM core_search_units").fetchone()[0] == scan.chunks_created
-        assert connection.execute("SELECT COUNT(*) FROM core_unit_embeddings").fetchone()[0] == scan.chunks_created
+        assert connection.execute("SELECT COUNT(*) FROM core_search_units").fetchone()[0] == scan.chunks_created + 1
+        assert connection.execute("SELECT COUNT(*) FROM core_unit_embeddings").fetchone()[0] == scan.chunks_created + 1
         assert connection.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
         assert connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM asset_references").fetchone()[0] == 0
@@ -185,6 +191,35 @@ def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(t
         assert connection.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
     finally:
         connection.close()
+
+
+def test_ready_core_resolves_provider_free_textual_resource_similarity(tmp_path: Path) -> None:
+    root = tmp_path / "vault"
+    root.mkdir()
+    (root / "first.md").write_text("# First\n\nShared searchable topic.\n", encoding="utf-8")
+    (root / "second.md").write_text("# Second\n\nShared searchable topic.\n", encoding="utf-8")
+    store_dir = tmp_path / "store"
+    _generation(store_dir, state=GenerationState.READY)
+    config = MDRackConfig(paths=PathsConfig(root=".", store=str(store_dir)))
+    assert run_indexer(root, config, provider=FakeEmbeddingProvider(dimensions=8)).status == "success"
+    storage = create_application_storage(root, config)
+    assert isinstance(storage, CoreCompatibilityStorage)
+    try:
+        resource_ids = tuple(
+            str(row[0])
+            for row in storage.connection.execute(
+                "SELECT resource_id FROM core_resources ORDER BY resource_id"
+            ).fetchall()
+        )
+        result = ResourceQueryService(
+            storage.resource_store,
+            whole_resource_resolver=storage,
+        ).find_similar_resource(resource_ids[0], scope="notes", limit=1)
+    finally:
+        storage.close()
+
+    assert result.degraded is False
+    assert [item.resource_id for item in result.results] == [resource_ids[1]]
 
 
 def test_active_non_ready_resource_generation_fails_closed(tmp_path: Path) -> None:

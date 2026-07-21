@@ -95,12 +95,20 @@ def test_metadata_text_is_separate_deterministic_and_never_embedded_by_default()
     metadata_representations = [
         item for item in first.representations if item.representation_kind == "metadata_text"
     ]
-    metadata_units = [item for item in first.units if item.unit_kind == "whole_resource"]
+    metadata_units = [
+        item
+        for item in first.units
+        if item.representation_id == metadata_representations[0].representation_id
+    ]
     assert len(metadata_representations) == len(metadata_units) == 1
     assert metadata_representations[0].text == "Second alias\nFirst alias\nSelected summary"
     assert metadata_units[0].text == metadata_representations[0].text
     assert metadata_units[0].representation_id == metadata_representations[0].representation_id
-    assert [vector.unit_id for vector in first.vectors] == ["unit-body"]
+    assert [vector.unit_id for vector in first.vectors] == [
+        unit.unit_id
+        for unit in first.units
+        if unit.representation_id != metadata_representations[0].representation_id
+    ]
     assert first.representations[0].representation_kind == "retrieval_text"
     assert first.representations[0].text == "ordinary body"
     assert first.units[0].text == "ordinary body"
@@ -119,6 +127,9 @@ def test_metadata_text_is_absent_when_no_allowlisted_value_is_projected() -> Non
         ),
     )
 
-    assert [item.representation_kind for item in batch.representations] == ["retrieval_text"]
-    assert [item.unit_kind for item in batch.units] == ["text_chunk"]
-    assert [vector.unit_id for vector in batch.vectors] == ["unit-body"]
+    assert [item.representation_kind for item in batch.representations] == [
+        "retrieval_text",
+        "whole_resource_text",
+    ]
+    assert [item.unit_kind for item in batch.units] == ["text_chunk", "whole_resource"]
+    assert [vector.unit_id for vector in batch.vectors] == [item.unit_id for item in batch.units]

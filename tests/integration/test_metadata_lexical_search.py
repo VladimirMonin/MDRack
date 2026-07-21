@@ -220,8 +220,16 @@ def test_metadata_lexical_ties_are_stable_without_missing_or_duplicate_field_bon
             ),
             metadata_policy=policy,
         )
-        assert single_field.representations[-1].text == "shared-token"
-        assert duplicate_fields.representations[-1].text == "shared-token"
+        assert next(
+            item.text
+            for item in single_field.representations
+            if item.representation_kind == "metadata_text"
+        ) == "shared-token"
+        assert next(
+            item.text
+            for item in duplicate_fields.representations
+            if item.representation_kind == "metadata_text"
+        ) == "shared-token"
         catalog.replace_resource(single_field)
         catalog.replace_resource(duplicate_fields)
         catalog.replace_resource(

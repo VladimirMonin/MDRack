@@ -38,11 +38,14 @@ from mdrack_core.domain import (
     VectorBranch,
     VectorRecord,
 )
+from mdrack_media import weighted_centroid
 
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_MEDIA_TYPES = frozenset({"image/gif", "image/jpeg", "image/png", "image/webp"})
 _TEXT_REPRESENTATION_KINDS = frozenset({REPRESENTATION_CAPTION_TEXT, REPRESENTATION_OCR_TEXT})
+_TEXT_AGGREGATE_REPRESENTATION = "image_text_aggregate"
+_CENTROID_TEXT_AGGREGATION = "token_weighted_centroid_v1"
 
 
 @dataclass(frozen=True)
@@ -299,6 +302,79 @@ class ImageIngestionService:
                 assert self._text_space is not None
                 vector = self._validated_vector(text_vectors[index], self._text_space.dimensions)
                 vectors.append(VectorRecord(unit_id, self._text_space.space_id, vector))
+
+        if extracted:
+            aggregate_text = "\n\n".join(item.text for item in extracted)
+            aggregate_fingerprint = logical_id(
+                "image-text-aggregate",
+                resource_id,
+                tuple((item.kind, item.language, item.producer_fingerprint) for item in extracted),
+            )
+            aggregate_representation_id = logical_id(
+                "image-representation",
+                resource_id,
+                _TEXT_AGGREGATE_REPRESENTATION,
+                aggregate_fingerprint,
+            )
+            aggregate_unit_id = logical_id(
+                "image-unit",
+                aggregate_representation_id,
+                UNIT_WHOLE_RESOURCE,
+            )
+            aggregate_tokens = sum(token_counts)
+            aggregate_metadata = {
+                "aggregation": _CENTROID_TEXT_AGGREGATION,
+                "aggregation_fingerprint": aggregate_fingerprint,
+                "representation_kind": _TEXT_AGGREGATE_REPRESENTATION,
+                "similarity_basis": "image_text_aggregate",
+            }
+            representations.append(
+                RepresentationRecord(
+                    aggregate_representation_id,
+                    resource_id,
+                    _TEXT_AGGREGATE_REPRESENTATION,
+                    MODALITY_TEXT,
+                    aggregate_text,
+                    producer_fingerprint=aggregate_fingerprint,
+                    token_count=aggregate_tokens,
+                    token_count_kind="estimated",
+                    metadata=aggregate_metadata,
+                )
+            )
+            units.append(
+                SearchUnitRecord(
+                    aggregate_unit_id,
+                    resource_id,
+                    aggregate_representation_id,
+                    UNIT_WHOLE_RESOURCE,
+                    MODALITY_TEXT,
+                    aggregate_text,
+                    Locator("whole_image", {"source_ref": source_ref}),
+                    0,
+                    aggregate_tokens,
+                    "estimated",
+                    aggregate_metadata,
+                )
+            )
+            if text_vectors:
+                assert self._text_space is not None
+                text_units = tuple(units[:-1])
+                aggregate_vectors = {
+                    unit.unit_id: vector.vector
+                    for unit, vector in zip(text_units, vectors, strict=True)
+                }
+                if any(value != 0.0 for vector in aggregate_vectors.values() for value in vector):
+                    aggregate_vector = weighted_centroid(
+                        aggregate_vectors,
+                        {unit.unit_id: unit.token_count or 1 for unit in text_units},
+                    )
+                    vectors.append(
+                        VectorRecord(
+                            aggregate_unit_id,
+                            self._text_space.space_id,
+                            aggregate_vector,
+                        )
+                    )
 
         if self._visual_provider is not None:
             assert self._visual_space is not None

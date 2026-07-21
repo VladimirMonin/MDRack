@@ -176,7 +176,7 @@ def test_repeated_diagnostic_counts_survive_markdown_it_prepared_file_path(
     assert "first" not in repr(batch.resource.metadata["derived"])
     assert "second" not in repr(batch.resource.metadata["derived"])
     assert batch.representations[0].text == "Stable\n\nVisible body."
-    assert batch.units[-1].text == "Visible body."
+    assert next(unit.text for unit in batch.units if unit.unit_kind == "text_chunk") == "Visible body."
 
 
 def test_repeated_diagnostic_counts_survive_legacy_prepared_file_path(

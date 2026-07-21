@@ -103,8 +103,9 @@ def test_prepared_file_projects_one_deterministic_complete_core_graph() -> None:
         "root_id": "vault",
     }
     assert first.resource.metadata["relative_path"] == "docs/guide.md"
-    assert len(first.representations) == 1
-    assert [unit.unit_id for unit in first.units] == ["chunk-logical"]
+    assert len(first.representations) == 2
+    assert [unit.unit_id for unit in first.units[:1]] == ["chunk-logical"]
+    assert first.units[1].unit_kind == UNIT_WHOLE_RESOURCE
     assert first.units[0].evidence_locator.payload["heading_path"] == ("Guide", "Heading")
     assert first.vectors[0].unit_id == "chunk-logical"
     assert first.vectors[0].space_id == first.spaces[0].space_id
@@ -112,6 +113,23 @@ def test_prepared_file_projects_one_deterministic_complete_core_graph() -> None:
     serialized = repr(first)
     for internal_id in ("internal-file-row", "internal-section-row", "internal-chunk-row", "internal-run-row"):
         assert internal_id not in serialized
+
+
+def test_prepared_file_default_projection_has_deterministic_whole_text_similarity_basis() -> None:
+    prepared = _prepared()
+    before = repr(prepared)
+
+    first = prepared_file_to_resource_batch(prepared)
+    second = prepared_file_to_resource_batch(prepared)
+    whole = [unit for unit in first.units if unit.unit_kind == UNIT_WHOLE_RESOURCE]
+
+    assert first == second
+    assert len(whole) == 1
+    assert whole[0].modality == "text"
+    assert whole[0].metadata["similarity_basis"] == "markdown_retrieval_text"
+    assert whole[0].metadata["aggregation"] == "token_weighted_centroid_v1"
+    assert any(vector.unit_id == whole[0].unit_id for vector in first.vectors)
+    assert repr(prepared) == before
 
 
 def test_compatibility_mapper_preserves_legacy_scores_ranks_locator_and_degradation() -> None:

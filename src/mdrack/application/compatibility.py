@@ -22,6 +22,7 @@ from mdrack.application.metadata_projection import (
     MetadataProjectionPolicy,
     metadata_projection_policy_from_config,
 )
+from mdrack.application.resources import TextualWholeResourceProjection
 from mdrack.application.store_generations import (
     ActiveGenerationPointer,
     GenerationContractKind,
@@ -70,6 +71,9 @@ _DOCUMENT_SPAN_LOCATOR = "document_span"
 _TEXT_BRANCH = "text"
 _SEMANTIC_BRANCH = "semantic"
 _METADATA_REPRESENTATION = "metadata_text"
+_DEFAULT_MARKDOWN_WHOLE_TEXT_POLICY = WholeResourceTextPolicy(overflow="caller_split")
+_DIRECT_TEXT_AGGREGATION = "direct_text_v1"
+_CENTROID_TEXT_AGGREGATION = "token_weighted_centroid_v1"
 
 
 def embedding_space_id(profile_name: str, fingerprint: str) -> str:
@@ -100,6 +104,17 @@ def prepared_file_to_resource_batch(
         raise ValueError("whole_text_policy and aggregation_fingerprint must be supplied together")
     if whole_vector is not None and not isinstance(whole_vector, Sequence):
         raise TypeError("whole_vector must be a sequence or None")
+
+    default_whole_projection = whole_text_policy is None
+    if default_whole_projection:
+        whole_text_policy = _DEFAULT_MARKDOWN_WHOLE_TEXT_POLICY
+        aggregation_fingerprint = AggregationFingerprint.from_payload(
+            {
+                "aggregation": _CENTROID_TEXT_AGGREGATION,
+                "contract": "mdrack.markdown.whole-resource.v1",
+                "policy": whole_text_policy.to_dict(),
+            }
+        )
 
     resource_id = prepared.logical_id
     projection = (metadata_policy or DEFAULT_METADATA_PROJECTION_POLICY).project(
@@ -296,11 +311,17 @@ def prepared_file_to_resource_batch(
         is_long = total_tokens > whole_text_policy.max_tokens
         if is_long and whole_text_policy.overflow == "reject":
             raise ValueError("Markdown whole-resource text exceeds whole_text_policy.max_tokens")
+        aggregation = (
+            _DIRECT_TEXT_AGGREGATION
+            if whole_vector is not None and not is_long
+            else _CENTROID_TEXT_AGGREGATION
+        )
         whole_representation_id = logical_id(
             "representation",
             resource_id,
             "whole_resource_text",
             aggregation_fingerprint.value,
+            aggregation,
             representation_id,
         )
         whole_unit_id = logical_id(
@@ -308,6 +329,7 @@ def prepared_file_to_resource_batch(
             resource_id,
             representation_id,
             aggregation_fingerprint.value,
+            aggregation,
         )
         whole_representation = RepresentationRecord(
             representation_id=whole_representation_id,
@@ -319,6 +341,7 @@ def prepared_file_to_resource_batch(
             token_count=total_tokens,
             token_count_kind="estimated",
             metadata={
+                "aggregation": aggregation,
                 "aggregation_fingerprint": aggregation_fingerprint.value,
                 "similarity_basis": "markdown_retrieval_text",
             },
@@ -338,14 +361,13 @@ def prepared_file_to_resource_batch(
             token_count=total_tokens,
             token_count_kind="estimated",
             metadata={
+                "aggregation": aggregation,
                 "aggregation_fingerprint": aggregation_fingerprint.value,
                 "similarity_basis": "markdown_retrieval_text",
             },
         )
         units = units + (whole_unit,)
-        if is_long:
-            if not prepared.vectors:
-                raise ValueError("long Markdown whole-resource text requires chunk vectors")
+        if whole_vector is None and prepared.vectors:
             whole_vector = weighted_centroid(
                 {
                     chunk.logical_id: vector
@@ -353,6 +375,8 @@ def prepared_file_to_resource_batch(
                 },
                 token_weights,
             )
+        elif is_long and not default_whole_projection and not prepared.vectors:
+            raise ValueError("long Markdown whole-resource text requires chunk vectors")
         if whole_vector is not None:
             if prepared.embedding_profile is None:
                 raise ValueError("embedding profile is required for whole-resource vectors")
@@ -574,6 +598,37 @@ class CoreCompatibilityStorage:
             )
             self.legacy.replace_file(prepared)
 
+    def resolve_textual_whole_resource_units(
+        self,
+        resource_id: str,
+    ) -> tuple[TextualWholeResourceProjection, ...]:
+        """Resolve persisted whole-text identities without exposing SQLite record IDs."""
+        if not isinstance(resource_id, str) or not resource_id:
+            raise ValueError("resource_id must be non-empty")
+        rows = self.connection.execute(
+            "SELECT u.resource_id,u.unit_id,s.space_id,s.dimensions,s.metric,s.fingerprint "
+            "FROM core_search_units u "
+            "JOIN core_unit_embeddings e ON e.unit_id=u.unit_id "
+            "JOIN core_embedding_spaces s ON s.space_id=e.space_id "
+            "WHERE u.resource_id=? AND u.unit_kind=? AND u.modality=? "
+            "ORDER BY u.unit_id,s.space_id",
+            (resource_id, UNIT_WHOLE_RESOURCE, MODALITY_TEXT),
+        ).fetchall()
+        return tuple(
+            TextualWholeResourceProjection(
+                str(row["resource_id"]),
+                str(row["unit_id"]),
+                EmbeddingSpaceRecord(
+                    str(row["space_id"]),
+                    int(row["dimensions"]),
+                    str(row["metric"]),
+                    str(row["fingerprint"]),
+                    {},
+                ),
+            )
+            for row in rows
+        )
+
     def delete_file(self, relative_path: str) -> None:
         current = self.legacy.get_file_by_path(relative_path)
         with self.connection.atomic_projection():
@@ -597,7 +652,16 @@ class CoreCompatibilityStorage:
         self.legacy.finish_run(run_id, status=status, stats=stats, error_codes=error_codes)
 
     def search_core(self, request: SearchRequest) -> SearchResult:
-        result = self.core_retrieval.search(request)
+        # The v1.1 surface returns legacy document spans.  Whole-resource
+        # projections belong to the new typed resource path and have a locator
+        # that cannot be represented by the frozen legacy result contract.
+        core_request = request
+        if request.target == TARGET_UNIT and not request.scope.unit_kinds:
+            core_request = replace(
+                request,
+                scope=replace(request.scope, unit_kinds=(UNIT_TEXT_CHUNK,)),
+            )
+        result = self.core_retrieval.search(core_request)
         if not request.lexical_branches:
             return result
         legacy_by_branch = {
