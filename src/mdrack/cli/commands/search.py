@@ -20,6 +20,7 @@ from mdrack.application.metadata_filters import (
 )
 from mdrack.application.metadata_projection import metadata_projection_policy_from_config
 from mdrack.application.resource_catalog import MetadataCatalogService
+from mdrack.application.resources import UnifiedTextSearchService
 from mdrack.application.retrieval import (
     InvalidTextSearchError,
     ResourcePresetSearchService,
@@ -41,6 +42,7 @@ from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import StorageError
 from mdrack.output.json_output import emit_json
 from mdrack.ports.embeddings import EmbeddingProvider
+from mdrack.public_api.engine import MDRackEngine
 from mdrack.storage.sqlite.fts import FTSQueryError
 from mdrack_core import SearchScope
 from mdrack_sqlite import SQLiteCatalog
@@ -50,6 +52,10 @@ logger = logging.getLogger(__name__)
 
 class MetadataSearchInputError(ValueError):
     """One fixed, payload-free metadata search usage failure."""
+
+
+class UnifiedSearchInputError(ValueError):
+    """One fixed, payload-free unified search usage failure."""
 
 
 def _open_storage(root: Path, config: Any, db_path: Path) -> Any:
@@ -91,6 +97,12 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     default=None,
     help="Explicit text-media resource-ranking preset; no automatic classifier.",
 )
+@click.option(
+    "--scope",
+    "unified_scope",
+    default=None,
+    help="Unified text scope: all, notes, audio, video, frames, or images.",
+)
 @click.option("--tag", "tags", multiple=True, help="Exact projected tag value.")
 @click.option(
     "--meta",
@@ -129,6 +141,7 @@ def cli_search(
     limit: int | None,
     target: str,
     search_preset: str | None,
+    unified_scope: str | None,
     tags: tuple[str, ...],
     metadata_all: tuple[str, ...],
     metadata_any: tuple[str, ...],
@@ -156,7 +169,7 @@ def cli_search(
     provider: EmbeddingProvider | None = None
     storage = None
     timed_catalog = None
-    if catalog_path is None:
+    if catalog_path is None and unified_scope is None:
         try:
             storage = _open_storage(ctx.obj.get("root", Path(".")), config, db_path)
         except StorageError as exc:
@@ -171,6 +184,62 @@ def cli_search(
         limit_value,
     )
     try:
+        if unified_scope is not None:
+            if (
+                unified_scope not in {"all", "notes", "audio", "video", "frames", "images"}
+                or search_preset is not None
+                or target != "unit"
+                or tags
+                or metadata_all
+                or metadata_any
+                or metadata_none
+                or resource_kinds
+                or media_types
+                or source_namespaces
+                or representation_kinds
+                or unit_kinds
+            ):
+                raise UnifiedSearchInputError
+            if mode != "text":
+                provider_name = embedding_provider or config.embedding.provider
+                provider = create_embedding_provider(provider_name, config)
+            if catalog_path is not None:
+                timed_catalog = SQLiteCatalog.open(catalog_path)
+                fingerprint = (
+                    embedding_profile_from_config(config, provider, "default").fingerprint
+                    if provider is not None
+                    else None
+                )
+                result = asyncio.run(
+                    UnifiedTextSearchService(
+                        timed_catalog,
+                        embedding_provider=provider,
+                        embedding_fingerprint=fingerprint,
+                        profile="default",
+                        rrf_k=config.search.rrf_k,
+                    ).search(
+                        query,
+                        scope=cast(Any, unified_scope),
+                        mode=cast(Any, mode),
+                        limit=limit_value,
+                    )
+                )
+            else:
+                root = ctx.obj.get("root", Path("."))
+                engine = MDRackEngine(root=root, config=config, embedding_provider=provider)
+                try:
+                    result = asyncio.run(
+                        engine.search_unified(
+                            query,
+                            scope=cast(Any, unified_scope),
+                            mode=cast(Any, mode),
+                            limit=limit_value,
+                        )
+                    )
+                finally:
+                    engine.close()
+            _emit_success(ctx, result.to_dict(), command)
+            return
         try:
             metadata_filters = metadata_filters_from_cli(
                 metadata_projection_policy_from_config(config.metadata),
@@ -311,6 +380,13 @@ def cli_search(
                     command,
                 )
             )
+    except UnifiedSearchInputError:
+        logger.error("cli.search.failed status=failed reason=unified_search_options_invalid")
+        _output(
+            ctx,
+            envelope_error("Unified search options are invalid", "VALIDATION_ERROR", command),
+        )
+        ctx.exit(1)
     except MetadataSearchInputError:
         logger.error("cli.search.failed status=failed reason=metadata_search_options_invalid")
         _output(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import click
 
@@ -14,6 +14,7 @@ from mdrack.application.resources import FacetFilter, ResourceQueryScope, Resour
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
+from mdrack.public_api.engine import MDRackEngine
 from mdrack_core.application.retrieval import RetrievalService
 from mdrack_core.domain import TARGET_RESOURCE, TARGET_UNIT, LexicalBranch, SearchRequest
 
@@ -97,6 +98,57 @@ def _scope(
 @click.group(name="resources")
 def resources() -> None:
     """Query logical resource duplicates and existing-vector similarity."""
+
+
+@click.command(name="find-similar")
+@click.argument("resource_id")
+@click.option("--scope", default="all", help="all, notes, audio, video, or images.")
+@click.option("--limit", type=click.IntRange(min=1), default=20, show_default=True)
+@click.pass_context
+def find_similar(
+    ctx: click.Context,
+    resource_id: str,
+    scope: str,
+    limit: int,
+) -> None:
+    """Find provider-free text similarity from a logical resource ID."""
+    command = "find-similar"
+    engine = None
+    try:
+        if scope not in {"all", "notes", "audio", "video", "images"}:
+            raise ValueError("unified_similarity_scope_invalid")
+        config = ctx.obj.get("config") if ctx.obj else None
+        root = ctx.obj.get("root") if ctx.obj else None
+        if config is None or not isinstance(root, Path):
+            raise RuntimeError("config_unavailable")
+        engine = MDRackEngine(root=root, config=config)
+        result = engine.find_similar_resource(resource_id, scope=cast(Any, scope), limit=limit)
+        logger.info(
+            "cli.find_similar.completed",
+            extra={"result_count": len(result.results), "degraded": result.degraded},
+        )
+        _output(ctx, envelope_success(result.to_dict(), command=command))
+    except ValueError as error:
+        if str(error) != "unified_similarity_scope_invalid":
+            logger.error("cli.find_similar.failed", extra={"reason": "similarity_lookup_error"})
+            _output(
+                ctx,
+                envelope_error("Similar resource lookup failed", "FIND_SIMILAR_ERROR", command),
+            )
+        else:
+            logger.error("cli.find_similar.failed", extra={"reason": "scope_invalid"})
+            _output(
+                ctx,
+                envelope_error("Unified similarity options are invalid", "VALIDATION_ERROR", command),
+            )
+        ctx.exit(1)
+    except Exception:
+        logger.error("cli.find_similar.failed", extra={"reason": "similarity_lookup_error"})
+        _output(ctx, envelope_error("Similar resource lookup failed", "FIND_SIMILAR_ERROR", command))
+        ctx.exit(1)
+    finally:
+        if engine is not None:
+            engine.close()
 
 
 @resources.command(name="duplicates")
@@ -285,4 +337,4 @@ def facets(ctx: click.Context, namespace: str | None) -> None:
             storage.close()
 
 
-__all__ = ["resources"]
+__all__ = ["find_similar", "resources"]

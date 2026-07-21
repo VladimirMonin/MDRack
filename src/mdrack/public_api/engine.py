@@ -26,6 +26,12 @@ from mdrack.application.resources import (
     ResourceQueryService,
     SimilarResourceResult,
     TextualSimilarityResult,
+    UnifiedTextEvidence,
+    UnifiedTextScopeName,
+    UnifiedTextSearchItem,
+    UnifiedTextSearchMode,
+    UnifiedTextSearchResult,
+    UnifiedTextSearchService,
 )
 from mdrack.application.retrieval import (
     ResourcePresetSearchService,
@@ -57,6 +63,7 @@ from mdrack.ingestion.images import (
 )
 from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
+from mdrack.public_api.models import UnifiedTextSimilarityResult
 from mdrack_core import (
     JSONValue,
     Locator,
@@ -235,6 +242,23 @@ class MDRackEngine:
             limit=limit,
         )
 
+    async def search_unified(
+        self,
+        query: str,
+        *,
+        scope: UnifiedTextScopeName = "all",
+        mode: UnifiedTextSearchMode = "hybrid",
+        limit: int = 20,
+    ) -> UnifiedTextSearchResult:
+        """Search every supported textual resource class through the active generation."""
+        return await UnifiedTextSearchService(
+            self._transcript_catalog(),
+            embedding_provider=self.embedding_provider,
+            embedding_fingerprint=self._transcript_embedding_fingerprint(),
+            profile=self.profile,
+            rrf_k=self.config.search.rrf_k,
+        ).search(query, scope=scope, mode=mode, limit=limit)
+
     async def ingest_video(
         self,
         transcript: TranscriptArtifact,
@@ -398,6 +422,33 @@ class MDRackEngine:
             exclude_same_resource=exclude_same_resource,
         )
 
+    def find_similar_resource(
+        self,
+        resource_id: str,
+        *,
+        scope: UnifiedTextScopeName = "all",
+        limit: int = 20,
+    ) -> UnifiedTextSimilarityResult:
+        """Find provider-free textual matches by resource ID with portable evidence only."""
+        catalog = self._transcript_catalog()
+        resolver = cast(Any, self.storage) if callable(
+            getattr(self.storage, "resolve_textual_whole_resource_units", None)
+        ) else None
+        try:
+            result = ResourceQueryService(
+                catalog,  # type: ignore[arg-type]
+                whole_resource_resolver=resolver,
+            ).find_similar_resource(resource_id, scope=scope, limit=limit)
+            return UnifiedTextSimilarityResult(
+                resource_id,
+                scope,
+                self._safe_unified_similarity_items(result, catalog),
+                result.degraded,
+                result.degraded_reason,
+            )
+        except Exception:
+            return UnifiedTextSimilarityResult(resource_id, scope, (), True, "adapter_error")
+
     def get_file_by_path(self, relative_path: str) -> dict[str, Any] | None:
         public_reader = getattr(self.read_storage, "get_public_file_by_path", None)
         if callable(public_reader):
@@ -451,6 +502,83 @@ class MDRackEngine:
         if catalog is None:
             raise RuntimeError("active resource-core generation is required for resource operations")
         return ResourceQueryService(catalog)
+
+    @staticmethod
+    def _safe_unified_similarity_items(
+        result: TextualSimilarityResult,
+        catalog: object,
+    ) -> tuple[UnifiedTextSearchItem, ...]:
+        reader = cast(Any, catalog)
+        items: list[UnifiedTextSearchItem] = []
+        for item in result.results:
+            resource = reader.read_resource(item.resource_id)
+            if resource is None:
+                continue
+            evidence: list[UnifiedTextEvidence] = []
+            for raw_evidence in item.evidence:
+                unit = reader.read_unit(raw_evidence.unit_id)
+                if unit is None:
+                    continue
+                evidence.append(
+                    UnifiedTextEvidence(
+                        raw_evidence.branch_id,
+                        raw_evidence.unit_id,
+                        raw_evidence.representation_id,
+                        unit.unit_kind,
+                        MDRackEngine._portable_evidence_locator(raw_evidence.locator),
+                    )
+                )
+            if evidence:
+                items.append(
+                    UnifiedTextSearchItem(
+                        item.resource_id,
+                        resource.resource_kind,
+                        item.score,
+                        item.rank,
+                        tuple(evidence),
+                    )
+                )
+        return tuple(items)
+
+    @staticmethod
+    def _portable_evidence_locator(locator: object) -> dict[str, object]:
+        if not isinstance(locator, Mapping):
+            return {"kind": "opaque", "payload": {}}
+        kind = locator.get("kind")
+        payload = locator.get("payload")
+        if not isinstance(kind, str) or not isinstance(payload, Mapping):
+            return {"kind": "opaque", "payload": {}}
+        safe_payload: dict[str, object] = {}
+        if kind in {"document_span", "whole_resource"}:
+            relative_path = payload.get("relative_path")
+            if (
+                isinstance(relative_path, str)
+                and relative_path
+                and not relative_path.startswith(("/", "\\"))
+                and "\\" not in relative_path
+                and ":" not in relative_path
+                and all(part not in {"", ".", ".."} for part in relative_path.split("/"))
+            ):
+                safe_payload["relative_path"] = relative_path
+            for field_name in ("start_line", "end_line", "start_char", "end_char"):
+                value = payload.get(field_name)
+                if type(value) is int and value >= 0:
+                    safe_payload[field_name] = value
+        elif kind == "time_segment":
+            for field_name in ("start_ms", "end_ms"):
+                value = payload.get(field_name)
+                if type(value) is int and value >= 0:
+                    safe_payload[field_name] = value
+            track = payload.get("track")
+            if track in {"audio", "video"}:
+                safe_payload["track"] = track
+        elif kind == "video_frame":
+            timestamp = payload.get("timestamp_ms")
+            if type(timestamp) is int and timestamp >= 0:
+                safe_payload["timestamp_ms"] = timestamp
+        elif kind not in {"whole_image", "whole_media"}:
+            return {"kind": "opaque", "payload": {}}
+        return {"kind": kind, "payload": safe_payload}
 
     def _metadata_service(self) -> MetadataCatalogService:
         catalog = getattr(self.storage, "resource_store", None)

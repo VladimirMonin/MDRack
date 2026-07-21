@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from mdrack.application.compatibility import StoreGenerationManagerError, create_application_storage
 from mdrack.application.manifest import MAX_MANIFEST_BYTES
 from mdrack.application.video_composition import VideoCompositionService
 from mdrack.embeddings.runtime import (
@@ -46,13 +47,31 @@ def _read_bounded(path: str) -> bytes:
     return payload
 
 
+def _open_catalog(ctx: click.Context, catalog_path: str | None) -> tuple[Any | None, Any]:
+    if catalog_path is not None:
+        return None, SQLiteCatalog.open(catalog_path)
+    config = ctx.obj.get("config") if ctx.obj else None
+    root = ctx.obj.get("root") if ctx.obj else None
+    if config is None or not isinstance(root, Path):
+        raise ValueError("config_unavailable")
+    try:
+        storage = create_application_storage(root, config)
+    except StoreGenerationManagerError:
+        raise ValueError("resource_generation_unavailable") from None
+    catalog = getattr(storage, "resource_store", None)
+    if catalog is None:
+        storage.close()
+        raise ValueError("resource_generation_unavailable")
+    return storage, catalog
+
+
 @click.command(name="video")
 @click.argument("manifest_path")
 @click.option("--embedding-profile", "profile", default="default", show_default=True)
 @click.option("--provider", "provider_name", type=click.Choice(["lmstudio", "fake"]), default=None)
 @click.option("--no-embeddings", is_flag=True, default=False)
 @click.option("--dry-run", is_flag=True, default=False)
-@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
+@click.option("--catalog", "catalog_path", default=None, metavar="PATH")
 @click.pass_context
 def ingest_video(
     ctx: click.Context,
@@ -61,15 +80,16 @@ def ingest_video(
     provider_name: str | None,
     no_embeddings: bool,
     dry_run: bool,
-    catalog_path: str,
+    catalog_path: str | None,
 ) -> None:
     """Atomically replace one complete transcript + frame-caption video graph."""
     config = ctx.obj.get("config") if ctx.obj else None
     provider = None
+    storage = None
     catalog = None
     try:
         manifest = read_video_resource_manifest(_read_bounded(manifest_path))
-        catalog = SQLiteCatalog.open(catalog_path)
+        storage, catalog = _open_catalog(ctx, catalog_path)
         embedding_fingerprint = None
         if not no_embeddings and not dry_run:
             if config is None:
@@ -144,6 +164,7 @@ def ingest_video(
             "manifest_unavailable",
             "manifest_too_large",
             "config_unavailable",
+            "resource_generation_unavailable",
         } else "operation_failed"
         _fail(
             ctx,
@@ -152,7 +173,9 @@ def ingest_video(
             reason=reason,
         )
     finally:
-        if catalog is not None:
+        if storage is not None:
+            storage.close()
+        elif catalog is not None:
             catalog.close()
         if provider is not None:
             try:

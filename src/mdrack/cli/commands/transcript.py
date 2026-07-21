@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import click
 
+from mdrack.application.compatibility import StoreGenerationManagerError, create_application_storage
 from mdrack.application.manifest import MAX_MANIFEST_BYTES
 from mdrack.application.transcript_ingestion import TranscriptIngestionService
 from mdrack.embeddings.runtime import (
@@ -67,6 +68,24 @@ def _read_bounded(path: str) -> bytes:
     return payload
 
 
+def _open_catalog(ctx: click.Context, catalog_path: str | None) -> tuple[Any | None, Any]:
+    if catalog_path is not None:
+        return None, SQLiteCatalog.open(catalog_path)
+    config = ctx.obj.get("config") if ctx.obj else None
+    root = ctx.obj.get("root") if ctx.obj else None
+    if config is None or not isinstance(root, Path):
+        raise ValueError("config_unavailable")
+    try:
+        storage = create_application_storage(root, config)
+    except StoreGenerationManagerError:
+        raise ValueError("resource_generation_unavailable") from None
+    catalog = getattr(storage, "resource_store", None)
+    if catalog is None:
+        storage.close()
+        raise ValueError("resource_generation_unavailable")
+    return storage, catalog
+
+
 @click.group(name="ingest")
 def ingest() -> None:
     """Ingest prepared source content into a resource catalog."""
@@ -93,7 +112,7 @@ def ingest() -> None:
 @click.option("--provider", "provider_name", type=click.Choice(["lmstudio", "fake"]), default=None)
 @click.option("--no-embeddings", is_flag=True, default=False)
 @click.option("--dry-run", is_flag=True, default=False)
-@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
+@click.option("--catalog", "catalog_path", default=None, metavar="PATH")
 @click.pass_context
 def ingest_transcript(
     ctx: click.Context,
@@ -111,12 +130,13 @@ def ingest_transcript(
     provider_name: str | None,
     no_embeddings: bool,
     dry_run: bool,
-    catalog_path: str,
+    catalog_path: str | None,
 ) -> None:
     """Read, group, and atomically replace one audio/video transcript graph."""
     del chunking_profile
     config = ctx.obj.get("config") if ctx.obj else None
     embedding_provider = None
+    storage = None
     catalog = None
     try:
         source = _read_bounded(transcript_path)
@@ -137,7 +157,7 @@ def ingest_transcript(
             strict=True,
         )
         artifact = read_result.artifact  # type: ignore[attr-defined]
-        catalog = SQLiteCatalog.open(catalog_path)
+        storage, catalog = _open_catalog(ctx, catalog_path)
         embedding_fingerprint = None
         if not no_embeddings and not dry_run:
             if config is None:
@@ -211,6 +231,7 @@ def ingest_transcript(
             "transcript_unavailable",
             "transcript_too_large",
             "config_unavailable",
+            "resource_generation_unavailable",
         } else "operation_failed"
         _fail(
             ctx,
@@ -219,7 +240,9 @@ def ingest_transcript(
             reason=reason,
         )
     finally:
-        if catalog is not None:
+        if storage is not None:
+            storage.close()
+        elif catalog is not None:
             catalog.close()
         if embedding_provider is not None:
             try:

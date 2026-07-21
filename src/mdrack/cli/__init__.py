@@ -20,6 +20,7 @@ from mdrack.cli.commands.read import read
 from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
 from mdrack.cli.commands.resource import resource as resource_group
 from mdrack.cli.commands.resources import facets as facets_command
+from mdrack.cli.commands.resources import find_similar as find_similar_command
 from mdrack.cli.commands.resources import resources as resources_group
 from mdrack.cli.commands.resources import similar as similar_command
 from mdrack.cli.commands.scan import cli_scan
@@ -223,6 +224,7 @@ main.add_command(metadata_group)
 main.add_command(cache_group)
 main.add_command(resource_group)
 main.add_command(resources_group)
+main.add_command(find_similar_command)
 main.add_command(similar_command, name="similar")
 main.add_command(facets_command, name="facets")
 
