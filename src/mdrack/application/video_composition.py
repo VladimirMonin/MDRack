@@ -128,6 +128,7 @@ class VideoCompositionService:
             token_count_kind="estimated",
             resource_identifier=transcript.resource_id,
             normalization_fingerprint=transcript.normalization_fingerprint,
+            unsplittable="flag",
         )
         whole_text_policy = WholeResourceTextPolicy(overflow="caller_split")
         aggregation = _whole_text_aggregation(
@@ -154,6 +155,7 @@ class VideoCompositionService:
             transcript_input,
             token_counter=self._counter,
             token_count_kind="estimated",
+            unsplittable="flag",
         )
         transcript_ids = {
             unit.unit_id
@@ -175,6 +177,7 @@ class VideoCompositionService:
                 token_counter=self._counter,
                 token_count_kind="estimated",
                 vectors={unit_id: vectors[unit_id] for unit_id in transcript_ids},
+                unsplittable="flag",
             )
         )
         if include_whole:

@@ -150,6 +150,87 @@ def _policy() -> TimedChunkingPolicy:
 
 
 @pytest.mark.asyncio
+async def test_default_video_composition_flags_oversized_atom_without_losing_frames(
+    tmp_path: Path,
+) -> None:
+    resource = resource_id("fixture", "oversized-video-atom")
+    transcript = read_transcript(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0,
+                        "end": 130,
+                        "text": "длинный фрагмент с точной временной привязкой",
+                    }
+                ]
+            }
+        ).encode(),
+        resource_id=resource,
+        producer_fingerprint=ProducerFingerprint.from_payload(
+            {"producer": "fixture-transcript", "version": 1}
+        ),
+    ).artifact
+    frames = read_frame_captions(
+        json.dumps(
+            {
+                "schema": "mdrack.frame-captions.v1",
+                "resource_id": resource,
+                "producer_fingerprint": ProducerFingerprint.from_payload(
+                    {"producer": "fixture-frame", "version": 1}
+                ).value,
+                "normalization_fingerprint": None,
+                "metadata": {},
+                "frames": [
+                    {
+                        "frame_id": "frame-1",
+                        "timestamp_ms": 65_000,
+                        "caption": "кадр внутри длинного фрагмента",
+                        "metadata": {},
+                    }
+                ],
+            }
+        ).encode()
+    ).artifact
+    fingerprint = EmbeddingFingerprint.from_payload(
+        {"provider": "fake", "dimensions": 8, "version": 1}
+    ).value
+
+    with SQLiteCatalog.create(tmp_path / "oversized-video.sqlite3") as catalog:
+        service = VideoCompositionService(
+            catalog,
+            embedding_provider=FakeEmbeddingProvider(dimensions=8),
+            embedding_fingerprint=fingerprint,
+        )
+        result = await service.ingest(
+            transcript,
+            frames,
+            media_type="video/mp4",
+            source_namespace="fixture",
+            source_locator=Locator(
+                "external_record", {"source_ref": "oversized-video-atom"}
+            ),
+        )
+        passage_id = catalog.connection.execute(
+            "SELECT unit_id FROM core_search_units "
+            "WHERE resource_id=? AND unit_kind='time_segment'",
+            (resource,),
+        ).fetchone()[0]
+        passage = catalog.read_unit(passage_id)
+
+    assert result.transcript_unit_count == 1
+    assert result.frame_unit_count == 1
+    assert passage is not None
+    assert passage.evidence_locator.payload == {
+        "start_ms": 0,
+        "end_ms": 130_000,
+        "track": "video",
+    }
+    assert passage.metadata["unsplittable"] is True
+    assert passage.metadata["hard_limit_exceeded"] is True
+
+
+@pytest.mark.asyncio
 async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors_once(
     tmp_path: Path,
     video_inputs: tuple[object, object, bytes, str],
