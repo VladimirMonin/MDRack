@@ -230,6 +230,23 @@ SQLite tables. Timed lexical and semantic branches each use the bounded
 candidate budget `max(100, limit * 10)` before resource grouping/fusion and the
 final result limit.
 
+For resource-target text-media retrieval, `--preset speech_first|balanced|frames_first`
+is accepted only with `--catalog` and `--target resource`. The preset is explicit;
+MDRack does not classify the query. It controls transcript, frame-caption, and
+metadata lexical weights while core continues to own branch-local resource grouping
+and weighted RRF. The success `data` adds `preset` and `target="resource"` and each
+result includes bounded branch/unit/representation/locator evidence. See
+[`contracts/v1.1-search-presets.md`](contracts/v1.1-search-presets.md).
+
+Preset search also accepts the existing `--tag`, `--meta`, `--meta-any`, and
+`--meta-none` options. They are validated and compiled into the request-global facet
+scope before every branch candidate limit; they are never silently ignored. Invalid
+paths or typed scalar values return the fixed `VALIDATION_ERROR` metadata-options
+envelope without echoing the supplied payload. Empty/non-finite provider vectors,
+provider or resolver failures, missing/ambiguous spaces, and adapter failures are
+reported as payload-free degradation. Semantic mode returns no results; hybrid mode
+retains lexical results when that branch succeeds.
+
 ### 3a. Text search (`--mode text`)
 
 #### Success
@@ -435,6 +452,27 @@ performs no production reranking, so `rerank_rank` and `rerank_score` are always
 ```
 
 Additional error codes: `FTS_ERROR`, `EMBEDDING_ERROR`, `INTERNAL_ERROR`.
+
+### 3e. Explicit whole-resource textual similarity
+
+```
+mdrack resource similar <whole-resource-unit-id> \
+  --catalog <clean-catalog.sqlite3> \
+  --space-id <space-id> \
+  --embedding-fingerprint <fingerprint> \
+  --aggregation direct-text|token-weighted-centroid \
+  [--basis textual-content] [--kind <kind>] [--namespace <namespace>] \
+  [--facet-any NAMESPACE=VALUE] [--facet-all NAMESPACE=VALUE] \
+  [--facet-none NAMESPACE=VALUE] [--limit N]
+```
+
+This provider-free command searches from an existing whole-resource text vector.
+The public result always reports `similarity_basis="textual_content"` and the exact
+aggregation identity (`direct_text_v1` or `token_weighted_centroid_v1`). It validates
+the requested embedding-space fingerprint, applies kind/namespace/facet scope before
+limits, excludes the source resource, and returns bounded portable evidence. Missing
+or incompatible vectors produce an empty degraded result. Byte-identical duplicate
+lookup remains separate.
 
 ### Notes
 

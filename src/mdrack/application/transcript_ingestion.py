@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
+from mdrack.application.retrieval import validate_embedding_vector
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core import (
     TARGET_RESOURCE,
@@ -25,18 +26,23 @@ from mdrack_core import (
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_media import (
+    AggregationFingerprint,
     EmbeddingFingerprint,
     MediaResourceDescriptor,
     TimedChunkingPolicy,
     TokenCounterFingerprint,
     TranscriptArtifact,
     TranscriptBatchBuilderInput,
+    WholeResourceTextPolicy,
     build_audio_transcript_batch,
     build_video_transcript_batch,
     group_timed_atoms,
 )
 
 logger = logging.getLogger(__name__)
+
+_DIRECT_TEXT_AGGREGATION = "direct_text_v1"
+_CENTROID_AGGREGATION = "token_weighted_centroid_v1"
 
 TimedRetrievalMode = Literal["text", "semantic", "hybrid"]
 
@@ -204,6 +210,12 @@ class TranscriptIngestionService:
             resource_identifier=artifact.resource_id,
             normalization_fingerprint=artifact.normalization_fingerprint,
         )
+        whole_text_policy = WholeResourceTextPolicy(overflow="caller_split")
+        aggregation = _whole_text_aggregation(
+            sum(passage.token_count.count for passage in grouped.passages),
+            whole_text_policy,
+        )
+        include_whole = aggregation == _DIRECT_TEXT_AGGREGATION
         builder_input = TranscriptBatchBuilderInput(
             resource=descriptor,
             transcript=artifact,
@@ -211,8 +223,17 @@ class TranscriptIngestionService:
             passage_representation_kind="timed_passage",
             chunking_policy=policy,
             grouper_fingerprint=grouped.grouper_fingerprint,
+            whole_text_policy=whole_text_policy if include_whole else None,
+            aggregation_fingerprint=(
+                _aggregation_fingerprint(aggregation, whole_text_policy)
+                if include_whole
+                else None
+            ),
         )
-        return self._build(builder_input)
+        return self._build(
+            builder_input,
+            aggregation=aggregation if include_whole else None,
+        )
 
     async def ingest(
         self,
@@ -238,18 +259,37 @@ class TranscriptIngestionService:
         if embeddings:
             if self._provider is None or self._embedding_fingerprint is None:
                 raise EmbeddingError("embedding_provider_unavailable")
-            texts = [unit.text or "" for unit in lexical_batch.units]
+            whole_unit = next(
+                (unit for unit in lexical_batch.units if unit.unit_kind == "whole_resource"),
+                None,
+            )
+            aggregation = (
+                str(whole_unit.metadata["aggregation"])
+                if whole_unit is not None
+                else _whole_text_aggregation(
+                    sum(unit.token_count or 0 for unit in lexical_batch.units),
+                    WholeResourceTextPolicy(overflow="caller_split"),
+                )
+            )
+            embedding_units = (
+                lexical_batch.units
+                if aggregation == _DIRECT_TEXT_AGGREGATION
+                else tuple(
+                    unit for unit in lexical_batch.units if unit.unit_kind != "whole_resource"
+                )
+            )
+            texts = [unit.text or "" for unit in embedding_units]
             try:
                 supplied = await self._provider.embed(texts, profile=self._profile)
             except EmbeddingError:
                 raise
             except Exception:
                 raise EmbeddingError("embedding_provider_error") from None
-            if len(supplied) != len(lexical_batch.units):
+            if len(supplied) != len(embedding_units):
                 raise EmbeddingError("embedding_count_mismatch")
             vectors = {
-                unit.unit_id: _validated_vector(vector)
-                for unit, vector in zip(lexical_batch.units, supplied, strict=True)
+                unit.unit_id: validate_embedding_vector(vector)
+                for unit, vector in zip(embedding_units, supplied, strict=True)
             }
             builder_input = self._builder_input(
                 artifact,
@@ -260,7 +300,11 @@ class TranscriptIngestionService:
                 chunking_policy=chunking_policy or TimedChunkingPolicy(),
                 embedding_fingerprint=self._embedding_fingerprint,
             )
-            batch = self._build(builder_input, vectors=vectors)
+            batch = self._build(
+                builder_input,
+                vectors=vectors,
+                aggregation=aggregation,
+            )
 
         logger.info(
             "transcript.ingest.started",
@@ -323,6 +367,11 @@ class TranscriptIngestionService:
             resource_identifier=artifact.resource_id,
             normalization_fingerprint=artifact.normalization_fingerprint,
         )
+        whole_text_policy = WholeResourceTextPolicy(overflow="caller_split")
+        aggregation = _whole_text_aggregation(
+            sum(passage.token_count.count for passage in grouped.passages),
+            whole_text_policy,
+        )
         return TranscriptBatchBuilderInput(
             resource=descriptor,
             transcript=artifact,
@@ -331,6 +380,11 @@ class TranscriptIngestionService:
             chunking_policy=chunking_policy,
             grouper_fingerprint=grouped.grouper_fingerprint,
             embedding_fingerprint=embedding_fingerprint,
+            whole_text_policy=whole_text_policy,
+            aggregation_fingerprint=_aggregation_fingerprint(
+                aggregation,
+                whole_text_policy,
+            ),
         )
 
     def _build(
@@ -338,18 +392,75 @@ class TranscriptIngestionService:
         builder_input: TranscriptBatchBuilderInput,
         *,
         vectors: Mapping[str, Sequence[float]] | None = None,
+        aggregation: str | None,
     ) -> PreparedResourceBatch:
         builder = (
             build_audio_transcript_batch
             if builder_input.resource.resource_kind == "audio"
             else build_video_transcript_batch
         )
-        return builder(
+        batch = builder(
             builder_input,
             token_counter=self._counter,
             token_count_kind=self._token_count_kind,
             vectors=vectors,
         )
+        return batch if aggregation is None else _persist_whole_aggregation(batch, aggregation)
+
+
+def _whole_text_aggregation(
+    total_tokens: int,
+    policy: WholeResourceTextPolicy,
+) -> str:
+    return (
+        _DIRECT_TEXT_AGGREGATION
+        if total_tokens <= policy.max_tokens
+        else _CENTROID_AGGREGATION
+    )
+
+
+def _aggregation_fingerprint(
+    aggregation: str,
+    policy: WholeResourceTextPolicy,
+) -> AggregationFingerprint:
+    return AggregationFingerprint.from_payload(
+        {
+            "algorithm": aggregation,
+            "policy": policy.to_dict(),
+            "version": 1,
+        }
+    )
+
+
+def _persist_whole_aggregation(
+    batch: PreparedResourceBatch,
+    aggregation: str,
+) -> PreparedResourceBatch:
+    whole_units = tuple(unit for unit in batch.units if unit.unit_kind == "whole_resource")
+    if len(whole_units) != 1:
+        raise ValueError("transcript batch must contain exactly one whole_resource unit")
+    whole_representation_id = whole_units[0].representation_id
+    return replace(
+        batch,
+        representations=tuple(
+            replace(
+                representation,
+                metadata={**dict(representation.metadata), "aggregation": aggregation},
+            )
+            if representation.representation_id == whole_representation_id
+            else representation
+            for representation in batch.representations
+        ),
+        units=tuple(
+            replace(
+                unit,
+                metadata={**dict(unit.metadata), "aggregation": aggregation},
+            )
+            if unit.unit_kind == "whole_resource"
+            else unit
+            for unit in batch.units
+        ),
+    )
 
 
 class TimedRetrievalService:
@@ -523,22 +634,13 @@ class TimedRetrievalService:
         if self._provider is None or self._embedding_fingerprint is None:
             return None, "embedding_provider_unavailable"
         try:
-            return _validated_vector(
+            return validate_embedding_vector(
                 await self._provider.embed_query(query, profile=self._profile)
             ), None
         except EmbeddingError:
             return None, "embedding_provider_error"
         except Exception:
             return None, "semantic_search_error"
-
-
-def _validated_vector(value: Sequence[float]) -> tuple[float, ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
-        raise EmbeddingError("invalid_embedding_vector")
-    vector = tuple(float(item) for item in value)
-    if not vector or any(not math.isfinite(item) for item in vector):
-        raise EmbeddingError("invalid_embedding_vector")
-    return vector
 
 
 def _normalized_embedding_fingerprint(value: str) -> str:

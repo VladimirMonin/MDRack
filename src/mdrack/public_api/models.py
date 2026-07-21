@@ -6,6 +6,13 @@ from mdrack.application.resource_catalog import (
     MetadataInspection,
     ResourceSearchResult,
 )
+from mdrack.application.resources import (
+    ResourcePresetEvidence,
+    ResourcePresetSearchItem,
+    ResourcePresetSearchResult,
+    TextualSimilarityResult,
+    TextualSimilarResourceItem,
+)
 from mdrack.application.transcript_ingestion import (
     TimedEvidence,
     TimedSearchItem,
@@ -28,11 +35,16 @@ __all__ = [
     "RetrievalCandidate",
     "RetrievalItem",
     "RetrievalResult",
+    "ResourcePresetEvidence",
+    "ResourcePresetSearchItem",
+    "ResourcePresetSearchResult",
     "ResourceSearchResult",
     "SourceLocator",
     "TimedEvidence",
     "TimedSearchItem",
     "TimedSearchResult",
+    "TextualSimilarityResult",
+    "TextualSimilarResourceItem",
     "TranscriptIngestionResult",
     "VideoCompositionResult",
 ]

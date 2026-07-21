@@ -13,10 +13,20 @@ from mdrack.application.compatibility import (
     StoreGenerationManagerError,
     create_application_storage,
 )
-from mdrack.application.metadata_filters import MetadataFilters, metadata_filters_from_cli
+from mdrack.application.metadata_filters import (
+    MetadataFilters,
+    compile_metadata_filters,
+    metadata_filters_from_cli,
+)
 from mdrack.application.metadata_projection import metadata_projection_policy_from_config
 from mdrack.application.resource_catalog import MetadataCatalogService
-from mdrack.application.retrieval import InvalidTextSearchError, RetrievalService
+from mdrack.application.retrieval import (
+    InvalidTextSearchError,
+    ResourcePresetSearchService,
+    ResourceSearchMode,
+    ResourceSearchPresetName,
+    RetrievalService,
+)
 from mdrack.application.transcript_ingestion import (
     TimedRetrievalMode,
     TimedRetrievalService,
@@ -74,6 +84,13 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     default="unit",
     show_default=True,
 )
+@click.option(
+    "--preset",
+    "search_preset",
+    type=click.Choice(["speech_first", "balanced", "frames_first"]),
+    default=None,
+    help="Explicit text-media resource-ranking preset; no automatic classifier.",
+)
 @click.option("--tag", "tags", multiple=True, help="Exact projected tag value.")
 @click.option(
     "--meta",
@@ -111,6 +128,7 @@ def cli_search(
     search_mode: str | None,
     limit: int | None,
     target: str,
+    search_preset: str | None,
     tags: tuple[str, ...],
     metadata_all: tuple[str, ...],
     metadata_any: tuple[str, ...],
@@ -153,10 +171,28 @@ def cli_search(
         limit_value,
     )
     try:
+        try:
+            metadata_filters = metadata_filters_from_cli(
+                metadata_projection_policy_from_config(config.metadata),
+                tags=tags,
+                all_values=metadata_all,
+                any_values=metadata_any,
+                none_values=metadata_none,
+            )
+        except ValueError:
+            raise MetadataSearchInputError from None
+        application_filters = (
+            metadata_filters
+            if metadata_filters.any or metadata_filters.all or metadata_filters.none
+            else None
+        )
+        if search_preset is not None and catalog_path is None:
+            raise MetadataSearchInputError
         if catalog_path is not None:
             timed_catalog = SQLiteCatalog.open(catalog_path)
             if mode == "semantic" or (
-                mode == "hybrid" and config.search.semantic_weight > 0.0
+                mode == "hybrid"
+                and (search_preset is not None or config.search.semantic_weight > 0.0)
             ):
                 timed_provider_name = embedding_provider or config.embedding.provider
                 provider = create_embedding_provider(timed_provider_name, config)
@@ -165,6 +201,35 @@ def cli_search(
                 if provider is not None
                 else None
             )
+            if search_preset is not None:
+                if target != "resource":
+                    raise MetadataSearchInputError
+                preset_result = asyncio.run(
+                    ResourcePresetSearchService(
+                        timed_catalog,
+                        embedding_provider=provider,
+                        embedding_fingerprint=fingerprint,
+                        profile="default",
+                        rrf_k=config.search.rrf_k,
+                    ).search(
+                        query,
+                        preset=cast(ResourceSearchPresetName, search_preset),
+                        mode=cast(ResourceSearchMode, mode),
+                        scope=compile_metadata_filters(
+                            metadata_filters,
+                            base_scope=SearchScope(
+                                resource_kinds=resource_kinds,
+                                media_types=media_types,
+                                source_namespaces=source_namespaces,
+                                representation_kinds=representation_kinds,
+                                unit_kinds=unit_kinds,
+                            ),
+                        ),
+                        limit=limit_value,
+                    )
+                )
+                _emit_success(ctx, preset_result.to_dict(), command)
+                return
             timed_service = TimedRetrievalService(
                 timed_catalog,
                 embedding_provider=provider,
@@ -191,21 +256,6 @@ def cli_search(
             )
             _emit_success(ctx, timed_result.to_dict(), command)
             return
-        try:
-            metadata_filters = metadata_filters_from_cli(
-                metadata_projection_policy_from_config(config.metadata),
-                tags=tags,
-                all_values=metadata_all,
-                any_values=metadata_any,
-                none_values=metadata_none,
-            )
-        except ValueError:
-            raise MetadataSearchInputError from None
-        application_filters = (
-            metadata_filters
-            if metadata_filters.any or metadata_filters.all or metadata_filters.none
-            else None
-        )
         if target == "resource":
             if mode != "text":
                 raise MetadataSearchInputError

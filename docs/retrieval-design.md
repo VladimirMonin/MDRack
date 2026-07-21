@@ -261,6 +261,30 @@ span. Mermaid source lines are never fragmented. Adjacent standalone Markdown
 image references and Obsidian embeds become individual `IMAGE_REFERENCE`
 source blocks, even when CommonMark groups their lines into one paragraph.
 
+## MDRack 1.1 resource presets and textual similarity
+
+The maintained 1.1 application path adds explicit `speech_first`, `balanced`, and
+`frames_first` presets for resource-target text-media retrieval. These presets only
+construct representation-scoped lexical/vector branches. Core remains the sole
+owner of positional-rank validation, branch-local resource grouping, bounded
+evidence selection, and weighted RRF. There is no automatic query classifier.
+Typed metadata/tag filters are compiled into the global scope before branch limits.
+Provider vectors use the shared finite/non-empty validator; resolver and adapter
+failures degrade semantic mode to an empty result and hybrid mode to lexical results.
+
+Whole-resource similarity is separately exposed with the exact basis
+`textual_content` and aggregation identity `direct_text_v1` or
+`token_weighted_centroid_v1`. It reuses a stored whole-resource text vector, validates
+the exact persisted aggregation and embedding-space fingerprint, excludes the source
+resource by default, and returns portable evidence. Candidate scope requires text
+modality plus a recognized textual basis and aggregation before the public candidate
+budget. Transcript/video ingestion marks direct short-text vectors and normalized
+token-weighted centroids truthfully. The operation is separate from byte-exact
+duplicate lookup and does not describe non-text resemblance.
+
+See [the normative 1.1 contract](contracts/v1.1-search-presets.md) for the branch
+matrix, public surfaces, result shape, filters, degradation behavior, and non-claims.
+
 ## Diagnostics
 
 `mdrack status` reports:

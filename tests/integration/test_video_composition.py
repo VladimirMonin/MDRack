@@ -191,6 +191,8 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
             chunking_policy=_policy(),
         )
         stored = sqlite_catalog.read_resource(resource)
+        prepared_whole = next(unit for unit in prepared.units if unit.unit_kind == "whole_resource")
+        stored_whole = sqlite_catalog.read_unit(prepared_whole.unit_id)
         rows = sqlite_catalog.connection.execute(
             "SELECT unit_kind,modality,evidence_locator_json FROM core_search_units "
             "WHERE resource_id=? ORDER BY unit_kind,ordinal",
@@ -221,7 +223,7 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
     assert catalog.replace_calls == 1
     assert result.transcript_unit_count == 2
     assert result.frame_unit_count == 2
-    assert result.vector_count == 4
+    assert result.vector_count == 5
     assert stored is not None
     assert stored.metadata["source"] == {"project": "MDRack", "draft": False}
     frame_representation = next(
@@ -230,8 +232,15 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
     first_frame = next(item for item in prepared.units if item.unit_kind == "frame")
     assert frame_representation.metadata["capture_policy"] == {"interval_ms": 1_000}
     assert first_frame.metadata["confidence"] == 0.9
-    assert {row["unit_kind"] for row in rows} == {"time_segment", "frame"}
+    assert {row["unit_kind"] for row in rows} == {
+        "time_segment",
+        "frame",
+        "whole_resource",
+    }
     assert {row["modality"] for row in rows} == {"text"}
+    assert prepared_whole.metadata["aggregation"] == "direct_text_v1"
+    assert stored_whole is not None
+    assert stored_whole.metadata["aggregation"] == "direct_text_v1"
     frame_locators = [
         json.loads(row["evidence_locator_json"])
         for row in rows

@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
-from mdrack.application.transcript_ingestion import DeterministicWhitespaceCounter
+from mdrack.application.retrieval import validate_embedding_vector
+from mdrack.application.transcript_ingestion import (
+    DeterministicWhitespaceCounter,
+    _aggregation_fingerprint,
+    _persist_whole_aggregation,
+    _whole_text_aggregation,
+)
 from mdrack.ingestion.frame_captions import validate_frame_caption_artifact
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core import (
@@ -28,6 +33,7 @@ from mdrack_media import (
     TimedChunkingPolicy,
     TranscriptArtifact,
     TranscriptBatchBuilderInput,
+    WholeResourceTextPolicy,
     build_video_frame_caption_batch,
     build_video_transcript_batch,
     canonical_json,
@@ -123,6 +129,12 @@ class VideoCompositionService:
             resource_identifier=transcript.resource_id,
             normalization_fingerprint=transcript.normalization_fingerprint,
         )
+        whole_text_policy = WholeResourceTextPolicy(overflow="caller_split")
+        aggregation = _whole_text_aggregation(
+            sum(passage.token_count.count for passage in grouped.passages),
+            whole_text_policy,
+        )
+        include_whole = aggregation == "direct_text_v1" or vectors is not None
         transcript_input = TranscriptBatchBuilderInput(
             resource=descriptor,
             transcript=transcript,
@@ -131,13 +143,23 @@ class VideoCompositionService:
             chunking_policy=policy,
             grouper_fingerprint=grouped.grouper_fingerprint,
             embedding_fingerprint=None,
+            whole_text_policy=whole_text_policy if include_whole else None,
+            aggregation_fingerprint=(
+                _aggregation_fingerprint(aggregation, whole_text_policy)
+                if include_whole
+                else None
+            ),
         )
         lexical_transcript = build_video_transcript_batch(
             transcript_input,
             token_counter=self._counter,
             token_count_kind="estimated",
         )
-        transcript_ids = {unit.unit_id for unit in lexical_transcript.units}
+        transcript_ids = {
+            unit.unit_id
+            for unit in lexical_transcript.units
+            if aggregation == "direct_text_v1" or unit.unit_kind != "whole_resource"
+        }
         frame_ids = {item.frame_id for item in frames.observations}
         expected_ids = transcript_ids | frame_ids
         if vectors is not None and set(vectors) != expected_ids:
@@ -155,6 +177,8 @@ class VideoCompositionService:
                 vectors={unit_id: vectors[unit_id] for unit_id in transcript_ids},
             )
         )
+        if include_whole:
+            transcript_batch = _persist_whole_aggregation(transcript_batch, aggregation)
 
         frame_batch = None
         if frames.observations:
@@ -250,18 +274,35 @@ class VideoCompositionService:
         if embeddings:
             if self._provider is None or self._embedding_fingerprint is None:
                 raise EmbeddingError("embedding_provider_unavailable")
-            texts = [unit.text or "" for unit in lexical.units]
+            whole_unit = next(
+                (unit for unit in lexical.units if unit.unit_kind == "whole_resource"),
+                None,
+            )
+            aggregation = (
+                str(whole_unit.metadata["aggregation"])
+                if whole_unit is not None
+                else _whole_text_aggregation(
+                    sum(unit.token_count or 0 for unit in lexical.units if unit.unit_kind == "time_segment"),
+                    WholeResourceTextPolicy(overflow="caller_split"),
+                )
+            )
+            embedding_units = (
+                lexical.units
+                if aggregation == "direct_text_v1"
+                else tuple(unit for unit in lexical.units if unit.unit_kind != "whole_resource")
+            )
+            texts = [unit.text or "" for unit in embedding_units]
             try:
                 supplied = await self._provider.embed(texts, profile=self._profile)
             except EmbeddingError:
                 raise
             except Exception:
                 raise EmbeddingError("embedding_provider_error") from None
-            if len(supplied) != len(lexical.units):
+            if len(supplied) != len(embedding_units):
                 raise EmbeddingError("embedding_count_mismatch")
             vectors = {
-                unit.unit_id: _validated_vector(vector)
-                for unit, vector in zip(lexical.units, supplied, strict=True)
+                unit.unit_id: validate_embedding_vector(vector)
+                for unit, vector in zip(embedding_units, supplied, strict=True)
             }
             batch = self.prepare(
                 transcript,
@@ -304,15 +345,6 @@ class VideoCompositionService:
             vector_count=len(batch.vectors),
             space_id=batch.spaces[0].space_id if batch.spaces else None,
         )
-
-
-def _validated_vector(value: Sequence[float]) -> tuple[float, ...]:
-    if isinstance(value, (str, bytes, bytearray)):
-        raise EmbeddingError("invalid_embedding_vector")
-    vector = tuple(float(item) for item in value)
-    if not vector or any(not math.isfinite(item) for item in vector):
-        raise EmbeddingError("invalid_embedding_vector")
-    return vector
 
 
 __all__ = ["VideoCompositionResult", "VideoCompositionService"]

@@ -8,7 +8,7 @@ from typing import Any
 
 from mdrack.application.compatibility import create_application_storage, embedding_space_id
 from mdrack.application.indexing import IndexingService
-from mdrack.application.metadata_filters import MetadataFilters
+from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.application.query import ReadService
 from mdrack.application.resource_catalog import (
     MetadataCatalogService,
@@ -18,11 +18,18 @@ from mdrack.application.resource_catalog import (
 )
 from mdrack.application.resources import (
     DuplicateResourceResult,
+    ResourcePresetSearchResult,
     ResourceQueryScope,
     ResourceQueryService,
     SimilarResourceResult,
+    TextualSimilarityResult,
 )
-from mdrack.application.retrieval import RetrievalService
+from mdrack.application.retrieval import (
+    ResourcePresetSearchService,
+    ResourceSearchMode,
+    ResourceSearchPresetName,
+    RetrievalService,
+)
 from mdrack.application.transcript_ingestion import (
     TimedRetrievalMode,
     TimedRetrievalService,
@@ -191,6 +198,34 @@ class MDRackEngine:
             limit=limit,
         )
 
+    async def search_resource_content(
+        self,
+        query: str,
+        *,
+        preset: ResourceSearchPresetName = "balanced",
+        mode: ResourceSearchMode = "hybrid",
+        scope: SearchScope | None = None,
+        metadata_filters: MetadataFilters | None = None,
+        limit: int = 20,
+    ) -> ResourcePresetSearchResult:
+        """Search text-media branches with one explicit deterministic preset."""
+        return await ResourcePresetSearchService(
+            self._transcript_catalog(),
+            embedding_provider=self.embedding_provider,
+            embedding_fingerprint=self._transcript_embedding_fingerprint(),
+            profile=self.profile,
+            rrf_k=self.config.search.rrf_k,
+        ).search(
+            query,
+            preset=preset,
+            mode=mode,
+            scope=compile_metadata_filters(
+                metadata_filters or MetadataFilters(),
+                base_scope=scope,
+            ),
+            limit=limit,
+        )
+
     async def ingest_video(
         self,
         transcript: TranscriptArtifact,
@@ -300,6 +335,28 @@ class MDRackEngine:
         return self._resource_query_service().find_similar(
             query_unit_id,
             space_id,
+            scope=scope,
+            limit=limit,
+            exclude_same_resource=exclude_same_resource,
+        )
+
+    def find_textually_similar_resources(
+        self,
+        query_unit_id: str,
+        space_id: str,
+        *,
+        aggregation: str,
+        expected_fingerprint: str,
+        scope: ResourceQueryScope | None = None,
+        limit: int = 20,
+        exclude_same_resource: bool = True,
+    ) -> TextualSimilarityResult:
+        """Search explicit whole-resource vectors and label the basis as text."""
+        return self._resource_query_service().find_textual_similarity(
+            query_unit_id,
+            space_id,
+            aggregation=aggregation,
+            expected_fingerprint=expected_fingerprint,
             scope=scope,
             limit=limit,
             exclude_same_resource=exclude_same_resource,

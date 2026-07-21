@@ -14,9 +14,11 @@ from mdrack.application.resource_catalog import (
     ResourceCatalogError,
     ResourceCatalogErrorCode,
 )
+from mdrack.application.resources import FacetFilter, ResourceQueryScope, ResourceQueryService
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
+from mdrack_sqlite import SQLiteCatalog
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,16 @@ def _run(
         )
 
 
+def _facet_filters(values: tuple[str, ...]) -> tuple[FacetFilter, ...]:
+    parsed = []
+    for value in values:
+        namespace, separator, facet_value = value.partition("=")
+        if not separator or not namespace or not facet_value:
+            raise ValueError("facet_filter_invalid")
+        parsed.append(FacetFilter(namespace, facet_value))
+    return tuple(parsed)
+
+
 @click.group(name="resource")
 def resource() -> None:
     """Import, inspect, or delete one resource in an explicit clean catalog."""
@@ -138,6 +150,77 @@ def delete_resource(ctx: click.Context, resource_id: str, catalog_path: str) -> 
         catalog_path=catalog_path,
         action=lambda catalog: catalog.delete(resource_id).to_dict(),
     )
+
+
+@resource.command(name="similar")
+@click.argument("query_unit_id")
+@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
+@click.option("--space-id", required=True)
+@click.option("--embedding-fingerprint", required=True)
+@click.option(
+    "--aggregation",
+    type=click.Choice(["direct-text", "token-weighted-centroid"]),
+    required=True,
+)
+@click.option(
+    "--basis",
+    type=click.Choice(["textual-content"]),
+    default="textual-content",
+    show_default=True,
+)
+@click.option("--kind", "resource_kinds", multiple=True)
+@click.option("--namespace", "source_namespaces", multiple=True)
+@click.option("--facet-any", "facets_any", multiple=True, metavar="NAMESPACE=VALUE")
+@click.option("--facet-all", "facets_all", multiple=True, metavar="NAMESPACE=VALUE")
+@click.option("--facet-none", "facets_none", multiple=True, metavar="NAMESPACE=VALUE")
+@click.option("--limit", type=click.IntRange(min=1), default=20, show_default=True)
+@click.pass_context
+def similar_resource(
+    ctx: click.Context,
+    query_unit_id: str,
+    catalog_path: str,
+    space_id: str,
+    embedding_fingerprint: str,
+    aggregation: str,
+    basis: str,
+    resource_kinds: tuple[str, ...],
+    source_namespaces: tuple[str, ...],
+    facets_any: tuple[str, ...],
+    facets_all: tuple[str, ...],
+    facets_none: tuple[str, ...],
+    limit: int,
+) -> None:
+    """Find whole-resource similarity explicitly based on textual content."""
+    del basis
+    command = "resource similar"
+    try:
+        with SQLiteCatalog.open_readonly(catalog_path) as catalog:
+            result = ResourceQueryService(catalog).find_textual_similarity(
+                query_unit_id,
+                space_id,
+                aggregation=f"{aggregation.replace('-', '_')}_v1",
+                expected_fingerprint=embedding_fingerprint,
+                scope=ResourceQueryScope(
+                    resource_kinds=resource_kinds,
+                    source_namespaces=source_namespaces,
+                    facets_any=_facet_filters(facets_any),
+                    facets_all=_facet_filters(facets_all),
+                    facets_none=_facet_filters(facets_none),
+                ),
+                limit=limit,
+            )
+        logger.info(
+            "cli.resource.similar.completed",
+            extra={"status": "completed", "result_count": len(result.results)},
+        )
+        _output(ctx, envelope_success(result.to_dict(), command=command))
+    except Exception as error:
+        _failure(
+            ctx,
+            command=command,
+            operation="similarity",
+            error=error,
+        )
 
 
 __all__ = ["resource"]

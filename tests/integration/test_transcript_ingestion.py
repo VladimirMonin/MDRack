@@ -347,6 +347,14 @@ async def test_transcript_provider_finishes_before_atomic_replace_and_all_modes_
             source_locator=Locator("external_record", {"source_ref": "audio-1"}),
             chunking_policy=_policy(),
         )
+        whole_unit_id = str(
+            sqlite_catalog.connection.execute(
+                "SELECT unit_id FROM core_search_units "
+                "WHERE resource_id=? AND unit_kind='whole_resource'",
+                (resource,),
+            ).fetchone()[0]
+        )
+        stored_whole = sqlite_catalog.read_unit(whole_unit_id)
         retrieval = TimedRetrievalService(
             catalog,
             embedding_provider=provider,
@@ -368,6 +376,8 @@ async def test_transcript_provider_finishes_before_atomic_replace_and_all_modes_
     assert provider.completed
     assert ingested.vector_count == ingested.unit_count > 0
     assert ingested.space_id is not None
+    assert stored_whole is not None
+    assert stored_whole.metadata["aggregation"] == "direct_text_v1"
     assert text.results[0].evidence[0].start_ms == 1_000
     assert text.results[0].evidence[0].end_ms == 2_000
     assert text.results[0].evidence[0].track == "audio"
@@ -380,6 +390,63 @@ async def test_transcript_provider_finishes_before_atomic_replace_and_all_modes_
     assert "private opening words" not in captured
     assert "transaction boundary explained" not in captured
     assert "audio-1" not in captured
+
+
+@pytest.mark.asyncio
+async def test_long_transcript_persists_token_weighted_centroid_identity(
+    tmp_path: Path,
+) -> None:
+    resource = resource_id("fixture", "long-centroid")
+    source = json.dumps(
+        {
+            "segments": [
+                {
+                    "start": float(index),
+                    "end": float(index + 1),
+                    "text": " ".join(f"token-{index}-{token}" for token in range(500)),
+                }
+                for index in range(17)
+            ]
+        },
+        separators=(",", ":"),
+    ).encode()
+    artifact = read_transcript(
+        source,
+        resource_id=resource,
+        producer_fingerprint=ProducerFingerprint.from_payload(
+            {"producer": "long-fixture", "version": 1}
+        ),
+    ).artifact
+    fingerprint = EmbeddingFingerprint.from_payload(
+        {"provider": "fake", "dimensions": 8, "version": 1}
+    ).value
+
+    with SQLiteCatalog.create(tmp_path / "centroid.sqlite3") as catalog:
+        result = await TranscriptIngestionService(
+            catalog,
+            embedding_provider=FakeEmbeddingProvider(dimensions=8),
+            embedding_fingerprint=fingerprint,
+        ).ingest(
+            artifact,
+            resource_kind="audio",
+            media_type="audio/wav",
+            source_namespace="fixture",
+            source_locator=Locator("external_record", {"source_ref": "long-centroid"}),
+        )
+        whole_unit_id = str(
+            catalog.connection.execute(
+                "SELECT unit_id FROM core_search_units "
+                "WHERE resource_id=? AND unit_kind='whole_resource'",
+                (resource,),
+            ).fetchone()[0]
+        )
+        whole_unit = catalog.read_unit(whole_unit_id)
+        whole_vector = catalog.read_vector(whole_unit_id, result.space_id or "")
+
+    assert whole_unit is not None
+    assert whole_unit.metadata["aggregation"] == "token_weighted_centroid_v1"
+    assert whole_vector is not None
+    assert result.vector_count == result.unit_count
 
 
 @pytest.mark.asyncio

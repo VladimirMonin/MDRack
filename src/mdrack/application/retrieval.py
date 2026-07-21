@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Literal, cast
 
 from mdrack.application.compatibility import CoreCompatibilityMapper
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
+from mdrack.application.resources import (
+    ResourcePresetEvidence,
+    ResourcePresetSearchItem,
+    ResourcePresetSearchResult,
+)
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 from mdrack.domain.retrieval import (
     RetrievalCandidate,
@@ -18,9 +26,13 @@ from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack.ports.storage import RetrievalStorage
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_core.domain import (
+    TARGET_RESOURCE,
     TARGET_UNIT,
     BranchExecutionError,
     BranchScopeOverride,
+    CatalogExecutionError,
+    EmbeddingSpaceRecord,
+    ErrorCategory,
     LexicalBranch,
     RankedCandidate,
     SearchRequest,
@@ -29,6 +41,317 @@ from mdrack_core.domain import (
 )
 
 logger = logging.getLogger(__name__)
+
+ResourceSearchMode = Literal["text", "semantic", "hybrid"]
+ResourceSearchPresetName = Literal["speech_first", "balanced", "frames_first"]
+
+_CATALOG_ERROR_TO_DEGRADED_REASON = {
+    ErrorCategory.CATALOG_ERROR: "adapter_error",
+    ErrorCategory.ADAPTER_TIMEOUT: "adapter_timeout",
+}
+
+
+def validate_embedding_vector(value: object) -> tuple[float, ...]:
+    """Return one finite, non-empty provider vector or fail with the stable app error."""
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise EmbeddingError("invalid_embedding_vector")
+    try:
+        vector = tuple(float(item) for item in value)
+    except (TypeError, ValueError):
+        raise EmbeddingError("invalid_embedding_vector") from None
+    if not vector or any(not math.isfinite(item) for item in vector):
+        raise EmbeddingError("invalid_embedding_vector")
+    return vector
+
+
+@dataclass(frozen=True)
+class ResourceSearchPreset:
+    """Deterministic app-owned weights for text-first media retrieval."""
+
+    transcript_weight: float
+    frame_caption_weight: float
+    metadata_weight: float
+    lexical_fraction: float = 0.4
+    semantic_fraction: float = 0.6
+
+
+SEARCH_PRESETS: dict[str, ResourceSearchPreset] = {
+    "speech_first": ResourceSearchPreset(1.0, 0.35, 0.15),
+    "balanced": ResourceSearchPreset(1.0, 1.0, 0.20),
+    "frames_first": ResourceSearchPreset(0.6, 1.0, 0.15),
+}
+
+
+def build_resource_search_request(
+    query: str,
+    *,
+    preset: str,
+    mode: ResourceSearchMode,
+    query_vector: tuple[float, ...] | None = None,
+    space_id: str | None = None,
+    expected_fingerprint: str | None = None,
+    scope: SearchScope | None = None,
+    limit: int = 20,
+    rrf_k: int = 60,
+) -> SearchRequest:
+    """Build the five bounded v1.1 branches without owning fusion or grouping."""
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("query must be a non-empty string")
+    if preset not in SEARCH_PRESETS:
+        raise ValueError("preset must be speech_first, balanced, or frames_first")
+    if mode not in {"text", "semantic", "hybrid"}:
+        raise ValueError("mode must be text, semantic, or hybrid")
+    if type(limit) is not int or limit < 1:
+        raise ValueError("limit must be a positive integer")
+    if type(rrf_k) is not int or rrf_k < 1:
+        raise ValueError("rrf_k must be a positive integer")
+    if mode in {"semantic", "hybrid"} and (
+        query_vector is None or space_id is None or expected_fingerprint is None
+    ):
+        raise ValueError("semantic branches require a vector, space_id, and fingerprint")
+
+    weights = SEARCH_PRESETS[preset]
+    candidate_limit = max(100, limit * 10)
+    lexical: list[LexicalBranch] = []
+    vectors: list[VectorBranch] = []
+
+    def branch_weight(signal_weight: float, fraction: float) -> float:
+        return round(signal_weight * fraction, 12)
+
+    if mode in {"text", "hybrid"}:
+        lexical.extend(
+            (
+                LexicalBranch(
+                    "transcript_text",
+                    query,
+                    weight=branch_weight(weights.transcript_weight, weights.lexical_fraction),
+                    candidate_limit=candidate_limit,
+                    scope_override=BranchScopeOverride(
+                        representation_kinds=("timed_passage",),
+                        unit_kinds=("time_segment",),
+                    ),
+                ),
+                LexicalBranch(
+                    "frame_caption_text",
+                    query,
+                    weight=branch_weight(weights.frame_caption_weight, weights.lexical_fraction),
+                    candidate_limit=candidate_limit,
+                    scope_override=BranchScopeOverride(
+                        representation_kinds=("frame_caption",),
+                        unit_kinds=("frame",),
+                    ),
+                ),
+                LexicalBranch(
+                    "metadata_text",
+                    query,
+                    weight=weights.metadata_weight,
+                    candidate_limit=candidate_limit,
+                    scope_override=BranchScopeOverride(
+                        representation_kinds=("metadata_text",),
+                        unit_kinds=("whole_resource",),
+                    ),
+                ),
+            )
+        )
+    if mode in {"semantic", "hybrid"}:
+        assert query_vector is not None
+        assert space_id is not None
+        assert expected_fingerprint is not None
+        vectors.extend(
+            (
+                VectorBranch(
+                    "transcript_semantic",
+                    space_id,
+                    query_vector,
+                    weight=branch_weight(weights.transcript_weight, weights.semantic_fraction),
+                    candidate_limit=candidate_limit,
+                    expected_fingerprint=expected_fingerprint,
+                    scope_override=BranchScopeOverride(
+                        representation_kinds=("timed_passage",),
+                        unit_kinds=("time_segment",),
+                    ),
+                ),
+                VectorBranch(
+                    "frame_caption_semantic",
+                    space_id,
+                    query_vector,
+                    weight=branch_weight(weights.frame_caption_weight, weights.semantic_fraction),
+                    candidate_limit=candidate_limit,
+                    expected_fingerprint=expected_fingerprint,
+                    scope_override=BranchScopeOverride(
+                        representation_kinds=("frame_caption",),
+                        unit_kinds=("frame",),
+                    ),
+                ),
+            )
+        )
+    return SearchRequest(
+        lexical_branches=tuple(lexical),
+        vector_branches=tuple(vectors),
+        scope=scope or SearchScope(),
+        target=TARGET_RESOURCE,
+        limit=limit,
+        rrf_k=rrf_k,
+        allow_partial=True,
+    )
+
+
+class ResourcePresetSearchService:
+    """Prepare app-side query vectors, then delegate grouping and RRF to core."""
+
+    def __init__(
+        self,
+        catalog: object,
+        *,
+        embedding_provider: EmbeddingProvider | None = None,
+        embedding_fingerprint: str | None = None,
+        profile: str = "default",
+        rrf_k: int = 60,
+    ) -> None:
+        if not callable(getattr(catalog, "search_lexical", None)):
+            raise TypeError("catalog must support lexical search")
+        if not callable(getattr(catalog, "search_vector", None)):
+            raise TypeError("catalog must support vector search")
+        self._catalog = catalog
+        self._provider = embedding_provider
+        self._fingerprint = embedding_fingerprint
+        self._profile = profile
+        self._rrf_k = rrf_k
+
+    async def search(
+        self,
+        query: str,
+        *,
+        preset: ResourceSearchPresetName = "balanced",
+        mode: ResourceSearchMode = "hybrid",
+        scope: SearchScope | None = None,
+        limit: int = 20,
+    ) -> ResourcePresetSearchResult:
+        vector: tuple[float, ...] | None = None
+        space_id: str | None = None
+        degraded_reason: str | None = None
+        effective_mode = mode
+        if mode in {"semantic", "hybrid"}:
+            if self._provider is None or self._fingerprint is None:
+                degraded_reason = "embedding_provider_unavailable"
+            else:
+                try:
+                    vector = validate_embedding_vector(
+                        await self._provider.embed_query(query, profile=self._profile)
+                    )
+                except EmbeddingError:
+                    degraded_reason = "embedding_provider_error"
+                except Exception:
+                    degraded_reason = "semantic_search_error"
+                if vector:
+                    resolver = getattr(self._catalog, "resolve_embedding_space", None)
+                    try:
+                        space = (
+                            resolver(fingerprint=self._fingerprint, dimensions=len(vector))
+                            if callable(resolver)
+                            else None
+                        )
+                    except CatalogExecutionError as error:
+                        degraded_reason = _CATALOG_ERROR_TO_DEGRADED_REASON[error.category]
+                        space = None
+                    except TimeoutError:
+                        degraded_reason = "adapter_timeout"
+                        space = None
+                    except Exception:
+                        degraded_reason = "adapter_error"
+                        space = None
+                    if space is None:
+                        degraded_reason = degraded_reason or "incompatible_embedding_profile"
+                        vector = None
+                    elif not isinstance(space, EmbeddingSpaceRecord):
+                        degraded_reason = "incompatible_embedding_profile"
+                        vector = None
+                    else:
+                        resolved_space = cast(EmbeddingSpaceRecord, space)
+                        if (
+                            resolved_space.fingerprint != self._fingerprint
+                            or resolved_space.dimensions != len(vector)
+                        ):
+                            degraded_reason = "incompatible_embedding_profile"
+                            vector = None
+                        else:
+                            space_id = resolved_space.space_id
+        if vector is None and mode == "semantic":
+            return ResourcePresetSearchResult(
+                query,
+                mode,
+                preset,
+                (),
+                degraded=True,
+                degraded_reason=degraded_reason or "branch_unavailable",
+            )
+        if vector is None and mode == "hybrid":
+            effective_mode = "text"
+        request = build_resource_search_request(
+            query,
+            preset=preset,
+            mode=effective_mode,
+            query_vector=vector,
+            space_id=space_id,
+            expected_fingerprint=self._fingerprint if vector is not None else None,
+            scope=scope,
+            limit=limit,
+            rrf_k=self._rrf_k,
+        )
+        try:
+            result = CoreRetrievalService(self._catalog).search(request)  # type: ignore[arg-type]
+        except BranchExecutionError as error:
+            degraded_reason = error.category.value
+            if effective_mode == "semantic":
+                return ResourcePresetSearchResult(
+                    query,
+                    mode,
+                    preset,
+                    (),
+                    degraded=True,
+                    degraded_reason=degraded_reason,
+                )
+            lexical_request = build_resource_search_request(
+                query,
+                preset=preset,
+                mode="text",
+                scope=scope,
+                limit=limit,
+                rrf_k=self._rrf_k,
+            )
+            try:
+                result = CoreRetrievalService(self._catalog).search(lexical_request)  # type: ignore[arg-type]
+            except BranchExecutionError as lexical_error:
+                return ResourcePresetSearchResult(
+                    query,
+                    mode,
+                    preset,
+                    (),
+                    degraded=True,
+                    degraded_reason=lexical_error.category.value,
+                )
+        reason = degraded_reason or (
+            result.degradations[0].category.value if result.degradations else None
+        )
+        return ResourcePresetSearchResult(
+            query,
+            mode,
+            preset,
+            tuple(
+                ResourcePresetSearchItem(
+                    item.resource_id,
+                    item.score,
+                    item.rank,
+                    tuple(
+                        ResourcePresetEvidence.from_candidate(candidate)
+                        for candidate in item.evidence
+                    ),
+                )
+                for item in result.items
+            ),
+            degraded=reason is not None,
+            degraded_reason=reason,
+        )
 
 
 class InvalidTextSearchError(ValueError):
@@ -443,7 +766,11 @@ class RetrievalService:
         except Exception:
             logger.warning("retrieval.semantic.degraded reason=semantic_search_error")
             return None, "semantic_search_error"
-        return tuple(float(value) for value in vector), None
+        try:
+            return validate_embedding_vector(vector), None
+        except EmbeddingError:
+            logger.warning("retrieval.semantic.degraded reason=embedding_provider_error")
+            return None, "embedding_provider_error"
 
     def _resolve_embedding_space(self) -> str | None:
         resolver = getattr(self.storage, "resolve_embedding_space", None)
