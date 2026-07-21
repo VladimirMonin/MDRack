@@ -1,7 +1,7 @@
 """Optional, opt-in text-generation provider contracts.
 
 The adapters in this module are deliberately not composed into the default
-MDRack engine.  They share an OpenAI-compatible request shape, but keep all
+MDRack engine. They share an OpenAI-compatible request shape, but keep all
 network behavior behind an injected transport so the contract suite remains
 fully offline.
 """
@@ -17,6 +17,8 @@ from typing import Any, Mapping, Protocol
 from urllib.parse import urlsplit
 
 import httpx
+
+from mdrack.application.artifact_cache import ArtifactCache, ArtifactCacheKey
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,18 @@ class GenerationResult:
     attempts: int
 
 
+@dataclass(frozen=True)
+class ProviderCacheContext:
+    """Caller-owned opaque identity for one provider artifact request."""
+
+    source_fingerprint: str
+    producer_fingerprint: str
+    prompt_fingerprint: str
+    config_fingerprint: str
+    preprocessing_fingerprint: str
+    artifact_kind: str
+
+
 class OptionalTextProvider:
     """Bounded OpenAI-compatible provider with offline-injectable transport."""
 
@@ -96,6 +110,7 @@ class OptionalTextProvider:
         max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS,
         max_cache_entries: int = DEFAULT_MAX_CACHE_ENTRIES,
         transport: ProviderTransport | None = None,
+        artifact_cache: ArtifactCache | None = None,
     ) -> None:
         parsed = urlsplit(endpoint)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -120,6 +135,7 @@ class OptionalTextProvider:
         self.max_output_chars = max_output_chars
         self.max_cache_entries = max_cache_entries
         self._transport = transport or _httpx_transport
+        self._artifact_cache = artifact_cache
         self._cache: OrderedDict[str, str] = OrderedDict()
 
     def _headers(self) -> dict[str, str]:
@@ -142,25 +158,88 @@ class OptionalTextProvider:
         ).encode("utf-8")
         return hashlib.sha256(canonical).hexdigest()
 
+    @staticmethod
+    def _opaque_fingerprint(payload: Mapping[str, Any] | str) -> str:
+        if isinstance(payload, str):
+            canonical = payload.encode("utf-8")
+        else:
+            canonical = json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+    def cache_key(
+        self,
+        prompt: str,
+        max_tokens: int,
+        context: ProviderCacheContext,
+    ) -> ArtifactCacheKey:
+        """Build complete durable identity and reject stale prompt metadata."""
+        prompt_fingerprint = self._opaque_fingerprint(prompt)
+        if context.prompt_fingerprint != prompt_fingerprint:
+            raise OptionalProviderError("invalid_cache_identity")
+        model_fingerprint = self._opaque_fingerprint(
+            {
+                "provider": self.provider_name,
+                "model": self.model,
+                "endpoint_family": "openai_chat_completions",
+            }
+        )
+        runtime_config_fingerprint = self._opaque_fingerprint(
+            {
+                "caller_config_fingerprint": context.config_fingerprint,
+                "max_tokens": max_tokens,
+                "max_output_chars": self.max_output_chars,
+            }
+        )
+        return ArtifactCacheKey(
+            artifact_kind=context.artifact_kind,
+            source_fingerprint=context.source_fingerprint,
+            producer_fingerprint=context.producer_fingerprint,
+            model_fingerprint=model_fingerprint,
+            prompt_fingerprint=prompt_fingerprint,
+            config_fingerprint=runtime_config_fingerprint,
+            preprocessing_fingerprint=context.preprocessing_fingerprint,
+        )
+
     def clear_cache(self) -> None:
-        """Drop all cached outputs and retain no provider response data."""
+        """Drop process-local outputs without destructively purging durable artifacts."""
         self._cache.clear()
 
     def cache_size(self) -> int:
-        """Return the number of cached entries without exposing their keys."""
+        """Return process-local entry count without exposing keys."""
         return len(self._cache)
 
-    async def generate(self, prompt: str, *, max_tokens: int = 256) -> GenerationResult:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 256,
+        cache_context: ProviderCacheContext | None = None,
+    ) -> GenerationResult:
         """Generate bounded text, retrying only transport/server failures."""
         if not isinstance(prompt, str) or not prompt:
             raise OptionalProviderError("invalid_input")
         if len(prompt) > self.max_input_chars or max_tokens < 1 or max_tokens > self.max_output_chars:
             raise OptionalProviderError("input_limit")
-        fingerprint = self._fingerprint(prompt, max_tokens)
+        durable_key = self.cache_key(prompt, max_tokens, cache_context) if cache_context is not None else None
+        fingerprint = durable_key.digest if durable_key is not None else self._fingerprint(prompt, max_tokens)
         cached = self._cache.get(fingerprint)
         if cached is not None:
             self._cache.move_to_end(fingerprint)
             return GenerationResult(cached, self.provider_name, self.model, fingerprint, True, 0)
+
+        if durable_key is not None and self._artifact_cache is not None:
+            durable = self._artifact_cache.lookup(durable_key)
+            if durable.payload is not None:
+                durable_text = self._decode_cached_text(durable.payload)
+                if durable_text is not None and len(durable_text) <= self.max_output_chars:
+                    self._put_cache(fingerprint, durable_text)
+                    return GenerationResult(durable_text, self.provider_name, self.model, fingerprint, True, 0)
+                self._artifact_cache.discard(durable_key)
 
         payload = {
             "model": self.model,
@@ -192,6 +271,20 @@ class OptionalTextProvider:
             if len(text) > self.max_output_chars:
                 raise OptionalProviderError("output_limit")
             self._put_cache(fingerprint, text)
+            if durable_key is not None and self._artifact_cache is not None:
+                cache_payload = json.dumps(
+                    {"schema": "mdrack.provider-text.v1", "text": text},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+                stored = self._artifact_cache.store(durable_key, cache_payload)
+                if stored.state == "exists":
+                    winning = self._artifact_cache.lookup(durable_key)
+                    winning_text = self._decode_cached_text(winning.payload) if winning.payload is not None else None
+                    if winning_text is not None:
+                        text = winning_text
+                        self._put_cache(fingerprint, text)
             logger.info(
                 "optional_provider.completed provider=%s model=%s attempts=%d cached=false output_chars=%d",
                 self.provider_name,
@@ -201,6 +294,17 @@ class OptionalTextProvider:
             )
             return GenerationResult(text, self.provider_name, self.model, fingerprint, False, attempts)
         raise OptionalProviderError("server_error")
+
+    @staticmethod
+    def _decode_cached_text(payload: bytes) -> str | None:
+        try:
+            decoded = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(decoded, dict) or decoded.get("schema") != "mdrack.provider-text.v1":
+            return None
+        text = decoded.get("text")
+        return text if isinstance(text, str) else None
 
     @staticmethod
     def _extract_text(payload: Mapping[str, Any]) -> str:
@@ -242,6 +346,7 @@ __all__ = [
     "OpenRouterTextProvider",
     "OptionalProviderError",
     "OptionalTextProvider",
+    "ProviderCacheContext",
     "ProviderHTTPResponse",
     "ProviderTransport",
 ]

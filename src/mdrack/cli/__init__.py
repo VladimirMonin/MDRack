@@ -10,6 +10,7 @@ from typing import Any
 import click
 
 from mdrack import __version__
+from mdrack.cli.commands.cache import cache as cache_group
 from mdrack.cli.commands.eval import retrieval as eval_retrieval
 from mdrack.cli.commands.files import files as files_group
 from mdrack.cli.commands.images import image as image_group
@@ -219,6 +220,7 @@ ingest_group.add_command(ingest_video)
 # Explicit direct-image lifecycle is separate from Markdown scan.
 main.add_command(image_group)
 main.add_command(metadata_group)
+main.add_command(cache_group)
 main.add_command(resource_group)
 main.add_command(resources_group)
 main.add_command(similar_command, name="similar")

@@ -130,6 +130,16 @@ class MetadataConfig(BaseModel):
     model_config = {"frozen": True}
 
 
+class CacheConfig(BaseModel):
+    """Standalone artifact-cache settings outside the retrieval catalog."""
+
+    enabled: bool = True
+    directory: str = Field(default=".mdrack/artifacts", min_length=1)
+    max_entry_bytes: int = Field(default=100 * 1024 * 1024, ge=1)
+
+    model_config = {"frozen": True}
+
+
 class EmbeddingConfig(BaseModel):
     """Embedding provider configuration."""
 
@@ -187,6 +197,7 @@ class MDRackConfig(BaseModel):
     scan: ScanConfig = Field(default_factory=ScanConfig)
     parsing: ParsingConfig = Field(default_factory=ParsingConfig)
     metadata: MetadataConfig = Field(default_factory=MetadataConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)

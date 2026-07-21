@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from mdrack.config.defaults import get_defaults
 from mdrack.config.models import (
+    CacheConfig,
     ChunkingConfig,
     EmbeddingConfig,
     MDRackConfig,
@@ -32,6 +33,7 @@ _SECTION_MAP: dict[str, type[BaseModel]] = {
     "scan": ScanConfig,
     "parsing": ParsingConfig,
     "metadata": MetadataConfig,
+    "cache": CacheConfig,
     "chunking": ChunkingConfig,
     "embedding": EmbeddingConfig,
     "search": SearchConfig,
@@ -181,6 +183,7 @@ def _build_config(raw: dict[str, Any]) -> MDRackConfig:
         scan=ScanConfig(**raw.get("scan", {})),  # type: ignore[arg-type]
         parsing=ParsingConfig(**raw.get("parsing", {})),  # type: ignore[arg-type]
         metadata=MetadataConfig(**raw.get("metadata", {})),  # type: ignore[arg-type]
+        cache=CacheConfig(**raw.get("cache", {})),  # type: ignore[arg-type]
         chunking=ChunkingConfig(**raw.get("chunking", {})),  # type: ignore[arg-type]
         embedding=EmbeddingConfig(**raw.get("embedding", {})),  # type: ignore[arg-type]
         search=SearchConfig(**raw.get("search", {})),  # type: ignore[arg-type]
