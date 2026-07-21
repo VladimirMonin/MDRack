@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mdrack"
-version = "1.1.0"
+version = "1.2.0"
 description = "Local command-line Markdown knowledge rack for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"

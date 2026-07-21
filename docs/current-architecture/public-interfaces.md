@@ -13,6 +13,7 @@ classDiagram
         +search_text(query, limit, offset) RetrievalResult
         +search_semantic(query, limit) RetrievalResult
         +search_hybrid(query, limit, reranker) RetrievalResult
+        +search_unified(query, scope, mode, limit) UnifiedTextSearchResult
         +ingest_image(path, resource_id, source_namespace, source_ref) ImageIngestionResult
         +search_images_text(query, limit) ImageSearchResult
         +search_images_semantic(query, limit) ImageSearchResult
@@ -20,6 +21,7 @@ classDiagram
         +delete_image(resource_id)
         +find_resource_duplicates(resource_id, scope, limit) DuplicateResourceResult
         +find_similar_resources(unit_id, space_id, scope, limit) SimilarResourceResult
+        +find_similar_resource(resource_id, scope, limit) UnifiedTextSimilarityResult
         +import_resource_manifest(payload) ResourceImportResult
         +export_resource_manifest(resource_id, options) bytes
         +get_file_by_path(relative_path) dict
@@ -101,6 +103,8 @@ Live command registration exposes:
 | `init` | Create the store and apply migrations. |
 | `scan` | Change-detect and index Markdown with LM Studio or test-only fake composition where exposed. |
 | `search` | Text, semantic, or hybrid retrieval. |
+| `search --scope all\|notes\|audio\|video\|frames\|images` | Unified 1.2 resource-level text retrieval over the ready generation. |
+| `find-similar RESOURCE_ID` | Provider-free 1.2 textual whole-resource similarity by logical resource ID. |
 | `read chunk` | Read a public logical chunk, optionally with neighbors. |
 | `read section` | Read a section and its chunks by public logical section ID. |
 | `read file` | Read file metadata and sections by public logical file ID. |
@@ -130,11 +134,13 @@ application degradation states to command errors; see [retrieval](retrieval.md).
 
 - scan with optional force reindex;
 - text, semantic, and hybrid search;
+- unified text search over notes, audio/video transcripts, frame captions, and image text;
 - file lookup by relative path;
 - chunk lookup by logical ID;
 - source-locator lookup;
 - explicit direct-image ingest/search/delete;
 - exact duplicate and whole-resource vector similarity discovery;
+- provider-free unified textual whole-resource similarity by logical resource ID;
 - active-catalog manifest-v1 import and deterministic semantic export;
 - explicit or context-managed close.
 
@@ -150,6 +156,11 @@ source files, or the network.
 The engine imports no Click modules. By default it composes
 `SQLiteIndexStorage`, while callers may inject compatible storage/read/search
 ports and an embedding provider.
+
+The additive 1.2 unified search contract is documented in
+[v1.2 unified text search](../contracts/v1.2-unified-search.md). It uses typed
+resource scopes and portable evidence only; `frames` is query-search-only and is
+not a resource-level similarity scope.
 
 ## Identity and DTO boundary
 

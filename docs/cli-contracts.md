@@ -482,6 +482,56 @@ lookup remains separate.
 - Semantic search loads all vectors into memory and performs linear-scan
   cosine similarity.
 
+### 3f. Unified text search
+
+```
+mdrack search <query> --scope all|notes|audio|video|frames|images
+  [--mode text|semantic|hybrid] [--limit N] [--provider lmstudio|fake]
+```
+
+Providing `--scope` selects the 1.2 unified resource-level text contract over a
+ready resource-core generation. `notes`, `audio`, `video`, `frames`, and `images`
+select only their matching textual material; `video` excludes frame captions and
+`frames` selects only frame-caption text. `all` is the union of those textual
+representations. It does not compare pixels, audio waves, or other raw-media
+features.
+
+The success data contains `query`, `mode`, `scope`, `target="resource"`,
+`results`, `total_count`, `degraded`, and `degraded_reason`. Each result contains
+only `resource_id`, `resource_kind`, score/rank, and bounded portable evidence.
+Text mode is provider-free. Semantic mode returns an empty degraded result if a
+compatible provider/vector space is unavailable; hybrid retains lexical results
+when only its semantic branch is unavailable. Result ordering is deterministic
+for a fixed ready generation, query, scope, and persisted vectors.
+
+`--scope` cannot be combined with `--preset`, non-unit `--target`, metadata
+filters, or low-level resource scope filters. Invalid combinations return:
+
+```json
+{"ok":false,"error":{"message":"Unified search options are invalid","code":"VALIDATION_ERROR"},"meta":{"command":"search"}}
+```
+
+### 3g. Unified provider-free resource similarity
+
+```
+mdrack find-similar <resource-id> [--scope all|notes|audio|video|images] [--limit N]
+```
+
+This command resolves one persisted textual whole-resource vector from the
+logical resource ID and never calls an embedding provider. It returns
+`query_resource_id`, `scope`, resource-level results, `total_count`, and stable
+degradation fields using the same privacy-safe evidence shape as unified search.
+Missing/ambiguous textual identity, incompatible space, or adapter failure yields
+an empty degraded result; no match is fabricated. Visual and acoustic vectors are
+excluded. `frames` is intentionally invalid because frame captions have no
+whole-resource textual similarity identity.
+
+Invalid options return:
+
+```json
+{"ok":false,"error":{"message":"Unified similarity options are invalid","code":"VALIDATION_ERROR"},"meta":{"command":"find-similar"}}
+```
+
 ---
 
 ## 4. `mdrack read chunk`

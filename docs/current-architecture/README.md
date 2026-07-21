@@ -27,6 +27,7 @@ When sources disagree, use this order:
 ## Supporting current contracts
 
 - [CLI contracts](../cli-contracts.md)
+- [v1.2 unified text search](../contracts/v1.2-unified-search.md)
 - [ADR-0001: reranking deferred](../decisions/0001-reranking-deferred.md)
 - [ADR-0002: provider/storage-neutral core](../decisions/0002-provider-storage-neutral-core.md)
 - [ADR-0003: core 1.0 RC contract](../decisions/0003-core-1.0-rc-contract.md)

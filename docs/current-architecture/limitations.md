@@ -11,6 +11,10 @@ This page is a current-state boundary, not a roadmap promise.
 - Audio and video retrieval consumes supplied timed transcripts and frame-caption
   text. MDRack does not transcribe raw audio, decode media, or perform acoustic,
   pixel, or visual-similarity search.
+- Unified 1.2 retrieval is text-first: it searches Markdown text, supplied audio/
+  video transcripts, frame-caption text, and explicit image caption/OCR text. Its
+  `find-similar` command reuses stored textual whole-resource vectors only; it does
+  not call a provider and does not accept the frame-only query scope.
 - Production reranking is unsupported. Non-null reranker injection and rerank
   requests fail closed; rerank result fields remain null.
 - Standard Markdown hybrid retrieval applies configured `text_weight` and
@@ -74,6 +78,9 @@ extension inferred from an existing protocol or reserved field.
   separate destructive authorization.
 - Linux unit/offline, local SQLite/filesystem, and installed-wheel evidence does
   not prove real-source safety, live external providers, or Windows execution.
+- A private real-corpus unified-search smoke is a separate explicit data-
+  authorization boundary. The 1.2 offline release evidence does not claim that
+  boundary, raw-media recognition, or live LM Studio semantic quality.
 
 ## Related current documentation
 
