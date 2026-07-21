@@ -187,6 +187,50 @@ def _policy() -> TimedChunkingPolicy:
     )
 
 
+def test_default_ingestion_flags_oversized_atom_without_losing_timing(tmp_path: Path) -> None:
+    resource = resource_id("fixture", "oversized-timed-atom")
+    source = json.dumps(
+        {
+            "language": "ru",
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 130.0,
+                    "text": "длинный фрагмент с точной временной привязкой",
+                }
+            ],
+        },
+        separators=(",", ":"),
+    ).encode()
+    artifact = read_transcript(
+        source,
+        resource_id=resource,
+        producer_fingerprint=ProducerFingerprint.from_payload(
+            {"producer": "fixture", "version": 1}
+        ),
+    ).artifact
+
+    with SQLiteCatalog.create(tmp_path / "oversized.sqlite3") as catalog:
+        batch = TranscriptIngestionService(catalog).prepare(
+            artifact,
+            resource_kind="video",
+            media_type="video/mp4",
+            source_namespace="fixture",
+            source_locator=Locator(
+                "external_record", {"source_ref": "oversized-timed-atom"}
+            ),
+        )
+
+    passage = next(unit for unit in batch.units if unit.unit_kind == "time_segment")
+    assert passage.evidence_locator.payload == {
+        "start_ms": 0,
+        "end_ms": 130_000,
+        "track": "video",
+    }
+    assert passage.metadata["unsplittable"] is True
+    assert passage.metadata["hard_limit_exceeded"] is True
+
+
 def test_default_estimated_and_injected_exact_token_provenance_change_identity(
     tmp_path: Path,
     transcript_source: bytes,

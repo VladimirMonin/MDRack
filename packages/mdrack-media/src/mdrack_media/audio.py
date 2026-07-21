@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping, Sequence
+from typing import Literal
 
 from mdrack_core import (
     MODALITY_TEXT,
@@ -53,6 +54,7 @@ def _build_transcript_batch(
     vectors: Mapping[str, Sequence[float]] | None = None,
     metric: str = "cosine",
     token_count_kind: str = TOKEN_COUNT_EXACT,
+    unsplittable: Literal["reject", "flag"] = "reject",
     resource_kind: str,
     track: str,
 ) -> PreparedResourceBatch:
@@ -82,6 +84,7 @@ def _build_transcript_batch(
         token_count_kind=token_count_kind,
         resource_identifier=input_value.resource.resource_id,
         normalization_fingerprint=input_value.transcript.normalization_fingerprint,
+        unsplittable=unsplittable,
     )
     if grouped.grouper_fingerprint != input_value.grouper_fingerprint:
         raise ValueError("grouper_fingerprint does not match the effective grouping policy")
@@ -238,6 +241,7 @@ def build_audio_transcript_batch(
     vectors: Mapping[str, Sequence[float]] | None = None,
     metric: str = "cosine",
     token_count_kind: str = TOKEN_COUNT_EXACT,
+    unsplittable: Literal["reject", "flag"] = "reject",
 ) -> PreparedResourceBatch:
     """Build an immutable audio transcript graph with audio seek evidence."""
     return _build_transcript_batch(
@@ -246,6 +250,7 @@ def build_audio_transcript_batch(
         vectors=vectors,
         metric=metric,
         token_count_kind=token_count_kind,
+        unsplittable=unsplittable,
         resource_kind=RESOURCE_AUDIO,
         track=TRACK_AUDIO,
     )
@@ -258,6 +263,7 @@ def build_video_transcript_batch(
     vectors: Mapping[str, Sequence[float]] | None = None,
     metric: str = "cosine",
     token_count_kind: str = TOKEN_COUNT_EXACT,
+    unsplittable: Literal["reject", "flag"] = "reject",
 ) -> PreparedResourceBatch:
     """Build an immutable video transcript graph with video seek evidence."""
     return _build_transcript_batch(
@@ -266,6 +272,7 @@ def build_video_transcript_batch(
         vectors=vectors,
         metric=metric,
         token_count_kind=token_count_kind,
+        unsplittable=unsplittable,
         resource_kind=RESOURCE_VIDEO,
         track=TRACK_VIDEO,
     )

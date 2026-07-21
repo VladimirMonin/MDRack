@@ -209,6 +209,7 @@ class TranscriptIngestionService:
             token_count_kind=self._token_count_kind,
             resource_identifier=artifact.resource_id,
             normalization_fingerprint=artifact.normalization_fingerprint,
+            unsplittable="flag",
         )
         whole_text_policy = WholeResourceTextPolicy(overflow="caller_split")
         aggregation = _whole_text_aggregation(
@@ -366,6 +367,7 @@ class TranscriptIngestionService:
             token_count_kind=self._token_count_kind,
             resource_identifier=artifact.resource_id,
             normalization_fingerprint=artifact.normalization_fingerprint,
+            unsplittable="flag",
         )
         whole_text_policy = WholeResourceTextPolicy(overflow="caller_split")
         aggregation = _whole_text_aggregation(
@@ -404,6 +406,7 @@ class TranscriptIngestionService:
             token_counter=self._counter,
             token_count_kind=self._token_count_kind,
             vectors=vectors,
+            unsplittable="flag",
         )
         return batch if aggregation is None else _persist_whole_aggregation(batch, aggregation)
 
