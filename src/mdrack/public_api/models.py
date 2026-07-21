@@ -12,6 +12,7 @@ from mdrack.application.transcript_ingestion import (
     TimedSearchResult,
     TranscriptIngestionResult,
 )
+from mdrack.application.video_composition import VideoCompositionResult
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.profiles import EmbeddingCapabilities, EmbeddingProfile
 from mdrack.domain.retrieval import RetrievalCandidate, RetrievalItem, RetrievalResult
@@ -33,4 +34,5 @@ __all__ = [
     "TimedSearchItem",
     "TimedSearchResult",
     "TranscriptIngestionResult",
+    "VideoCompositionResult",
 ]

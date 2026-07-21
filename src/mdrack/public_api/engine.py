@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,10 @@ from mdrack.application.transcript_ingestion import (
     TranscriptIngestionResult,
     TranscriptIngestionService,
 )
+from mdrack.application.video_composition import (
+    VideoCompositionResult,
+    VideoCompositionService,
+)
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.runtime import embedding_profile_from_config
@@ -42,8 +47,8 @@ from mdrack.ingestion.images import (
 )
 from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
-from mdrack_core import Locator, SearchScope
-from mdrack_media import TimedChunkingPolicy, TranscriptArtifact
+from mdrack_core import JSONValue, Locator, SearchScope
+from mdrack_media import FrameCaptionArtifact, TimedChunkingPolicy, TranscriptArtifact
 
 
 class MDRackEngine:
@@ -184,6 +189,32 @@ class MDRackEngine:
             target=target,
             scope=scope,
             limit=limit,
+        )
+
+    async def ingest_video(
+        self,
+        transcript: TranscriptArtifact,
+        frame_captions: FrameCaptionArtifact,
+        *,
+        media_type: str,
+        source_namespace: str,
+        source_locator: Locator,
+        source_metadata: Mapping[str, JSONValue] | None = None,
+        title: str | None = None,
+        chunking_policy: TimedChunkingPolicy | None = None,
+        embeddings: bool = True,
+    ) -> VideoCompositionResult:
+        """Build and atomically replace one complete text-only video graph."""
+        return await self._video_composition_service().ingest(
+            transcript,
+            frame_captions,
+            media_type=media_type,
+            source_namespace=source_namespace,
+            source_locator=source_locator,
+            source_metadata=source_metadata,
+            title=title,
+            chunking_policy=chunking_policy,
+            embeddings=embeddings,
         )
 
     def get_resource_metadata(self, resource_id: str) -> MetadataInspection:
@@ -368,6 +399,14 @@ class MDRackEngine:
             rrf_k=self.config.search.rrf_k,
             text_weight=self.config.search.text_weight,
             semantic_weight=self.config.search.semantic_weight,
+        )
+
+    def _video_composition_service(self) -> VideoCompositionService:
+        return VideoCompositionService(
+            self._transcript_catalog(),
+            embedding_provider=self.embedding_provider,
+            embedding_fingerprint=self._transcript_embedding_fingerprint(),
+            profile=self.profile,
         )
 
     def close(self) -> None:

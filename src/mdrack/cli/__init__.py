@@ -25,6 +25,7 @@ from mdrack.cli.commands.scan import cli_scan
 from mdrack.cli.commands.search import cli_search
 from mdrack.cli.commands.sections import sections as sections_group
 from mdrack.cli.commands.transcript import ingest as ingest_group
+from mdrack.cli.commands.video import ingest_video
 from mdrack.config.loader import load_config, resolve_config_path
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
@@ -213,6 +214,7 @@ main.add_command(cli_scan, name="scan")
 # ---------------------------------------------------------------------------
 main.add_command(cli_search, name="search")
 main.add_command(ingest_group)
+ingest_group.add_command(ingest_video)
 
 # Explicit direct-image lifecycle is separate from Markdown scan.
 main.add_command(image_group)
