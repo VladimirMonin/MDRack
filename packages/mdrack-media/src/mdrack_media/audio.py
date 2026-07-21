@@ -25,7 +25,7 @@ from .common import canonical_json
 from .grouper import group_timed_atoms
 from .identifiers import representation_id, whole_resource_id
 from .locators import TRACK_AUDIO, TRACK_VIDEO, TimeSegmentLocator
-from .records import REPRESENTATION_TIMED_PASSAGE, TOKEN_COUNT_EXACT, TimedPassage
+from .records import REPRESENTATION_TIMED_PASSAGE, TOKEN_COUNT_EXACT, TOKEN_COUNT_KINDS, TimedPassage
 
 
 def _space_id(fingerprint: str, dimensions: int, metric: str) -> str:
@@ -52,6 +52,7 @@ def _build_transcript_batch(
     token_counter: object,
     vectors: Mapping[str, Sequence[float]] | None = None,
     metric: str = "cosine",
+    token_count_kind: str = TOKEN_COUNT_EXACT,
     resource_kind: str,
     track: str,
 ) -> PreparedResourceBatch:
@@ -71,12 +72,14 @@ def _build_transcript_batch(
         raise TypeError("vectors must be a mapping or None")
     if metric not in {"cosine", "dot", "l2"}:
         raise ValueError("metric must be cosine, dot, or l2")
+    if token_count_kind not in TOKEN_COUNT_KINDS:
+        raise ValueError("token_count_kind must be exact or estimated")
 
     grouped = group_timed_atoms(
         input_value.transcript.atoms,
         policy=input_value.chunking_policy,
         token_counter=token_counter,  # type: ignore[arg-type]
-        token_count_kind=TOKEN_COUNT_EXACT,
+        token_count_kind=token_count_kind,
         resource_identifier=input_value.resource.resource_id,
         normalization_fingerprint=input_value.transcript.normalization_fingerprint,
     )
@@ -98,7 +101,7 @@ def _build_transcript_batch(
             language=transcript.language,
             producer_fingerprint=grouped.grouper_fingerprint.value,
             token_count=sum(item.token_count.count for item in grouped.passages),
-            token_count_kind=TOKEN_COUNT_EXACT,
+            token_count_kind=token_count_kind,
             metadata={
                 "transcript_representation_id": transcript.representation_id,
                 "normalization_fingerprint": transcript.normalization_fingerprint.value,
@@ -152,7 +155,7 @@ def _build_transcript_batch(
                 language=transcript.language,
                 producer_fingerprint=input_value.aggregation_fingerprint.value,  # type: ignore[union-attr]
                 token_count=total_tokens,
-                token_count_kind=TOKEN_COUNT_EXACT,
+                token_count_kind=token_count_kind,
             )
         )
         units.append(
@@ -166,7 +169,7 @@ def _build_transcript_batch(
                 evidence_locator=Locator("whole_media", {}),
                 ordinal=0,
                 token_count=total_tokens,
-                token_count_kind=TOKEN_COUNT_EXACT,
+                token_count_kind=token_count_kind,
                 metadata={"similarity_basis": "transcript_text"},
             )
         )
@@ -234,6 +237,7 @@ def build_audio_transcript_batch(
     token_counter: object,
     vectors: Mapping[str, Sequence[float]] | None = None,
     metric: str = "cosine",
+    token_count_kind: str = TOKEN_COUNT_EXACT,
 ) -> PreparedResourceBatch:
     """Build an immutable audio transcript graph with audio seek evidence."""
     return _build_transcript_batch(
@@ -241,6 +245,7 @@ def build_audio_transcript_batch(
         token_counter=token_counter,
         vectors=vectors,
         metric=metric,
+        token_count_kind=token_count_kind,
         resource_kind=RESOURCE_AUDIO,
         track=TRACK_AUDIO,
     )
@@ -252,6 +257,7 @@ def build_video_transcript_batch(
     token_counter: object,
     vectors: Mapping[str, Sequence[float]] | None = None,
     metric: str = "cosine",
+    token_count_kind: str = TOKEN_COUNT_EXACT,
 ) -> PreparedResourceBatch:
     """Build an immutable video transcript graph with video seek evidence."""
     return _build_transcript_batch(
@@ -259,6 +265,7 @@ def build_video_transcript_batch(
         token_counter=token_counter,
         vectors=vectors,
         metric=metric,
+        token_count_kind=token_count_kind,
         resource_kind=RESOURCE_VIDEO,
         track=TRACK_VIDEO,
     )

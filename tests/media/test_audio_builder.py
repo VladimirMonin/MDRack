@@ -126,6 +126,31 @@ def test_audio_builder_projects_passages_with_exact_half_open_times() -> None:
     assert batch.vectors == ()
 
 
+def test_audio_builder_preserves_caller_owned_estimated_token_provenance() -> None:
+    input_value, counter = _input()
+    grouped = group_timed_atoms(
+        input_value.transcript.atoms,
+        policy=input_value.chunking_policy,
+        token_counter=counter,
+        token_count_kind="estimated",
+        resource_identifier=input_value.resource.resource_id,
+        normalization_fingerprint=input_value.transcript.normalization_fingerprint,
+    )
+    batch = build_audio_transcript_batch(
+        replace(
+            input_value,
+            passage_representation_id=grouped.representation_id,
+            grouper_fingerprint=grouped.grouper_fingerprint,
+            embedding_fingerprint=None,
+        ),
+        token_counter=counter,
+        token_count_kind="estimated",
+    )
+
+    assert batch.representations[0].token_count_kind == "estimated"
+    assert {unit.token_count_kind for unit in batch.units} == {"estimated"}
+
+
 def test_audio_builder_requires_exact_ready_vectors_and_rebuilds_on_fingerprint() -> None:
     input_value, counter = _input()
     no_vectors = build_audio_transcript_batch(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import sqlite3
@@ -11,6 +12,9 @@ from types import TracebackType
 from typing import Literal
 
 from mdrack_core.domain import (
+    CatalogExecutionError,
+    EmbeddingSpaceRecord,
+    ErrorCategory,
     LexicalBranch,
     PreparedResourceBatch,
     RankedCandidate,
@@ -284,6 +288,40 @@ class SQLiteCatalog(SQLiteResourceStore):
     def read_vector(self, unit_id: str, space_id: str) -> VectorRecord | None:
         self._require_open()
         return super().read_vector(unit_id, space_id)
+
+    def resolve_embedding_space(
+        self,
+        *,
+        fingerprint: str,
+        dimensions: int,
+    ) -> EmbeddingSpaceRecord | None:
+        """Resolve one unambiguous ready space without leaking SQLite to callers."""
+        self._require_open()
+        if not isinstance(fingerprint, str) or not fingerprint:
+            raise ValueError("fingerprint must be non-empty")
+        if type(dimensions) is not int or dimensions < 1:
+            raise ValueError("dimensions must be a positive integer")
+        try:
+            rows = self.connection.execute(
+                "SELECT space_id,dimensions,metric,fingerprint,metadata_json "
+                "FROM core_embedding_spaces WHERE fingerprint=? AND dimensions=? "
+                "ORDER BY space_id",
+                (fingerprint, dimensions),
+            ).fetchall()
+            if len(rows) != 1:
+                return None
+            row = rows[0]
+            return EmbeddingSpaceRecord(
+                str(row["space_id"]),
+                int(row["dimensions"]),
+                str(row["metric"]),
+                str(row["fingerprint"]),
+                json.loads(str(row["metadata_json"])),
+            )
+        except sqlite3.OperationalError:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+        except Exception:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
 
     def find_by_content_hash(
         self,

@@ -7,7 +7,7 @@ from typing import Protocol
 from ..domain.batches import PreparedResourceBatch
 from ..domain.resources import ResourceRecord, SearchUnitRecord
 from ..domain.search import SearchScope
-from ..domain.vectors import VectorRecord
+from ..domain.vectors import EmbeddingSpaceRecord, VectorRecord
 
 
 class ResourceWritePort(Protocol):
@@ -33,3 +33,10 @@ class ResourceReadPort(Protocol):
 
 class CatalogPort(ResourceWritePort, ResourceReadPort, Protocol):
     """Complete shared catalog surface used by core application services."""
+
+    def resolve_embedding_space(
+        self,
+        *,
+        fingerprint: str,
+        dimensions: int,
+    ) -> EmbeddingSpaceRecord | None: ...

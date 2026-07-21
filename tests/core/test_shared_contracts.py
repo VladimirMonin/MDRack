@@ -293,6 +293,15 @@ def test_port_signatures_freeze_scope_before_adapter_limits_and_core_types_only(
     assert get_type_hints(LexicalSearchPort.search_lexical)["scope"] is SearchScope
     assert get_type_hints(VectorSearchPort.search_vector)["scope"] is SearchScope
 
+    resolver = inspect.signature(CatalogPort.resolve_embedding_space)
+    assert tuple(resolver.parameters) == ("self", "fingerprint", "dimensions")
+    assert resolver.parameters["fingerprint"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert resolver.parameters["dimensions"].kind is inspect.Parameter.KEYWORD_ONLY
+    resolver_hints = get_type_hints(CatalogPort.resolve_embedding_space)
+    assert resolver_hints["fingerprint"] is str
+    assert resolver_hints["dimensions"] is int
+    assert resolver_hints["return"] == EmbeddingSpaceRecord | None
+
     expected_catalog = {
         "replace_resource": PreparedResourceBatch,
         "delete_resource": str,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -17,6 +17,10 @@ from mdrack.application.metadata_filters import MetadataFilters, metadata_filter
 from mdrack.application.metadata_projection import metadata_projection_policy_from_config
 from mdrack.application.resource_catalog import MetadataCatalogService
 from mdrack.application.retrieval import InvalidTextSearchError, RetrievalService
+from mdrack.application.transcript_ingestion import (
+    TimedRetrievalMode,
+    TimedRetrievalService,
+)
 from mdrack.embeddings.runtime import (
     close_async_resource,
     create_embedding_provider,
@@ -28,6 +32,8 @@ from mdrack.output.errors import StorageError
 from mdrack.output.json_output import emit_json
 from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.storage.sqlite.fts import FTSQueryError
+from mdrack_core import SearchScope
+from mdrack_sqlite import SQLiteCatalog
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +98,12 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     default=None,
     help="Embedding provider for semantic/hybrid search (default from config).",
 )
+@click.option("--catalog", "catalog_path", default=None, metavar="PATH")
+@click.option("--kind", "resource_kinds", multiple=True)
+@click.option("--media-type", "media_types", multiple=True)
+@click.option("--namespace", "source_namespaces", multiple=True)
+@click.option("--representation", "representation_kinds", multiple=True)
+@click.option("--unit-kind", "unit_kinds", multiple=True)
 @click.pass_context
 def cli_search(
     ctx: click.Context,
@@ -105,6 +117,12 @@ def cli_search(
     metadata_none: tuple[str, ...],
     metadata_weight: float,
     embedding_provider: str | None,
+    catalog_path: str | None,
+    resource_kinds: tuple[str, ...],
+    media_types: tuple[str, ...],
+    source_namespaces: tuple[str, ...],
+    representation_kinds: tuple[str, ...],
+    unit_kinds: tuple[str, ...],
 ) -> None:
     """Search indexed chunks by text, semantic meaning, or hybrid."""
     command = "search"
@@ -118,12 +136,15 @@ def cli_search(
     mode: str = search_mode or config.search.default_mode
     limit_value: int = limit or config.search.top_k
     provider: EmbeddingProvider | None = None
-    try:
-        storage = _open_storage(ctx.obj.get("root", Path(".")), config, db_path)
-    except StorageError as exc:
-        _output(ctx, envelope_error(str(exc), exc.code, command))
-        ctx.exit(1)
-        return
+    storage = None
+    timed_catalog = None
+    if catalog_path is None:
+        try:
+            storage = _open_storage(ctx.obj.get("root", Path(".")), config, db_path)
+        except StorageError as exc:
+            _output(ctx, envelope_error(str(exc), exc.code, command))
+            ctx.exit(1)
+            return
 
     logger.info(
         "cli.search.started mode=%s query_length=%d limit=%d",
@@ -132,6 +153,44 @@ def cli_search(
         limit_value,
     )
     try:
+        if catalog_path is not None:
+            timed_catalog = SQLiteCatalog.open(catalog_path)
+            if mode == "semantic" or (
+                mode == "hybrid" and config.search.semantic_weight > 0.0
+            ):
+                timed_provider_name = embedding_provider or config.embedding.provider
+                provider = create_embedding_provider(timed_provider_name, config)
+            fingerprint = (
+                embedding_profile_from_config(config, provider, "default").fingerprint
+                if provider is not None
+                else None
+            )
+            timed_service = TimedRetrievalService(
+                timed_catalog,
+                embedding_provider=provider,
+                embedding_fingerprint=fingerprint,
+                profile="default",
+                rrf_k=config.search.rrf_k,
+                text_weight=config.search.text_weight,
+                semantic_weight=config.search.semantic_weight,
+            )
+            timed_result = asyncio.run(
+                timed_service.search(
+                    query,
+                    mode=cast(TimedRetrievalMode, mode),
+                    target=target,
+                    scope=SearchScope(
+                        resource_kinds=resource_kinds,
+                        media_types=media_types,
+                        source_namespaces=source_namespaces,
+                        representation_kinds=representation_kinds,
+                        unit_kinds=unit_kinds,
+                    ),
+                    limit=limit_value,
+                )
+            )
+            _emit_success(ctx, timed_result.to_dict(), command)
+            return
         try:
             metadata_filters = metadata_filters_from_cli(
                 metadata_projection_policy_from_config(config.metadata),
@@ -164,6 +223,7 @@ def cli_search(
         if mode == "semantic" or (mode == "hybrid" and config.search.semantic_weight > 0.0):
             provider_name: str = embedding_provider or config.embedding.provider
             provider = create_embedding_provider(provider_name, config)
+        assert storage is not None
         service = RetrievalService(
             storage,
             embedding_provider=provider,
@@ -223,7 +283,10 @@ def cli_search(
                 asyncio.run(close_async_resource(provider))
             except Exception:
                 logger.debug("embedding.provider.close_failed reason=cleanup_error")
-        storage.close()
+        if timed_catalog is not None:
+            timed_catalog.close()
+        if storage is not None:
+            storage.close()
 
 
 def _run_text_search(

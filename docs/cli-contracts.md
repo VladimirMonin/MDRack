@@ -168,10 +168,42 @@ Additional error codes: `INTERNAL_ERROR`.
 
 ---
 
+## 2a. `mdrack ingest transcript`
+
+```
+mdrack ingest transcript <transcript-path> \
+  --resource-id <canonical-resource-id> \
+  --kind audio|video \
+  --media-type <type> \
+  --namespace <namespace> \
+  --catalog <clean-catalog.sqlite3> \
+  [--format auto|whisper-json|vtt|srt|timed-json-v1] \
+  [--source-ref <portable-ref>] [--language <language>] \
+  [--producer <identity>] [--provider lmstudio|fake] \
+  [--embedding-profile <profile>] [--no-embeddings] [--dry-run]
+```
+
+The command reads one bounded transcript, creates deterministic timed passages,
+finishes all requested embedding calls, and then performs one complete atomic
+resource replacement. `--no-embeddings` writes a lexical-only graph. `--dry-run`
+does not call a provider and does not persist. The resource ID must satisfy the
+canonical `mdrack-media` resource-ID contract; `--source-ref` is a portable
+locator value and defaults to that resource ID.
+
+Success data contains `resource_id`, `resource_kind`, representation/unit/vector
+counts, `space_id`, and `persisted`. Failures use fixed
+`TRANSCRIPT_INVALID` or `TRANSCRIPT_INGEST_ERROR` messages. Source paths,
+transcript text, locator values, and raw exceptions are not emitted.
+
+---
+
 ## 3. `mdrack search`
 
 ```
-mdrack search <query> [--mode text|semantic|hybrid] [--limit N] [--provider lmstudio|fake]
+mdrack search <query> [--mode text|semantic|hybrid] [--limit N]
+  [--provider lmstudio|fake] [--catalog <clean-catalog.sqlite3>]
+  [--kind <kind>] [--media-type <type>] [--namespace <namespace>]
+  [--representation <kind>] [--unit-kind <kind>]
 ```
 
 Search indexed chunks by text, semantic similarity, or a hybrid blend.
@@ -182,6 +214,21 @@ Search indexed chunks by text, semantic similarity, or a hybrid blend.
 | `--mode` | `text` / `semantic` / `hybrid` | Search mode. Default: `hybrid` (from config). |
 | `--limit` | integer | Max results. Default: `20` (from config). |
 | `--provider` | `lmstudio` / `fake` | Embedding provider for `semantic` and `hybrid` modes. Default: `lmstudio` (from config). |
+| `--catalog` | path | Search timed transcript passages in one explicit clean catalog. |
+| `--kind`, `--media-type`, `--namespace`, `--representation`, `--unit-kind` | repeatable string | Categorical timed-search scope applied before candidate limits. |
+
+When `--catalog` is present, search is the timed transcript surface. Results use
+the same envelope but each item contains logical IDs, score/rank, and one or more
+typed evidence objects with `start_ms`, `end_ms`, `track`, and
+`timestamp_unit="ms"`. Semantic mode degrades safely when no compatible ready
+vector space is available; hybrid mode retains lexical hits and reports the
+degradation.
+
+Timed semantic lookup resolves one unambiguous embedding space by fingerprint
+and dimensions through the catalog contract; the application does not inspect
+SQLite tables. Timed lexical and semantic branches each use the bounded
+candidate budget `max(100, limit * 10)` before resource grouping/fusion and the
+final result limit.
 
 ### 3a. Text search (`--mode text`)
 

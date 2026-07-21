@@ -188,6 +188,14 @@ def test_context_open_verify_catalog_ports_and_close(tmp_path: Path) -> None:
         assert catalog.read_resource("resource") == batch.resource
         assert catalog.read_unit("unit") == batch.units[0]
         assert catalog.read_vector("unit", "space") == batch.vectors[0]
+        assert catalog.resolve_embedding_space(
+            fingerprint="fingerprint",
+            dimensions=2,
+        ) == batch.spaces[0]
+        assert catalog.resolve_embedding_space(
+            fingerprint="fingerprint",
+            dimensions=3,
+        ) is None
         assert catalog.find_by_content_hash(
             "sha256:content",
             scope=SearchScope(facets_all=[Facet("tag", "included")]),

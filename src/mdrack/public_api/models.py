@@ -6,6 +6,12 @@ from mdrack.application.resource_catalog import (
     MetadataInspection,
     ResourceSearchResult,
 )
+from mdrack.application.transcript_ingestion import (
+    TimedEvidence,
+    TimedSearchItem,
+    TimedSearchResult,
+    TranscriptIngestionResult,
+)
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.profiles import EmbeddingCapabilities, EmbeddingProfile
 from mdrack.domain.retrieval import RetrievalCandidate, RetrievalItem, RetrievalResult
@@ -23,4 +29,8 @@ __all__ = [
     "RetrievalResult",
     "ResourceSearchResult",
     "SourceLocator",
+    "TimedEvidence",
+    "TimedSearchItem",
+    "TimedSearchResult",
+    "TranscriptIngestionResult",
 ]

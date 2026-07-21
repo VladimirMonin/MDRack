@@ -22,6 +22,13 @@ from mdrack.application.resources import (
     SimilarResourceResult,
 )
 from mdrack.application.retrieval import RetrievalService
+from mdrack.application.transcript_ingestion import (
+    TimedRetrievalMode,
+    TimedRetrievalService,
+    TimedSearchResult,
+    TranscriptIngestionResult,
+    TranscriptIngestionService,
+)
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.runtime import embedding_profile_from_config
@@ -35,6 +42,8 @@ from mdrack.ingestion.images import (
 )
 from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
+from mdrack_core import Locator, SearchScope
+from mdrack_media import TimedChunkingPolicy, TranscriptArtifact
 
 
 class MDRackEngine:
@@ -135,6 +144,46 @@ class MDRackEngine:
             limit=limit,
             reranker=reranker,
             metadata_filters=metadata_filters,
+        )
+
+    async def ingest_transcript(
+        self,
+        artifact: TranscriptArtifact,
+        *,
+        resource_kind: str,
+        media_type: str,
+        source_namespace: str,
+        source_locator: Locator,
+        chunking_policy: TimedChunkingPolicy | None = None,
+        embeddings: bool = True,
+    ) -> TranscriptIngestionResult:
+        """Build and atomically replace one complete timed-transcript graph."""
+        return await self._transcript_ingestion_service().ingest(
+            artifact,
+            resource_kind=resource_kind,
+            media_type=media_type,
+            source_namespace=source_namespace,
+            source_locator=source_locator,
+            chunking_policy=chunking_policy,
+            embeddings=embeddings,
+        )
+
+    async def search_transcripts(
+        self,
+        query: str,
+        *,
+        mode: TimedRetrievalMode = "hybrid",
+        target: str = "unit",
+        scope: SearchScope | None = None,
+        limit: int = 20,
+    ) -> TimedSearchResult:
+        """Search transcript passages and return typed millisecond evidence."""
+        return await self._timed_retrieval_service().search(
+            query,
+            mode=mode,
+            target=target,
+            scope=scope,
+            limit=limit,
         )
 
     def get_resource_metadata(self, resource_id: str) -> MetadataInspection:
@@ -284,6 +333,42 @@ class MDRackEngine:
         if catalog is None:
             raise RuntimeError("active resource-core generation is required for metadata operations")
         return MetadataCatalogService(catalog)
+
+    def _transcript_catalog(self) -> object:
+        catalog = getattr(self.storage, "resource_store", None)
+        if catalog is None:
+            raise RuntimeError(
+                "active resource-core generation is required for transcript operations"
+            )
+        return catalog
+
+    def _transcript_embedding_fingerprint(self) -> str | None:
+        if self.embedding_provider is None:
+            return None
+        return embedding_profile_from_config(
+            self.config,
+            self.embedding_provider,
+            self.profile,
+        ).fingerprint
+
+    def _transcript_ingestion_service(self) -> TranscriptIngestionService:
+        return TranscriptIngestionService(
+            self._transcript_catalog(),
+            embedding_provider=self.embedding_provider,
+            embedding_fingerprint=self._transcript_embedding_fingerprint(),
+            profile=self.profile,
+        )
+
+    def _timed_retrieval_service(self) -> TimedRetrievalService:
+        return TimedRetrievalService(
+            self._transcript_catalog(),
+            embedding_provider=self.embedding_provider,
+            embedding_fingerprint=self._transcript_embedding_fingerprint(),
+            profile=self.profile,
+            rrf_k=self.config.search.rrf_k,
+            text_weight=self.config.search.text_weight,
+            semantic_weight=self.config.search.semantic_weight,
+        )
 
     def close(self) -> None:
         self.storage.close()
