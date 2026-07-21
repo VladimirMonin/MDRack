@@ -1,7 +1,7 @@
 # Prepared-resource manifest v1
 
-`mdrack.application.manifest` converts one untrusted JSON document into one
-`PreparedResourceBatch` and can submit it to an explicitly supplied core catalog.
+`mdrack.application.manifest` converts between one untrusted JSON document and one
+`PreparedResourceBatch` and can submit the decoded graph to an explicitly supplied core catalog.
 The codec and facade do not import Click, open files or locators, resolve binary
 sources, call providers, or use the network.
 
@@ -56,6 +56,15 @@ streaming import is deferred.
 rejects duplicate keys and non-finite numbers, enforces the closed grammar and fixed
 limits, then constructs the typed batch.
 
+`encode_prepared_resource_manifest(batch)` runs the same canonical graph validation
+and emits deterministic compact UTF-8 JSON using this exact contract and version.
+Record collections are ordered by logical identity (units by representation and
+ordinal); mapping keys are canonicalized. Decoding the default export reconstructs
+the same semantic graph. `include_vectors=False`, `include_text=False`, and
+`redact_source_metadata=True` are explicit projections. A projection that leaves a
+unit with neither text nor a vector fails with `invalid_graph` instead of emitting an
+unimportable manifest.
+
 `import_manifest(catalog, payload)` additionally runs `CoreIndexingService` graph
 validation before exactly one `catalog.replace_resource()` call. Invalid ownership,
 duplicate IDs, dangling relationships, vector mismatches and other graph errors
@@ -64,7 +73,8 @@ batch)` provides the same explicit-catalog path for an already prepared batch.
 
 `PreparedResourceCatalog.open(catalog_path)` is the public Click-free lifecycle
 facade for an existing clean `mdrack_sqlite_catalog_v1` database. Its
-`import_file`, `import_bytes`, `inspect`, and `delete` methods always use the
+`import_file`, `import_bytes`, `export_file`, `export_bytes`, `export_batch`,
+`inspect`, and `delete` methods always use the
 explicit path; they never select or modify the application's configured/default
 store. `inspect` returns only logical identity, aggregate counts, kinds, and
 SHA-256 fingerprints. It never returns source namespace, title, text, metadata,
@@ -74,6 +84,7 @@ The matching CLI is singular and path-explicit:
 
 ```text
 mdrack resource import <manifest.json> --catalog <catalog.sqlite3>
+mdrack resource export <resource-id> --catalog <catalog.sqlite3> --output <manifest.json>
 mdrack resource inspect <resource-id> --catalog <catalog.sqlite3>
 mdrack resource delete <resource-id> --catalog <catalog.sqlite3>
 ```
@@ -82,13 +93,21 @@ Each invocation writes exactly one JSON envelope to stdout. Runtime failures use
 fixed messages and stable codes; paths, payloads, IDs from failed requests, raw
 SQLite errors, and exception text are not serialized or logged.
 
+Export defaults to the complete semantic graph, including text, vectors and source
+metadata. The manifest file is therefore an intentional sensitive payload. Use
+`--no-text`, `--no-vectors`, or `--redact-source-metadata` only when that reduced
+graph remains importable. Export creates a new output file and refuses to overwrite
+an existing path. The stdout envelope contains only logical identity, counts, byte
+size and a SHA-256 digest, never manifest content or the output path.
+
 Failures expose only stable `ManifestErrorCode` values. Untrusted text, metadata,
 facets, vectors, locator payloads and raw parser exceptions are never included in the
 exception string.
 
 ## Deferred surfaces
 
-Export is not part of v1: the frozen core read port cannot return an atomic complete
-graph, and widening it requires a separate contract and privacy review. Streaming
-import, source resolution, implicit embedding, catalog creation, and default-store
-selection remain deferred.
+Streaming import/export, source resolution, implicit embedding, catalog creation,
+default-store selection, and export of unreferenced global embedding spaces remain
+deferred. Catalog export takes one SQLite read snapshot and includes only spaces
+referenced by the selected resource's vectors; it does not widen the frozen core read
+port or add another version-1 grammar.

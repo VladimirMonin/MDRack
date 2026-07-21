@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from mdrack.application.compatibility import create_application_storage, embedding_space_id
 from mdrack.application.indexing import IndexingService
+from mdrack.application.manifest import PreparedResourceFacade
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.application.query import ReadService
 from mdrack.application.resource_catalog import (
     MetadataCatalogService,
     MetadataFacetValue,
     MetadataInspection,
+    PreparedResourceExportService,
+    ResourceImportResult,
     ResourceSearchResult,
 )
 from mdrack.application.resources import (
@@ -54,7 +57,13 @@ from mdrack.ingestion.images import (
 )
 from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
-from mdrack_core import JSONValue, Locator, SearchScope
+from mdrack_core import (
+    JSONValue,
+    Locator,
+    PreparedResourceBatch,
+    ResourceWritePort,
+    SearchScope,
+)
 from mdrack_media import FrameCaptionArtifact, TimedChunkingPolicy, TranscriptArtifact
 
 
@@ -279,6 +288,33 @@ class MDRackEngine:
             limit=limit,
         )
 
+    def import_resource_manifest(self, payload: bytes) -> ResourceImportResult:
+        """Import one existing manifest-v1 payload into the active resource catalog."""
+        batch = PreparedResourceFacade(
+            cast(ResourceWritePort, self._transcript_catalog())
+        ).import_manifest(payload)
+        return ResourceImportResult(
+            resource_id=batch.resource.resource_id,
+            resource_kind=batch.resource.resource_kind,
+            counts=self._prepared_batch_counts(batch),
+        )
+
+    def export_resource_manifest(
+        self,
+        resource_id: str,
+        *,
+        include_vectors: bool = True,
+        include_text: bool = True,
+        redact_source_metadata: bool = False,
+    ) -> bytes:
+        """Export one active resource through the existing manifest-v1 grammar."""
+        return PreparedResourceExportService(self._transcript_catalog()).export_bytes(
+            resource_id,
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        )
+
     async def ingest_image(
         self,
         path: Path,
@@ -429,6 +465,16 @@ class MDRackEngine:
                 "active resource-core generation is required for transcript operations"
             )
         return catalog
+
+    @staticmethod
+    def _prepared_batch_counts(batch: PreparedResourceBatch) -> dict[str, int]:
+        return {
+            "representations": len(batch.representations),
+            "units": len(batch.units),
+            "spaces": len(batch.spaces),
+            "vectors": len(batch.vectors),
+            "facets": len(batch.facets),
+        }
 
     def _transcript_embedding_fingerprint(self) -> str | None:
         if self.embedding_provider is None:

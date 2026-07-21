@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from enum import StrEnum
-from typing import NoReturn
+from typing import Any, NoReturn, cast
 
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.domain import (
@@ -398,6 +399,191 @@ def decode_prepared_resource_manifest(payload: bytes) -> PreparedResourceBatch:
         raise ManifestError(ManifestErrorCode.INVALID_MANIFEST) from None
 
 
+class _ValidationCatalog:
+    """Discarding write port used to run the canonical graph validator."""
+
+    def replace_resource(self, batch: PreparedResourceBatch) -> None:
+        del batch
+
+    def delete_resource(self, resource_id: str) -> None:
+        del resource_id
+
+
+def _plain_json(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _plain_json(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain_json(item) for item in value]
+    return value
+
+
+def _project_export_batch(
+    batch: PreparedResourceBatch,
+    *,
+    include_vectors: bool,
+    include_text: bool,
+    redact_source_metadata: bool,
+) -> PreparedResourceBatch:
+    if not isinstance(batch, PreparedResourceBatch):
+        raise ManifestError(ManifestErrorCode.INVALID_MANIFEST)
+    resource = batch.resource
+    if not include_text or redact_source_metadata:
+        metadata = cast(dict[str, Any], _plain_json(resource.metadata))
+        if redact_source_metadata:
+            metadata.pop("source", None)
+        resource = replace(
+            resource,
+            title=resource.title if include_text else None,
+            metadata=metadata,
+        )
+    representations = tuple(
+        replace(item, text=item.text if include_text else None)
+        for item in batch.representations
+    )
+    units = tuple(
+        replace(item, text=item.text if include_text else None)
+        for item in batch.units
+    )
+    return PreparedResourceBatch(
+        resource=resource,
+        representations=representations,
+        units=units,
+        spaces=batch.spaces if include_vectors else (),
+        vectors=batch.vectors if include_vectors else (),
+        facets=batch.facets,
+    )
+
+
+def _manifest_value(batch: PreparedResourceBatch) -> dict[str, object]:
+    resource = batch.resource
+    return {
+        "contract": MANIFEST_CONTRACT,
+        "version": MANIFEST_VERSION,
+        "resource": {
+            "resource_id": resource.resource_id,
+            "resource_kind": resource.resource_kind,
+            "media_type": resource.media_type,
+            "source_namespace": resource.source_namespace,
+            "locator": {
+                "kind": resource.locator.kind,
+                "payload": _plain_json(resource.locator.payload),
+            },
+            "content_hash": resource.content_hash,
+            "title": resource.title,
+            "metadata": _plain_json(resource.metadata),
+        },
+        "representations": [
+            {
+                "representation_id": item.representation_id,
+                "resource_id": item.resource_id,
+                "representation_kind": item.representation_kind,
+                "modality": item.modality,
+                "text": item.text,
+                "language": item.language,
+                "producer_fingerprint": item.producer_fingerprint,
+                "token_count": item.token_count,
+                "token_count_kind": item.token_count_kind,
+                "metadata": _plain_json(item.metadata),
+            }
+            for item in sorted(batch.representations, key=lambda value: value.representation_id)
+        ],
+        "units": [
+            {
+                "unit_id": item.unit_id,
+                "resource_id": item.resource_id,
+                "representation_id": item.representation_id,
+                "unit_kind": item.unit_kind,
+                "modality": item.modality,
+                "text": item.text,
+                "evidence_locator": {
+                    "kind": item.evidence_locator.kind,
+                    "payload": _plain_json(item.evidence_locator.payload),
+                },
+                "ordinal": item.ordinal,
+                "token_count": item.token_count,
+                "token_count_kind": item.token_count_kind,
+                "metadata": _plain_json(item.metadata),
+            }
+            for item in sorted(
+                batch.units,
+                key=lambda value: (value.representation_id, value.ordinal, value.unit_id),
+            )
+        ],
+        "spaces": [
+            {
+                "space_id": item.space_id,
+                "dimensions": item.dimensions,
+                "metric": item.metric,
+                "fingerprint": item.fingerprint,
+                "metadata": _plain_json(item.metadata),
+            }
+            for item in sorted(batch.spaces, key=lambda value: value.space_id)
+        ],
+        "vectors": [
+            {
+                "unit_id": item.unit_id,
+                "space_id": item.space_id,
+                "vector": list(item.vector),
+            }
+            for item in sorted(batch.vectors, key=lambda value: (value.unit_id, value.space_id))
+        ],
+        "facets": [
+            {
+                "resource_id": item.resource_id,
+                "facet": {
+                    "namespace": item.facet.namespace,
+                    "value": item.facet.value,
+                },
+                "origin": item.origin,
+                "producer_fingerprint": item.producer_fingerprint,
+                "confidence": item.confidence,
+            }
+            for item in sorted(
+                batch.facets,
+                key=lambda value: (
+                    value.facet.namespace,
+                    value.facet.value,
+                    value.origin,
+                    value.producer_fingerprint is not None,
+                    value.producer_fingerprint or "",
+                ),
+            )
+        ],
+    }
+
+
+def encode_prepared_resource_manifest(
+    batch: PreparedResourceBatch,
+    *,
+    include_vectors: bool = True,
+    include_text: bool = True,
+    redact_source_metadata: bool = False,
+) -> bytes:
+    """Encode one graph into the existing deterministic manifest-v1 grammar."""
+    projected = _project_export_batch(
+        batch,
+        include_vectors=include_vectors,
+        include_text=include_text,
+        redact_source_metadata=redact_source_metadata,
+    )
+    try:
+        CoreIndexingService(_ValidationCatalog()).index(projected)
+        payload = json.dumps(
+            _manifest_value(projected),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
+        ).encode("utf-8", "strict")
+    except CoreError:
+        raise ManifestError(ManifestErrorCode.INVALID_GRAPH) from None
+    except (TypeError, ValueError, OverflowError, UnicodeEncodeError):
+        raise ManifestError(ManifestErrorCode.INVALID_MANIFEST) from None
+    if len(payload) > MAX_MANIFEST_BYTES:
+        raise ManifestError(ManifestErrorCode.PAYLOAD_TOO_LARGE)
+    return payload
+
+
 class PreparedResourceFacade:
     """Click-free prepared-resource indexing against one explicit catalog."""
 
@@ -406,6 +592,21 @@ class PreparedResourceFacade:
 
     def index_prepared_resource(self, batch: PreparedResourceBatch) -> None:
         self._indexing.index(batch)
+
+    def export_manifest(
+        self,
+        batch: PreparedResourceBatch,
+        *,
+        include_vectors: bool = True,
+        include_text: bool = True,
+        redact_source_metadata: bool = False,
+    ) -> bytes:
+        return encode_prepared_resource_manifest(
+            batch,
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        )
 
     def import_manifest(self, payload: bytes) -> PreparedResourceBatch:
         batch = decode_prepared_resource_manifest(payload)
@@ -441,6 +642,7 @@ __all__ = (
     "ManifestErrorCode",
     "PreparedResourceFacade",
     "decode_prepared_resource_manifest",
+    "encode_prepared_resource_manifest",
     "import_manifest",
     "index_prepared_resource",
 )

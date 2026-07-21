@@ -1583,13 +1583,22 @@ network.
 
 ```text
 mdrack resource import <manifest.json> --catalog <catalog.sqlite3>
+mdrack resource export <resource-id> --catalog <catalog.sqlite3> --output <manifest.json>
+  [--include-vectors|--no-vectors] [--include-text|--no-text]
+  [--redact-source-metadata]
 mdrack resource inspect <resource-id> --catalog <catalog.sqlite3>
 mdrack resource delete <resource-id> --catalog <catalog.sqlite3>
 ```
 
 `import` reads at most the fixed manifest limit plus one byte, validates the complete
 graph before one catalog replacement, closes the catalog, and returns logical identity
-plus record counts. `inspect` reopens the catalog and returns only allowlisted counts,
+plus record counts. `export` reads one consistent persisted graph and writes the same
+deterministic manifest-v1 grammar to a new output file. Its default is a complete,
+intentional sensitive payload; stdout contains only resource identity, record counts,
+byte size and `sha256:` digest. `--no-text`, `--no-vectors`, and
+`--redact-source-metadata` are explicit projections and fail closed if the result
+would not be importable. Existing output files are never overwritten. `inspect`
+reopens the catalog and returns only allowlisted counts,
 kinds, and one-way fingerprints:
 
 ```json
@@ -1617,14 +1626,18 @@ stored.
 Every runtime success or failure writes exactly one JSON object followed by one newline
 to stdout. Safe errors use `RESOURCE_MANIFEST_<MANIFEST_CODE>`,
 `RESOURCE_MANIFEST_UNAVAILABLE`, `RESOURCE_CATALOG_UNAVAILABLE`, or
-`RESOURCE_NOT_FOUND`; stderr/logs contain only fixed event names and safe categories.
+`RESOURCE_MANIFEST_OUTPUT_UNAVAILABLE`, `RESOURCE_NOT_FOUND`; stderr/logs contain
+only fixed event names and safe categories.
 Failed request IDs, manifest/catalog paths, payloads, SQLite messages, and exception
 text are never emitted. Click usage errors that occur before command dispatch retain
 Click's standard usage stream.
 
 The Click-free Python-parity surface is
 `mdrack.application.resource_catalog.PreparedResourceCatalog.open(path)` with
-`import_file`, `import_bytes`, `inspect`, `delete`, and context-managed `close`.
+`import_file`, `import_bytes`, `export_file`, `export_bytes`, `export_batch`,
+`inspect`, `delete`, and context-managed `close`. The active-store embedded parity
+methods are `MDRackEngine.import_resource_manifest` and
+`MDRackEngine.export_resource_manifest`.
 
 ---
 
@@ -1698,6 +1711,7 @@ unit-target search methods.
 | `RESOURCE_SIMILARITY_ERROR` | Existing-vector resource similarity lookup could not complete. |
 | `RESOURCE_MANIFEST_<MANIFEST_CODE>` | Prepared manifest parsing, limits, schema, or graph validation failed. |
 | `RESOURCE_MANIFEST_UNAVAILABLE` | The explicit manifest file could not be read. |
+| `RESOURCE_MANIFEST_OUTPUT_UNAVAILABLE` | The explicit export file could not be created or already exists. |
 | `RESOURCE_CATALOG_UNAVAILABLE` | The explicit path is missing, unreadable, invalid, or not a clean catalog. |
 | `RESOURCE_NOT_FOUND` | Explicit-catalog inspection did not find the logical resource. |
 | `METADATA_SHOW_ERROR` | Exact metadata inspection could not complete. |
@@ -1750,7 +1764,7 @@ All commands read and write the same database file:
 | `eval retrieval` | `<store>/knowledge.db` |
 | `doctor` | `<store>/knowledge.db` |
 | `image ingest/search/delete` | Ready resource-core generation selected by `<store>/active-generation.json` |
-| `resource import/inspect/delete` | Existing clean standalone database required by explicit `--catalog PATH` |
+| `resource import/export/inspect/delete` | Existing clean standalone database required by explicit `--catalog PATH` |
 | `resources duplicates/similar/search/facets` | Ready resource-core generation selected by `<store>/active-generation.json` |
 | `metadata show/facets/projection-check` | Ready resource-core generation for reads; source file only for read-only projection preview |
 | `similar`, `facets` | Ready resource-core generation selected by `<store>/active-generation.json` |

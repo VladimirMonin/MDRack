@@ -37,8 +37,8 @@ def _failure(
 ) -> None:
     code = f"RESOURCE_{operation.upper()}_ERROR"
     message = (
-        "Prepared resource import failed"
-        if operation == "import"
+        f"Prepared resource {operation} failed"
+        if operation in {"import", "export"}
         else f"Resource {operation} failed"
     )
     reason = "operation_failed"
@@ -50,6 +50,9 @@ def _failure(
         if error.code is ResourceCatalogErrorCode.MANIFEST_UNAVAILABLE:
             code = "RESOURCE_MANIFEST_UNAVAILABLE"
             message = "Prepared resource import failed"
+        elif error.code is ResourceCatalogErrorCode.MANIFEST_OUTPUT_UNAVAILABLE:
+            code = "RESOURCE_MANIFEST_OUTPUT_UNAVAILABLE"
+            message = "Prepared resource export failed"
         elif error.code is ResourceCatalogErrorCode.RESOURCE_NOT_FOUND:
             code = "RESOURCE_NOT_FOUND"
             message = "Resource was not found"
@@ -119,6 +122,39 @@ def import_resource(ctx: click.Context, manifest_path: str, catalog_path: str) -
         operation="import",
         catalog_path=catalog_path,
         action=lambda catalog: catalog.import_file(manifest_path).to_dict(),
+    )
+
+
+@resource.command(name="export")
+@click.argument("resource_id")
+@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
+@click.option("--output", "output_path", required=True, metavar="PATH")
+@click.option("--include-vectors/--no-vectors", default=True, show_default=True)
+@click.option("--include-text/--no-text", default=True, show_default=True)
+@click.option("--redact-source-metadata", is_flag=True, default=False)
+@click.pass_context
+def export_resource(
+    ctx: click.Context,
+    resource_id: str,
+    catalog_path: str,
+    output_path: str,
+    include_vectors: bool,
+    include_text: bool,
+    redact_source_metadata: bool,
+) -> None:
+    """Export one resource through the existing manifest-v1 grammar."""
+    _run(
+        ctx,
+        command="resource export",
+        operation="export",
+        catalog_path=catalog_path,
+        action=lambda catalog: catalog.export_file(
+            resource_id,
+            output_path,
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        ).to_dict(),
     )
 
 

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -12,6 +14,7 @@ from typing import Any
 
 import pytest
 
+import mdrack.application.resource_catalog as resource_catalog_module
 from mdrack.application.manifest import (
     MANIFEST_CONTRACT,
     MANIFEST_VERSION,
@@ -24,7 +27,13 @@ from mdrack.application.manifest import (
     ManifestError,
     ManifestErrorCode,
     decode_prepared_resource_manifest,
+    encode_prepared_resource_manifest,
     import_manifest,
+)
+from mdrack.application.resource_catalog import (
+    PreparedResourceExportService,
+    ResourceCatalogError,
+    ResourceCatalogErrorCode,
 )
 from mdrack_core.domain import PreparedResourceBatch
 
@@ -40,6 +49,53 @@ class CatalogSpy:
 
     def delete_resource(self, resource_id: str) -> None:
         raise AssertionError(resource_id)
+
+
+class _ExportCatalogStub:
+    connection = object()
+
+    def read_resource(self, resource_id: str) -> None:
+        raise AssertionError(resource_id)
+
+
+class _ShortWriteFile:
+    def __init__(self, descriptor: int, *, fail_at: str | None = None) -> None:
+        self.descriptor = descriptor
+        self.fail_at = fail_at
+        self.writes = 0
+
+    def __enter__(self) -> _ShortWriteFile:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        os.close(self.descriptor)
+        if self.fail_at == "close":
+            raise OSError("simulated close failure")
+
+    def write(self, value: memoryview) -> int:
+        self.writes += 1
+        written = os.write(self.descriptor, bytes(value[:3]))
+        if self.fail_at == "write" and self.writes == 1:
+            raise OSError("simulated partial write failure")
+        return written
+
+    def flush(self) -> None:
+        if self.fail_at == "flush":
+            raise OSError("simulated flush failure")
+
+    def fileno(self) -> int:
+        return self.descriptor
+
+
+def _export_service(monkeypatch: pytest.MonkeyPatch) -> tuple[PreparedResourceExportService, bytes]:
+    batch = decode_prepared_resource_manifest(_encode(_manifest()))
+    service = PreparedResourceExportService(_ExportCatalogStub())
+    monkeypatch.setattr(service, "export_batch", lambda _resource_id: batch)
+    return service, encode_prepared_resource_manifest(batch)
+
+
+def _temporary_entries(tmp_path: Path) -> list[Path]:
+    return [entry for entry in tmp_path.iterdir() if entry.name.endswith(".tmp")]
 
 
 def _manifest() -> dict[str, Any]:
@@ -133,6 +189,109 @@ def test_valid_manifest_round_trips_to_typed_batch_and_one_adapter_call() -> Non
     assert len(catalog.calls) == 1
     assert catalog.calls[0] is batch
     assert catalog.transactions_opened == 1
+
+
+def test_manifest_v1_export_is_deterministic_and_semantically_round_trips() -> None:
+    batch = decode_prepared_resource_manifest(_encode(_manifest()))
+
+    first = encode_prepared_resource_manifest(batch)
+    second = encode_prepared_resource_manifest(batch)
+    restored = decode_prepared_resource_manifest(first)
+
+    assert first == second
+    assert restored == batch
+    assert json.loads(first)["contract"] == MANIFEST_CONTRACT
+    assert json.loads(first)["version"] == MANIFEST_VERSION
+
+
+def test_export_projections_use_same_v1_grammar_and_fail_closed_if_content_is_removed() -> None:
+    value = _manifest()
+    value["resource"]["metadata"] = {
+        "source": {"private": "PRIVATE_METADATA_SENTINEL"},
+        "ingestion": {"adapter": "fixture"},
+    }
+    batch = decode_prepared_resource_manifest(_encode(value))
+
+    without_vectors = decode_prepared_resource_manifest(
+        encode_prepared_resource_manifest(batch, include_vectors=False)
+    )
+    without_text = decode_prepared_resource_manifest(
+        encode_prepared_resource_manifest(batch, include_text=False)
+    )
+    redacted_payload = encode_prepared_resource_manifest(batch, redact_source_metadata=True)
+    redacted = decode_prepared_resource_manifest(redacted_payload)
+
+    assert without_vectors.spaces == without_vectors.vectors == ()
+    assert without_text.resource.title is None
+    assert without_text.representations[0].text is None
+    assert without_text.units[0].text is None
+    assert redacted.resource.metadata == {"ingestion": {"adapter": "fixture"}}
+    assert b"PRIVATE_METADATA_SENTINEL" not in redacted_payload
+    with pytest.raises(ManifestError) as caught:
+        encode_prepared_resource_manifest(batch, include_vectors=False, include_text=False)
+    assert caught.value.code is ManifestErrorCode.INVALID_GRAPH
+
+
+def test_export_file_retries_short_writes_and_publishes_exact_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, payload = _export_service(monkeypatch)
+    opened: list[_ShortWriteFile] = []
+
+    def short_writer(descriptor: int, _mode: str) -> _ShortWriteFile:
+        stream = _ShortWriteFile(descriptor)
+        opened.append(stream)
+        return stream
+
+    monkeypatch.setattr(resource_catalog_module.os, "fdopen", short_writer)
+    output = tmp_path / "manifest.json"
+
+    result = service.export_file("resource-1", output)
+
+    assert output.read_bytes() == payload
+    assert result.byte_size == len(payload)
+    assert result.digest == "sha256:" + hashlib.sha256(payload).hexdigest()
+    assert opened[0].writes > 1
+    assert _temporary_entries(tmp_path) == []
+
+
+@pytest.mark.parametrize("fail_at", ["write", "flush", "close"])
+def test_export_file_removes_owned_temporary_after_stream_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fail_at: str,
+) -> None:
+    service, _payload = _export_service(monkeypatch)
+    monkeypatch.setattr(
+        resource_catalog_module.os,
+        "fdopen",
+        lambda descriptor, _mode: _ShortWriteFile(descriptor, fail_at=fail_at),
+    )
+    output = tmp_path / "manifest.json"
+
+    with pytest.raises(ResourceCatalogError) as caught:
+        service.export_file("resource-1", output)
+
+    assert caught.value.code is ResourceCatalogErrorCode.MANIFEST_OUTPUT_UNAVAILABLE
+    assert not output.exists()
+    assert _temporary_entries(tmp_path) == []
+
+
+def test_export_file_collision_preserves_existing_target_and_removes_temporary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _payload = _export_service(monkeypatch)
+    output = tmp_path / "manifest.json"
+    output.write_bytes(b"existing")
+
+    with pytest.raises(ResourceCatalogError) as caught:
+        service.export_file("resource-1", output)
+
+    assert caught.value.code is ResourceCatalogErrorCode.MANIFEST_OUTPUT_UNAVAILABLE
+    assert output.read_bytes() == b"existing"
+    assert _temporary_entries(tmp_path) == []
 
 
 @pytest.mark.parametrize(

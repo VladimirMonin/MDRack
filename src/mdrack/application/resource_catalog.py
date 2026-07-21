@@ -5,14 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import TracebackType
-from typing import Literal
+from typing import Literal, cast
 
-from mdrack.application.manifest import MAX_MANIFEST_BYTES, PreparedResourceFacade
+from mdrack.application.manifest import (
+    MAX_MANIFEST_BYTES,
+    PreparedResourceFacade,
+    decode_prepared_resource_manifest,
+    encode_prepared_resource_manifest,
+)
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.application.metadata_projection import FACET_SCALAR_CODEC, MetadataScalar
 from mdrack_core.application.retrieval import RetrievalService
@@ -20,11 +27,19 @@ from mdrack_core.domain import (
     TARGET_RESOURCE,
     TARGET_UNIT,
     BranchScopeOverride,
+    EmbeddingSpaceRecord,
+    Facet,
+    JSONValue,
     LexicalBranch,
+    Locator,
     PreparedResourceBatch,
+    RepresentationRecord,
+    ResourceFacet,
     SearchRequest,
     SearchScope,
+    SearchUnitRecord,
     VectorBranch,
+    VectorRecord,
 )
 from mdrack_sqlite import SQLITE_CATALOG_SCHEMA_ID, SQLiteCatalog
 
@@ -34,6 +49,7 @@ class ResourceCatalogErrorCode(StrEnum):
 
     CATALOG_NOT_CLEAN = "catalog_not_clean"
     MANIFEST_UNAVAILABLE = "manifest_unavailable"
+    MANIFEST_OUTPUT_UNAVAILABLE = "manifest_output_unavailable"
     RESOURCE_NOT_FOUND = "resource_not_found"
     OPERATION_FAILED = "operation_failed"
 
@@ -59,6 +75,22 @@ class ResourceImportResult:
             "resource_id": self.resource_id,
             "resource_kind": self.resource_kind,
             "counts": dict(self.counts),
+        }
+
+
+@dataclass(frozen=True)
+class ResourceExportResult:
+    resource_id: str
+    counts: dict[str, int]
+    byte_size: int
+    digest: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "resource_id": self.resource_id,
+            "counts": dict(self.counts),
+            "byte_size": self.byte_size,
+            "digest": self.digest,
         }
 
 
@@ -372,6 +404,253 @@ class MetadataCatalogService:
         )
 
 
+def _decode_json_mapping(value: object) -> Mapping[str, JSONValue]:
+    if not isinstance(value, str):
+        raise ValueError("stored metadata must be text")
+    decoded = json.loads(value)
+    if not isinstance(decoded, dict):
+        raise ValueError("stored metadata must be an object")
+    return cast(dict[str, JSONValue], decoded)
+
+
+def _decode_json_vector(value: object) -> tuple[float, ...]:
+    if not isinstance(value, bytes):
+        raise ValueError("stored vector must be bytes")
+    decoded = json.loads(value.decode("utf-8", "strict"))
+    if not isinstance(decoded, list):
+        raise ValueError("stored vector must be an array")
+    return tuple(decoded)
+
+
+def _write_complete_payload(stream: object, payload: bytes) -> None:
+    """Write all payload bytes, including when the raw stream short-writes."""
+    view = memoryview(payload)
+    offset = 0
+    while offset < len(view):
+        written = stream.write(view[offset:])  # type: ignore[attr-defined]
+        if type(written) is not int or written <= 0 or written > len(view) - offset:
+            raise OSError("manifest write did not make progress")
+        offset += written
+    stream.flush()  # type: ignore[attr-defined]
+    os.fsync(stream.fileno())  # type: ignore[attr-defined]
+
+
+def _remove_owned_temporary(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+class PreparedResourceExportService:
+    """Reconstruct one persisted graph and encode the existing manifest-v1 contract."""
+
+    def __init__(self, catalog: object) -> None:
+        if not callable(getattr(catalog, "read_resource", None)):
+            raise TypeError("catalog must support resource reads")
+        if getattr(catalog, "connection", None) is None:
+            raise TypeError("catalog must expose its verified SQLite connection")
+        self._catalog = catalog
+
+    def export_batch(self, resource_id: str) -> PreparedResourceBatch:
+        connection = self._catalog.connection  # type: ignore[attr-defined]
+        owns_transaction = not connection.in_transaction
+        try:
+            if owns_transaction:
+                connection.execute("BEGIN")
+            resource = self._catalog.read_resource(resource_id)  # type: ignore[attr-defined]
+            if resource is None:
+                raise ResourceCatalogError(ResourceCatalogErrorCode.RESOURCE_NOT_FOUND)
+            representation_rows = connection.execute(
+                "SELECT * FROM core_representations WHERE resource_id=? "
+                "ORDER BY representation_id",
+                (resource_id,),
+            ).fetchall()
+            unit_rows = connection.execute(
+                "SELECT * FROM core_search_units WHERE resource_id=? "
+                "ORDER BY representation_id,ordinal,unit_id",
+                (resource_id,),
+            ).fetchall()
+            space_rows = connection.execute(
+                "SELECT DISTINCT s.* FROM core_embedding_spaces s "
+                "JOIN core_unit_embeddings e USING(space_id) "
+                "JOIN core_search_units u USING(unit_id) "
+                "WHERE u.resource_id=? ORDER BY s.space_id",
+                (resource_id,),
+            ).fetchall()
+            vector_rows = connection.execute(
+                "SELECT e.unit_id,e.space_id,e.embedding FROM core_unit_embeddings e "
+                "JOIN core_search_units u USING(unit_id) "
+                "WHERE u.resource_id=? ORDER BY e.unit_id,e.space_id",
+                (resource_id,),
+            ).fetchall()
+            facet_rows = connection.execute(
+                "SELECT f.namespace,f.value,rf.origin,rf.producer_is_null,"
+                "rf.producer_value,rf.confidence_json "
+                "FROM core_resource_facets rf JOIN core_facets f USING(facet_id) "
+                "WHERE rf.resource_id=? "
+                "ORDER BY f.namespace,f.value,rf.origin,rf.producer_is_null,rf.producer_value",
+                (resource_id,),
+            ).fetchall()
+            batch = PreparedResourceBatch(
+                resource=resource,
+                representations=tuple(
+                    RepresentationRecord(
+                        representation_id=row["representation_id"],
+                        resource_id=row["resource_id"],
+                        representation_kind=row["representation_kind"],
+                        modality=row["modality"],
+                        text=row["text_content"],
+                        language=row["language"],
+                        producer_fingerprint=row["producer_fingerprint"],
+                        token_count=row["token_count"],
+                        token_count_kind=row["token_count_kind"],
+                        metadata=_decode_json_mapping(row["metadata_json"]),
+                    )
+                    for row in representation_rows
+                ),
+                units=tuple(
+                    SearchUnitRecord(
+                        unit_id=row["unit_id"],
+                        resource_id=row["resource_id"],
+                        representation_id=row["representation_id"],
+                        unit_kind=row["unit_kind"],
+                        modality=row["modality"],
+                        text=row["text_content"],
+                        evidence_locator=Locator(
+                            row["evidence_locator_kind"],
+                            _decode_json_mapping(row["evidence_locator_json"]),
+                        ),
+                        ordinal=row["ordinal"],
+                        token_count=row["token_count"],
+                        token_count_kind=row["token_count_kind"],
+                        metadata=_decode_json_mapping(row["metadata_json"]),
+                    )
+                    for row in unit_rows
+                ),
+                spaces=tuple(
+                    EmbeddingSpaceRecord(
+                        space_id=row["space_id"],
+                        dimensions=row["dimensions"],
+                        metric=row["metric"],
+                        fingerprint=row["fingerprint"],
+                        metadata=_decode_json_mapping(row["metadata_json"]),
+                    )
+                    for row in space_rows
+                ),
+                vectors=tuple(
+                    VectorRecord(
+                        unit_id=row["unit_id"],
+                        space_id=row["space_id"],
+                        vector=_decode_json_vector(row["embedding"]),
+                    )
+                    for row in vector_rows
+                ),
+                facets=tuple(
+                    ResourceFacet(
+                        resource_id=resource_id,
+                        facet=Facet(row["namespace"], row["value"]),
+                        origin=row["origin"],
+                        producer_fingerprint=(
+                            None if row["producer_is_null"] == 1 else row["producer_value"]
+                        ),
+                        confidence=(
+                            None
+                            if row["confidence_json"] is None
+                            else float(json.loads(row["confidence_json"].decode("utf-8", "strict")))
+                        ),
+                    )
+                    for row in facet_rows
+                ),
+            )
+            if owns_transaction:
+                connection.rollback()
+            return batch
+        except ResourceCatalogError:
+            if owns_transaction and connection.in_transaction:
+                connection.rollback()
+            raise
+        except Exception:
+            if owns_transaction and connection.in_transaction:
+                connection.rollback()
+            raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
+
+    def export_bytes(
+        self,
+        resource_id: str,
+        *,
+        include_vectors: bool = True,
+        include_text: bool = True,
+        redact_source_metadata: bool = False,
+    ) -> bytes:
+        return encode_prepared_resource_manifest(
+            self.export_batch(resource_id),
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        )
+
+    def export_file(
+        self,
+        resource_id: str,
+        output_path: str | Path,
+        *,
+        include_vectors: bool = True,
+        include_text: bool = True,
+        redact_source_metadata: bool = False,
+    ) -> ResourceExportResult:
+        batch = self.export_batch(resource_id)
+        payload = encode_prepared_resource_manifest(
+            batch,
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        )
+        exported_batch = decode_prepared_resource_manifest(payload)
+        file_descriptor: int | None = None
+        temporary_path: Path | None = None
+        try:
+            destination = Path(output_path)
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{destination.name}.",
+                suffix=".tmp",
+                dir=destination.parent,
+            )
+            temporary_path = Path(temporary_name)
+            with os.fdopen(file_descriptor, "wb") as stream:
+                _write_complete_payload(stream, payload)
+            file_descriptor = None
+            os.link(temporary_path, destination)
+            temporary_path.unlink()
+            temporary_path = None
+        except (OSError, TypeError, ValueError):
+            if file_descriptor is not None:
+                try:
+                    os.close(file_descriptor)
+                except OSError:
+                    pass
+            _remove_owned_temporary(temporary_path)
+            raise ResourceCatalogError(
+                ResourceCatalogErrorCode.MANIFEST_OUTPUT_UNAVAILABLE
+            ) from None
+        except BaseException:
+            if file_descriptor is not None:
+                try:
+                    os.close(file_descriptor)
+                except OSError:
+                    pass
+            _remove_owned_temporary(temporary_path)
+            raise
+        return ResourceExportResult(
+            resource_id=resource_id,
+            counts=_batch_counts(exported_batch),
+            byte_size=len(payload),
+            digest="sha256:" + hashlib.sha256(payload).hexdigest(),
+        )
+
+
 class PreparedResourceCatalog:
     """Provider-free lifecycle facade for one explicit clean SQLite catalog path."""
 
@@ -408,7 +687,43 @@ class PreparedResourceCatalog:
             raise ResourceCatalogError(ResourceCatalogErrorCode.MANIFEST_UNAVAILABLE) from None
         return self.import_bytes(payload)
 
+    def export_batch(self, resource_id: str) -> PreparedResourceBatch:
+        return PreparedResourceExportService(self._catalog).export_batch(resource_id)
+
+    def export_bytes(
+        self,
+        resource_id: str,
+        *,
+        include_vectors: bool = True,
+        include_text: bool = True,
+        redact_source_metadata: bool = False,
+    ) -> bytes:
+        return PreparedResourceExportService(self._catalog).export_bytes(
+            resource_id,
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        )
+
+    def export_file(
+        self,
+        resource_id: str,
+        output_path: str | Path,
+        *,
+        include_vectors: bool = True,
+        include_text: bool = True,
+        redact_source_metadata: bool = False,
+    ) -> ResourceExportResult:
+        return PreparedResourceExportService(self._catalog).export_file(
+            resource_id,
+            output_path,
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        )
+
     def inspect(self, resource_id: str) -> ResourceInspection:
+        """Inspect redacted aggregate details for one resource."""
         try:
             resource = self._catalog.read_resource(resource_id)
             if resource is None:
@@ -645,9 +960,11 @@ __all__ = [
     "MetadataFacetValue",
     "MetadataInspection",
     "PreparedResourceCatalog",
+    "PreparedResourceExportService",
     "ResourceCatalogError",
     "ResourceCatalogErrorCode",
     "ResourceDeleteResult",
+    "ResourceExportResult",
     "ResourceImportResult",
     "ResourceInspection",
     "ResourceSearchResult",

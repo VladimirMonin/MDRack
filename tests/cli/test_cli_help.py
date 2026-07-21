@@ -97,6 +97,21 @@ def test_sections_list_exists() -> None:
     assert "FILE_ID" in result.output
 
 
+def test_resource_export_is_registered_once_with_manifest_projection_options() -> None:
+    runner = CliRunner()
+    group = runner.invoke(main, ["resource", "--help"])
+    command = runner.invoke(main, ["resource", "export", "--help"])
+
+    assert group.exit_code == command.exit_code == 0
+    assert group.output.count("export") == 1
+    assert "RESOURCE_ID" in command.output
+    assert "--catalog" in command.output
+    assert "--output" in command.output
+    assert "--include-vectors / --no-vectors" in command.output
+    assert "--include-text / --no-text" in command.output
+    assert "--redact-source-metadata" in command.output
+
+
 # ---------------------------------------------------------------------------
 # JSON envelope shape checks
 # ---------------------------------------------------------------------------

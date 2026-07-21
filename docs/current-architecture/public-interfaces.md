@@ -20,6 +20,8 @@ classDiagram
         +delete_image(resource_id)
         +find_resource_duplicates(resource_id, scope, limit) DuplicateResourceResult
         +find_similar_resources(unit_id, space_id, scope, limit) SimilarResourceResult
+        +import_resource_manifest(payload) ResourceImportResult
+        +export_resource_manifest(resource_id, options) bytes
         +get_file_by_path(relative_path) dict
         +get_chunk(logical_id) dict
         +get_chunk_source_locator(chunk_id) SourceLocator
@@ -110,7 +112,7 @@ Live command registration exposes:
 | `rebuild embeddings` | Recreate vectors for the active profile. |
 | `eval retrieval` | Run retrieval evaluation against the indexed store. |
 | `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against a ready resource generation; never triggered by Markdown scan. |
-| `resource import`, `inspect`, `delete` | Provider-free prepared-resource lifecycle against one explicitly named clean standalone catalog. |
+| `resource import`, `export`, `inspect`, `delete` | Provider-free prepared-resource lifecycle against one explicitly named clean standalone catalog. Export uses the existing manifest-v1 grammar. |
 | `resources duplicates`, `similar` | Provider-free exact hash and existing-vector discovery with typed/facet scope filters. |
 | `resources search`, `search` | Provider-free lexical search against the configured ready resource-core generation; `--target unit|resource` and scope filters are applied before limiting. |
 | `resources facets`, `facets` | Deterministic catalog facet listing, optionally narrowed by namespace. |
@@ -133,13 +135,14 @@ application degradation states to command errors; see [retrieval](retrieval.md).
 - source-locator lookup;
 - explicit direct-image ingest/search/delete;
 - exact duplicate and whole-resource vector similarity discovery;
+- active-catalog manifest-v1 import and deterministic semantic export;
 - explicit or context-managed close.
 
 It does not expose CLI diagnostics, status, model lifecycle, rebuild, evaluation,
 or legacy section listing methods.
 
 The separate Click-free `PreparedResourceCatalog` public facade opens one explicit
-clean standalone catalog path and provides manifest import, redacted inspect/delete,
+clean standalone catalog path and provides manifest import/export, redacted inspect/delete,
 provider-free lexical/vector search with `unit|resource` targets, and deterministic
 facet listing. It does not use `MDRackEngine`, configured generations, providers,
 source files, or the network.
