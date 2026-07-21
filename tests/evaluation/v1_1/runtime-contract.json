@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "contract": "mdrack.v11-q1-runtime-result",
+  "f1_input_contract": "sha256:8e75cc894c8cc373e70b7f9778a8e806daca65922c471ae9efd965b4d99f780b",
+  "f1_config_sha256": "sha256:84e160169853ea8f98f9152fe33f4248a838c9d7b52a88101eee5950c0975c8f",
+  "required_execution": {
+    "repeats": 2,
+    "fresh_disposable_catalogs": 2,
+    "network_attempts": 0,
+    "network_syscalls": 0,
+    "privacy_violations": 0,
+    "source_hashes_unchanged": true,
+    "disposable_catalogs_removed": true
+  },
+  "network_syscall_policy": "AF_INET and AF_INET6 syscalls are forbidden; AF_UNIX event-loop self-pipe IPC is observed but is not external network access",
+  "required_scenarios": ["A_metadata", "B_audio", "C_video", "D_degradation"],
+  "required_ablation_families": ["chunk_profiles", "frame_profiles", "metadata_profiles", "hybrid_profiles"],
+  "required_hybrid_profiles": {
+    "lexical_only": {"lexical_weight": 1.0, "semantic_weight": 0.0},
+    "semantic_only": {"lexical_weight": 0.0, "semantic_weight": 1.0},
+    "equal": {"lexical_weight": 0.5, "semantic_weight": 0.5},
+    "configured": {"lexical_weight": 0.4, "semantic_weight": 0.6}
+  },
+  "required_hybrid_metric_keys": [
+    "best_iou",
+    "cases",
+    "end_error_ms",
+    "interval_hit_at_k",
+    "mrr",
+    "ndcg",
+    "recall_at_10",
+    "recall_at_5",
+    "start_error_ms",
+    "temporal_cases",
+    "timestamp_hit_at_k"
+  ],
+  "required_privacy_surfaces": [
+    "api",
+    "cli_stderr",
+    "cli_stdout",
+    "disk",
+    "eval",
+    "log",
+    "provider",
+    "report"
+  ],
+  "required_non_claims": [
+    "live_provider",
+    "private_corpus",
+    "paid_or_network_provider",
+    "windows",
+    "python_3_12",
+    "visual_similarity",
+    "acoustic_similarity",
+    "universal_semantic_quality"
+  ]
+}

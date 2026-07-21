@@ -1,7 +1,8 @@
 # MDRack
 
-MDRack 0.3 is a local Python 3.11+ command-line and embedded retrieval rack for
-Markdown documents and explicitly supplied images.
+MDRack 1.1 is a local Python 3.11+ command-line and embedded retrieval rack for
+Markdown, typed metadata, timed transcripts, frame-caption text, and explicitly
+supplied images.
 
 The application depends on standalone `mdrack-core` and `mdrack-sqlite`
 distributions. The first is the stdlib-only provider/persistence-neutral kernel;
@@ -48,6 +49,7 @@ LM Studio model-management commands. Host applications can use
 - [Asset handling](docs/current-architecture/assets.md)
 - [CLI and embedded interfaces](docs/current-architecture/public-interfaces.md)
 - [Current limitations](docs/current-architecture/limitations.md)
+- [MDRack 1.1 local release](docs/release-1.1.md)
 - [CLI contracts](docs/cli-contracts.md)
 - [v0.3 compatibility registry](docs/compatibility/v0.3-compatibility-registry.md)
 - [Recovery procedures](docs/recovery.md)
@@ -81,6 +83,10 @@ never modified.
   not overlap.
 - Production reranking is disabled. `rerank_rank` and `rerank_score` remain
   `null`; non-null reranker injection fails closed.
+- MDRack indexes supplied transcripts and frame-caption text; it does not
+  transcribe raw audio or perform pixel/visual or acoustic search.
+- Provider-free and real-source checks prove retrieval behavior and source
+  integrity, not universal semantic quality from a live embedding model.
 - Legacy `files` and `sections` inspection commands still expose internal record
   IDs; new resource/image/search contracts expose logical IDs only.
 - The resource-core schema lives in candidate store generations. Only a verified

@@ -8,6 +8,9 @@ This page is a current-state boundary, not a roadmap promise.
   ANN index, vector database, or `sqlite-vec` extension.
 - Production embeddings require a reachable LM Studio HTTP endpoint. The Python
   package does not load embedding model weights itself.
+- Audio and video retrieval consumes supplied timed transcripts and frame-caption
+  text. MDRack does not transcribe raw audio, decode media, or perform acoustic,
+  pixel, or visual-similarity search.
 - Production reranking is unsupported. Non-null reranker injection and rerank
   requests fail closed; rerank result fields remain null.
 - Standard Markdown hybrid retrieval applies configured `text_weight` and
@@ -19,6 +22,9 @@ This page is a current-state boundary, not a roadmap promise.
   [v0.3.1 offline evidence](../evidence/v0.3.1-release-gate.md) are observations
   from one Linux host, not a portable latency/RSS support SLA. Larger matrix
   cells remain unrun.
+- Provider-free vectors and the accepted real-source media run prove application
+  wiring, timing evidence, source integrity, and textual retrieval. They do not
+  establish universal semantic quality from a live embedding model.
 
 ## Parsing and chunking
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Installed-artifact smoke for MDRack v0.3 public and persistence contracts."""
+"""Installed-artifact smoke for MDRack public and persistence contracts."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-EXPECTED_VERSION = "0.3.0"
+EXPECTED_VERSION = "1.1.0"
 REGISTRY_IMPORTS = {
     "mdrack.application.query": ("SearchService",),
     "mdrack.application.retrieval": ("RetrievalService", "HybridRetrievalService"),
@@ -48,10 +48,25 @@ REGISTRY_IMPORTS = {
         "EmbeddingCapabilities",
         "EmbeddingProfile",
         "IndexingResult",
+        "MetadataFacetValue",
+        "MetadataFilter",
+        "MetadataFilters",
+        "MetadataInspection",
         "RetrievalCandidate",
         "RetrievalItem",
         "RetrievalResult",
+        "ResourcePresetEvidence",
+        "ResourcePresetSearchItem",
+        "ResourcePresetSearchResult",
+        "ResourceSearchResult",
         "SourceLocator",
+        "TimedEvidence",
+        "TimedSearchItem",
+        "TimedSearchResult",
+        "TextualSimilarityResult",
+        "TextualSimilarResourceItem",
+        "TranscriptIngestionResult",
+        "VideoCompositionResult",
     ),
     "mdrack.indexing.indexer": ("IndexerResult", "run_indexer"),
     "mdrack.search.text": ("TextSearchItem", "TextSearchResult", "text_search"),
