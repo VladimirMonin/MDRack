@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-EXPECTED_VERSION = "1.1.0"
+EXPECTED_VERSION = "1.2.0"
 REGISTRY_IMPORTS = {
     "mdrack.application.query": ("SearchService",),
     "mdrack.application.retrieval": ("RetrievalService", "HybridRetrievalService"),
@@ -66,6 +66,11 @@ REGISTRY_IMPORTS = {
         "TextualSimilarityResult",
         "TextualSimilarResourceItem",
         "TranscriptIngestionResult",
+        "UnifiedTextEvidence",
+        "UnifiedTextSearchItem",
+        "UnifiedTextSearchResult",
+        "UnifiedTextSimilarityResult",
+        "UnifiedTextScopeName",
         "VideoCompositionResult",
     ),
     "mdrack.indexing.indexer": ("IndexerResult", "run_indexer"),
