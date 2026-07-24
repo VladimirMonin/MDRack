@@ -59,13 +59,17 @@ version, producer fingerprints, verification time, and a stable failure reason.
 States are `legacy_only`, `rebuild_required`, `building`, `ready`, and `failed`;
 only `ready` may serve core-backed search/write.
 
-A fresh candidate is created exclusively with the v2 package manifest, rebuilt,
-verified (identity/digest, FK/integrity, canonical records, vector codec/backend
-registry, FTS/vector/facet graph), checkpointed, closed and fsynced before its ready
-metadata becomes durable. Under one-writer quiescence, the active pointer is replaced
-and its directory fsynced. Readers see the old or new generation only. Retained
-legacy stores remain preservation-only: runtime pointer rollback is unsupported, and
-cleanup is a separate destructive action outside release acceptance.
+A fresh candidate is created exclusively with the v2 package manifest, rebuilt from
+source inputs, verified (identity/digest, FK/integrity, canonical records, vector
+codec/backend registry, FTS/vector/facet graph), checkpointed, closed and fsynced
+before its ready metadata becomes durable. The Markdown rebuild path snapshots source
+bytes before and after reparse; explicitly supplied non-Markdown rebuild inputs carry
+their own immutable source digests. Under one-writer quiescence, one-way promotion
+reads a predecessor pointer only as metadata and file presence, never opens its SQLite
+database, then replaces the pointer and fsyncs its directory. Readers see the old or
+new generation only. Retained legacy stores remain preservation-only: runtime pointer
+rollback is unsupported, and cleanup is a separate destructive action outside release
+acceptance.
 
 ## Current ER model
 

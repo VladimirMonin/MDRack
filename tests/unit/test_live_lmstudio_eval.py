@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from scripts.live_lmstudio_eval import build_capability_report
+from scripts.live_lmstudio_eval import _run_live_matrix, build_capability_report
 from scripts.live_lmstudio_eval import main as live_eval_main
 
 pytestmark = [pytest.mark.unit, pytest.mark.no_live_default]
@@ -123,3 +123,94 @@ def test_report_marks_mrl_tested_only_for_explicit_matching_runtime_evidence() -
         "vector_length_valid": True,
         "mrl_status": "tested",
     }
+
+
+@pytest.mark.asyncio
+async def test_live_matrix_requires_a_separate_load_permission_and_never_exposes_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mdrack.integrations.lmstudio.client import LMStudioModelInfo
+
+    class UnloadedClient:
+        async def list_models(self) -> list[LMStudioModelInfo]:
+            return [LMStudioModelInfo(key="safe-model", state="idle", loaded=False)]
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("scripts.live_lmstudio_eval.LMStudioControlClient", lambda endpoint: UnloadedClient())
+
+    report = await _run_live_matrix(
+        endpoint="http://HOST_SENTINEL:43123/private-api",
+        model="safe-model",
+        requested_dimensions=(1024, 512),
+        allow_model_load=False,
+        config_source="test",
+    )
+
+    assert report["status"] == "blocked_runtime_capability"
+    assert report["reason_code"] == "model_not_loaded"
+    assert report["calls_attempted"] == 1
+    assert "HOST_SENTINEL" not in json.dumps(report)
+
+
+@pytest.mark.asyncio
+async def test_live_matrix_records_requested_and_returned_dimensions_and_unloads_own_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mdrack.integrations.lmstudio.client import LMStudioLoadResult, LMStudioModelInfo
+
+    class ControlledClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, object | None]] = []
+
+        async def list_models(self) -> list[LMStudioModelInfo]:
+            self.calls.append(("list", None))
+            return [LMStudioModelInfo(key="safe-model", state="idle", loaded=False)]
+
+        async def load_model(self, model: str) -> LMStudioLoadResult:
+            self.calls.append(("load", model))
+            return LMStudioLoadResult(key=model, state="loaded", instance_id="runner-instance")
+
+        async def probe_embedding_dimensions(self, model: str, *, dimensions: int | None = None) -> int:
+            self.calls.append(("probe", dimensions))
+            assert model == "safe-model"
+            return 1024 if dimensions is None else dimensions
+
+        async def unload_model(self, instance_id: str) -> None:
+            self.calls.append(("unload", instance_id))
+
+        async def close(self) -> None:
+            self.calls.append(("close", None))
+
+    client = ControlledClient()
+    monkeypatch.setattr("scripts.live_lmstudio_eval.LMStudioControlClient", lambda endpoint: client)
+
+    report = await _run_live_matrix(
+        endpoint="http://HOST_SENTINEL:43123/private-api",
+        model="safe-model",
+        requested_dimensions=(1024, 512),
+        allow_model_load=True,
+        config_source="test",
+    )
+
+    assert report["status"] == "completed"
+    assert report["calls_attempted"] == 7
+    assert report["native_dimensions"] == 1024
+    assert report["all_reduced_dimensions_supported"] is True
+    assert report["cleanup"] == {
+        "model_loaded_by_runner": True,
+        "unload_status": "unloaded",
+        "loaded_models_after_cleanup": 0,
+    }
+    assert client.calls == [
+        ("list", None),
+        ("load", "safe-model"),
+        ("probe", None),
+        ("probe", 1024),
+        ("probe", 512),
+        ("unload", "runner-instance"),
+        ("list", None),
+        ("close", None),
+    ]
+    assert "HOST_SENTINEL" not in json.dumps(report)

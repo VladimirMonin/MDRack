@@ -114,6 +114,7 @@ Live command registration exposes:
 | `doctor` | Store, FTS, embedding, migration, and configuration diagnostics. |
 | `rebuild fts` | Rebuild the manually maintained FTS projection. |
 | `rebuild embeddings` | Recreate vectors for the active profile. |
+| `storage rebuild-fresh`, `verify`, `activate` | Build, inspect, and explicitly one-way-promote a verified clean v2 float32 candidate. |
 | `eval retrieval` | Run retrieval evaluation against the indexed store. |
 | `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against a ready resource generation; never triggered by Markdown scan. |
 | `resource import`, `export`, `inspect`, `delete` | Provider-free prepared-resource lifecycle against one explicitly named clean standalone catalog. Export uses the existing manifest-v1 grammar. |

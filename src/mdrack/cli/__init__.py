@@ -26,6 +26,7 @@ from mdrack.cli.commands.resources import similar as similar_command
 from mdrack.cli.commands.scan import cli_scan
 from mdrack.cli.commands.search import cli_search
 from mdrack.cli.commands.sections import sections as sections_group
+from mdrack.cli.commands.storage import storage as storage_group
 from mdrack.cli.commands.transcript import ingest as ingest_group
 from mdrack.cli.commands.video import ingest_video
 from mdrack.config.loader import load_config, resolve_config_path
@@ -233,6 +234,7 @@ main.add_command(resources_group)
 main.add_command(find_similar_command)
 main.add_command(similar_command, name="similar")
 main.add_command(facets_command, name="facets")
+main.add_command(storage_group)
 
 
 # ---------------------------------------------------------------------------

@@ -43,6 +43,7 @@ from mdrack_sqlite.contract_v2 import (
 
 FailureHook = Callable[[str], None]
 RebuildCallback = Callable[[sqlite3.Connection], None]
+FingerprintSupplier = Callable[[sqlite3.Connection], tuple[GenerationFingerprint, ...]]
 Clock = Callable[[], str]
 IdFactory = Callable[[], str]
 
@@ -89,6 +90,7 @@ class GenerationRuntime(Protocol):
         connection: sqlite3.Connection,
         *,
         expected_fingerprints: tuple[str, ...] = (),
+        require_exact_fingerprints: bool = False,
     ) -> Mapping[str, int]: ...
 
     def finalize_candidate(
@@ -103,6 +105,7 @@ class GenerationRuntime(Protocol):
         *,
         expected_version: str,
         expected_fingerprints: tuple[str, ...] = (),
+        require_exact_fingerprints: bool = False,
     ) -> Mapping[str, int]: ...
 
 
@@ -159,8 +162,11 @@ class StoreGenerationManager:
         rebuild: RebuildCallback,
         *,
         fingerprints: tuple[GenerationFingerprint, ...] = (),
+        fingerprint_supplier: FingerprintSupplier | None = None,
     ) -> StoreGeneration:
         """Build, verify, durably finalize, and mark one inactive candidate ready."""
+        if fingerprints and fingerprint_supplier is not None:
+            raise ValueError("candidate fingerprints must have one source")
         with self._writer_lease():
             generation_id = validate_generation_id(self._id_factory())
             database_path = self.database_path(generation_id)
@@ -184,9 +190,19 @@ class StoreGenerationManager:
                 self.runtime.migrate_candidate(connection)
                 rebuild(connection)
                 self._fail("after_rebuild")
+                if fingerprint_supplier is not None:
+                    generation = dataclasses.replace(
+                        generation,
+                        fingerprints=tuple(sorted(fingerprint_supplier(connection))),
+                    )
+                    self._persist_generation(generation)
+                expected_fingerprints, require_exact_fingerprints = _fingerprint_expectations(
+                    generation
+                )
                 self.runtime.verify_candidate(
                     connection,
-                    expected_fingerprints=tuple(item.value for item in generation.fingerprints),
+                    expected_fingerprints=expected_fingerprints,
+                    require_exact_fingerprints=require_exact_fingerprints,
                 )
                 self.runtime.finalize_candidate(connection, database_path)
                 connection = None
@@ -279,6 +295,31 @@ class StoreGenerationManager:
             logger.info("store.generation.candidate.activated")
             return pointer
 
+    def activate_candidate_one_way(self, generation_id: str) -> ActiveGenerationPointer:
+        """Promote a verified v2 candidate without opening a retained predecessor database."""
+        with self._writer_lease():
+            self._verify_retained_pointer_metadata()
+            generation = self.load_generation(generation_id)
+            if generation.contract_kind is not GenerationContractKind.RESOURCE_CORE_V2:
+                raise StoreGenerationManagerError("candidate_contract_unsupported")
+            self._verify_ready_generation(generation)
+            expected_fingerprints, require_exact_fingerprints = _fingerprint_expectations(
+                generation
+            )
+            self.runtime.verify_database_path(
+                self.database_path(generation_id),
+                expected_version=SQLITE_CATALOG_V2_SCHEMA_VERSION,
+                expected_fingerprints=expected_fingerprints,
+                require_exact_fingerprints=require_exact_fingerprints,
+            )
+            pointer = ActiveGenerationPointer(generation_id, generation.contract_kind)
+            self._persist_pointer(pointer)
+            reopened_pointer, _reopened_generation, _reopened_path = self.resolve_active()
+            if reopened_pointer != pointer:
+                raise StoreGenerationManagerError("active_generation_invalid")
+            logger.info("store.generation.candidate.activated_one_way")
+            return pointer
+
     def rollback(self, legacy_generation_id: str) -> ActiveGenerationPointer:
         """Reject runtime pointer rollback; retained stores are preservation-only."""
         del legacy_generation_id
@@ -301,10 +342,14 @@ class StoreGenerationManager:
                     expected_manifest_digest=manifest_digest,
                     expected_schema_version=schema_version,
                 )
+                expected_fingerprints, require_exact_fingerprints = _fingerprint_expectations(
+                    generation
+                )
                 self.runtime.verify_database_path(
                     database_path,
                     expected_version=schema_version,
-                    expected_fingerprints=tuple(item.value for item in generation.fingerprints),
+                    expected_fingerprints=expected_fingerprints,
+                    require_exact_fingerprints=require_exact_fingerprints,
                 )
             elif pointer.contract_kind is GenerationContractKind.LEGACY_V0_2:
                 self._verify_rollback_target(generation)
@@ -315,6 +360,19 @@ class StoreGenerationManager:
             if isinstance(exc, StoreGenerationManagerError):
                 raise
             raise StoreGenerationManagerError("active_generation_invalid") from exc
+
+    def verify_generation(self, generation_id: str) -> Mapping[str, int]:
+        """Reopen one ready generation and bind it to its persisted fingerprint contract."""
+        generation = self.load_generation(generation_id)
+        self._verify_ready_generation(generation)
+        _manifest_digest, schema_version = _core_contract_expectations(generation.contract_kind)
+        expected_fingerprints, require_exact_fingerprints = _fingerprint_expectations(generation)
+        return self.runtime.verify_database_path(
+            self.database_path(generation_id),
+            expected_version=schema_version,
+            expected_fingerprints=expected_fingerprints,
+            require_exact_fingerprints=require_exact_fingerprints,
+        )
 
     def load_generation(self, generation_id: str) -> StoreGeneration:
         try:
@@ -387,6 +445,41 @@ class StoreGenerationManager:
             )
         except (StoreGenerationContractError, StoreGenerationManagerError) as exc:
             raise StoreGenerationManagerError("candidate_not_ready") from exc
+
+    def _verify_retained_pointer_metadata(self) -> ActiveGenerationPointer:
+        """Validate predecessor metadata and file presence without opening its database."""
+        try:
+            pointer = ActiveGenerationPointer.from_bytes(self.pointer_path.read_bytes())
+            generation = self.load_generation(pointer.generation_id)
+            if pointer.contract_kind is GenerationContractKind.LEGACY_V0_2:
+                if (
+                    generation.contract_kind is not GenerationContractKind.LEGACY_V0_2
+                    or generation.schema_version != ACTIVE_MIGRATION_VERSION
+                    or generation.migration_manifest_digest != _legacy_manifest_digest()
+                    or generation.retention.mode is not RetentionMode.RETAINED_READ_ONLY
+                    or generation.state not in {GenerationState.LEGACY_ONLY, GenerationState.READY}
+                ):
+                    raise StoreGenerationManagerError("active_generation_invalid")
+            elif pointer.contract_kind in {
+                GenerationContractKind.RESOURCE_CORE_V1,
+                GenerationContractKind.RESOURCE_CORE_V2,
+            }:
+                manifest_digest, schema_version = _core_contract_expectations(pointer.contract_kind)
+                assert_pointer_serves_generation(
+                    pointer,
+                    generation,
+                    expected_manifest_digest=manifest_digest,
+                    expected_schema_version=schema_version,
+                )
+            else:
+                raise StoreGenerationManagerError("active_generation_invalid")
+            if not self.database_path(pointer.generation_id).is_file():
+                raise StoreGenerationManagerError("active_generation_invalid")
+            return pointer
+        except Exception as exc:
+            if isinstance(exc, StoreGenerationManagerError):
+                raise
+            raise StoreGenerationManagerError("active_generation_invalid") from exc
 
     def _verify_rollback_target(self, generation: StoreGeneration) -> None:
         if (
@@ -543,6 +636,16 @@ def _core_contract_expectations(contract_kind: GenerationContractKind) -> tuple[
     if contract_kind is GenerationContractKind.RESOURCE_CORE_V1:
         return EXPECTED_MIGRATION_MANIFEST_DIGEST, EXPECTED_MIGRATION_VERSION
     raise StoreGenerationManagerError("candidate_contract_unsupported")
+
+
+def _fingerprint_expectations(generation: StoreGeneration) -> tuple[tuple[str, ...], bool]:
+    """Return metadata values and whether they bind exactly to ordered space rows."""
+    fingerprints = generation.fingerprints
+    exact_names = tuple(f"embedding_space:{index:04d}" for index in range(len(fingerprints)))
+    return (
+        tuple(item.value for item in fingerprints),
+        bool(fingerprints) and tuple(item.name for item in fingerprints) == exact_names,
+    )
 
 
 def _legacy_manifest_digest() -> str:

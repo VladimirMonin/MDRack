@@ -16,7 +16,7 @@
       {"path": "tests/e2e/conftest.py", "sha256": "f8aaee8fc47f18bbbaad22512053b06905b95a534fcc0414caea738c0b4f59f0"},
       {"path": "tests/unit/conftest.py", "sha256": "fb40934028aaf76809b277c296e5c416e95f32fe602da7e8da26e29b2458f5b5"},
       {"path": "tests/unit/test_eval_privacy.py", "sha256": "1d0af27ec2cb906019ed128d916492511c17f3ab34d33aa0e87645ec6a20a4d9"},
-      {"path": "tests/unit/test_live_lmstudio_eval.py", "sha256": "9a82c7b7eb0b6054ba080db3ed501ffca6bac5b6b8724dd256df04a280d4f762"},
+      {"path": "tests/unit/test_live_lmstudio_eval.py", "sha256": "812cb5b6494280b9ebd6873263f9c0b29fa93d826723e54252fecaca67ec7a68"},
       {"path": "tests/unit/test_offline_release_matrix.py", "sha256": "3842c98ff9a03034e0adc7d95b74f19b7d23c4093ed9e004a61d6978198a697f"},
       {"path": "tests/unit/test_privacy_evidence_oracle.py", "sha256": "543d16ce79dd32f81f6222cf702c5d24f855b2ecb394235d8bd17344e5cce9e5"},
       {"path": "tests/unit/test_s8_failure_matrix.py", "sha256": "28983242d7fcc6d3a7ea14ddfea0061458b37773fac3c4cf641c01d46295246e"},

@@ -595,6 +595,29 @@ class TestLMStudioControlClient:
         assert clients[0].calls[0][1]["json"] == {"instance_id": "inst-1"}
 
     @pytest.mark.asyncio
+    async def test_dimension_probe_forwards_an_explicit_requested_dimension(
+        self, client: LMStudioControlClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": [{"embedding": [0.25, 0.75]}]}
+        mock_response.raise_for_status = MagicMock()
+        clients = _patch_async_client(monkeypatch, response=mock_response)
+
+        returned = await client.probe_embedding_dimensions(
+            "Qwen/Qwen3-Embedding-0.6B-GGUF",
+            dimensions=512,
+        )
+
+        assert returned == 2
+        assert clients[0].calls[0][0][0] == "http://localhost:1234/v1/embeddings"
+        assert clients[0].calls[0][1]["json"] == {
+            "model": "Qwen/Qwen3-Embedding-0.6B-GGUF",
+            "input": ["health check"],
+            "dimensions": 512,
+        }
+
+    @pytest.mark.asyncio
     async def test_list_models_http_status_raises_control_error(
         self, client: LMStudioControlClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:

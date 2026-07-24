@@ -1382,6 +1382,43 @@ calls are made:
 
 ---
 
+## 14a. `mdrack storage`
+
+```
+mdrack storage rebuild-fresh [--provider lmstudio|fake] [--profile <name>]
+  [--candidate-name <generation-id>] [--vector-codec float32] [--vector-backend builtin]
+mdrack storage verify <generation-id>
+mdrack storage activate <generation-id>
+```
+
+`storage rebuild-fresh` creates one inactive clean `mdrack_sqlite_catalog_v2`
+candidate. It discovers configured Markdown source files, snapshots their SHA-256
+bytes before reparse, re-embeds them into float32 spaces, and verifies the complete
+candidate graph before it becomes `ready`. It does not open, copy, or migrate a
+legacy/app-bridge database. If a source changes before completion, the candidate
+fails and the active pointer is left unchanged.
+
+`storage verify` reopens a v2 generation and returns its aggregate verifier
+counts. `storage activate` performs the separate one-way promotion step. It reads a
+predecessor pointer only as generation metadata plus file presence, never opens the
+predecessor SQLite database, then re-verifies the new candidate and atomically
+replaces the pointer. Runtime rollback to the retained predecessor is unsupported.
+
+Successful `rebuild-fresh` data contains only `generation_id`, `state`,
+`source_count`, `vector_codec`, and `vector_backend`. `verify` returns
+`generation_id`, `state`, and aggregate `counts`; `activate` returns
+`generation_id` and `contract_kind`. Failures use the fixed codes
+`FRESH_REBUILD_ERROR`, `STORAGE_VERIFY_ERROR`, or `STORAGE_ACTIVATE_ERROR` and
+never serialize source paths, source content, database paths, or raw exceptions.
+
+The Click command currently discovers Markdown only. A caller that needs to include
+timed transcript, frame-caption, or image-text material must supply immutable
+`ExplicitFreshSource` inputs to `FreshCompactReindexService`; those inputs are
+snapshotted before and after candidate construction and are not read from an old
+store generation.
+
+---
+
 ## 15. `mdrack eval retrieval`
 
 ```

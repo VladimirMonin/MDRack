@@ -84,6 +84,7 @@ class SQLiteGenerationRuntime:
         connection: sqlite3.Connection,
         *,
         expected_fingerprints: Sequence[str] = (),
+        require_exact_fingerprints: bool = False,
         expected_schema_version: str = SQLITE_CATALOG_V2_SCHEMA_VERSION,
     ) -> dict[str, int]:
         """Verify exact schema, integrity, graph, FTS, and vector contracts."""
@@ -194,7 +195,11 @@ class SQLiteGenerationRuntime:
             for row in confidence_rows:
                 self._validate_confidence(row[0])
 
-            self._verify_adapter_graph(connection, expected_fingerprints)
+            self._verify_adapter_graph(
+                connection,
+                expected_fingerprints,
+                require_exact_fingerprints=require_exact_fingerprints,
+            )
 
             counts = {
                 "resources": connection.execute("SELECT COUNT(*) FROM core_resources").fetchone()[0],
@@ -248,6 +253,7 @@ class SQLiteGenerationRuntime:
         *,
         expected_version: str,
         expected_fingerprints: Sequence[str] = (),
+        require_exact_fingerprints: bool = False,
     ) -> dict[str, int]:
         """Verify a closed database read-only without creating WAL/SHM files."""
         try:
@@ -269,6 +275,7 @@ class SQLiteGenerationRuntime:
                 return self.verify_candidate(
                     connection,
                     expected_fingerprints=expected_fingerprints,
+                    require_exact_fingerprints=require_exact_fingerprints,
                     expected_schema_version=SQLITE_CATALOG_V2_SCHEMA_VERSION,
                 )
             versions = [
@@ -283,6 +290,7 @@ class SQLiteGenerationRuntime:
                 return self.verify_candidate(
                     connection,
                     expected_fingerprints=expected_fingerprints,
+                    require_exact_fingerprints=require_exact_fingerprints,
                     expected_schema_version=EXPECTED_MIGRATION_VERSION,
                 )
             integrity = [row[0] for row in connection.execute("PRAGMA integrity_check").fetchall()]
@@ -321,10 +329,13 @@ class SQLiteGenerationRuntime:
     def _verify_adapter_graph(
         connection: sqlite3.Connection,
         expected_fingerprints: Sequence[str],
+        *,
+        require_exact_fingerprints: bool,
     ) -> None:
         """Read every persisted graph family through production DTO/adapter invariants."""
         store = SQLiteResourceStore(connection)
         observed_fingerprints: set[str] = set()
+        observed_space_fingerprints: list[str] = []
 
         resource_ids = [
             row[0]
@@ -379,6 +390,7 @@ class SQLiteGenerationRuntime:
         for row in space_rows:
             fingerprint = require_non_empty(row["fingerprint"], "space.fingerprint")
             observed_fingerprints.add(fingerprint)
+            observed_space_fingerprints.append(fingerprint)
             EmbeddingSpaceRecord(
                 require_non_empty(row["space_id"], "space_id"),
                 row["dimensions"],
@@ -439,11 +451,13 @@ class SQLiteGenerationRuntime:
         if duplicate_source is not None:
             raise GenerationRuntimeError("candidate_adapter_readback_invalid")
 
-        expected = {
-            require_non_empty(value, "expected_fingerprint")
-            for value in expected_fingerprints
-        }
-        if not expected <= observed_fingerprints:
+        expected_values = tuple(
+            require_non_empty(value, "expected_fingerprint") for value in expected_fingerprints
+        )
+        if require_exact_fingerprints:
+            if expected_values != tuple(observed_space_fingerprints):
+                raise GenerationRuntimeError("candidate_fingerprint_mismatch")
+        elif not set(expected_values) <= observed_fingerprints:
             raise GenerationRuntimeError("candidate_fingerprint_mismatch")
 
     def _fail(self, point: str) -> None:

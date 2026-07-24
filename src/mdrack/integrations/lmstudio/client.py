@@ -380,13 +380,24 @@ class LMStudioControlClient:
             instance_id_present=True,
         )
 
-    async def probe_embedding_dimensions(self, model: str, text: str = "health check") -> int:
+    async def probe_embedding_dimensions(
+        self,
+        model: str,
+        text: str = "health check",
+        *,
+        dimensions: int | None = None,
+    ) -> int:
         """Probe an embedding model and return the actual vector dimension."""
+        payload: dict[str, object] = {"model": model, "input": [text]}
+        if dimensions is not None:
+            if isinstance(dimensions, bool) or not isinstance(dimensions, int) or dimensions < 1:
+                raise ValueError("dimensions must be a positive integer")
+            payload["dimensions"] = dimensions
         payload = await self._request_json(
             method="POST",
             path="/embeddings",
             operation="probe_embedding_dimensions",
-            payload={"model": model, "input": [text]},
+            payload=payload,
             model=model,
             use_openai_api=True,
         )

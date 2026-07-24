@@ -34,6 +34,7 @@ from mdrack_core.domain.common import (
     require_optional_non_empty,
     require_utf8_encodable,
 )
+from mdrack_sqlite.builtin_exact import BuiltinExactSearchCounters, BuiltinExactVectorBackend
 from mdrack_sqlite.fts import plain_query_fallback
 from mdrack_sqlite.vector_codecs import (
     VectorCodec,
@@ -102,15 +103,6 @@ def _decode_float(value: object, field_name: str, *, confidence: bool = False) -
     return float(decoded)
 
 
-def _decode_numeric(value: object, field_name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{field_name} must contain finite numbers")
-    number = float(value)
-    if not math.isfinite(number):
-        raise ValueError(f"{field_name} must contain finite numbers")
-    return number
-
-
 def _codec_id_for_space_metadata(metadata: Mapping[str, object]) -> str:
     return codec_id_from_metadata(metadata)
 
@@ -145,7 +137,18 @@ class SQLiteResourceStore:
         self._writer_lock = threading.Lock()
         self._failure_hook: FailureHook | None = None
         self._codec_registry = codec_registry or VectorCodecRegistry.default()
+        self._vector_backend = BuiltinExactVectorBackend(self._codec_registry)
         self.transaction_open_count = 0
+
+    @property
+    def vector_backend(self) -> BuiltinExactVectorBackend:
+        """Return the mandatory builtin exact backend selected for this catalog."""
+        return self._vector_backend
+
+    @property
+    def last_vector_search_counters(self) -> BuiltinExactSearchCounters | None:
+        """Return privacy-safe counters for the latest successful vector search."""
+        return self._vector_backend.last_search_counters
 
     def _codec_for_metadata(self, metadata: Mapping[str, object]) -> VectorCodec:
         return self._codec_registry.get(_codec_id_for_space_metadata(metadata))
@@ -401,42 +404,22 @@ class SQLiteResourceStore:
                 or (branch.expected_fingerprint is not None and branch.expected_fingerprint != space["fingerprint"])
             ):
                 raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
-            codec = self._codec_for_metadata(_decode_mapping(space["metadata_json"], "space.metadata"))
-            query = tuple(_decode_numeric(value, "query vector") for value in branch.vector)
-            codec.encode(query, dimensions=space["dimensions"])
-            if space["metric"] == "cosine" and self._norm(query) == 0.0:
-                raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
+            metadata = _decode_mapping(space["metadata_json"], "space.metadata")
             clauses, params = self._scope_clauses(scope)
-            rows = self.connection.execute(
-                "SELECT u.*, p.resource_id AS representation_resource_id, "
-                "p.modality AS representation_modality, e.embedding "
-                "FROM core_unit_embeddings e "
-                "JOIN core_search_units u ON u.unit_id = e.unit_id "
-                "JOIN core_representations p ON p.representation_id = u.representation_id "
-                "JOIN core_resources r ON r.resource_id = u.resource_id "
-                f"WHERE e.space_id = ?{' AND ' if clauses else ''}{' AND '.join(clauses)}",
-                (branch.space_id, *params),
-            ).fetchall()
-            scored: list[tuple[float, sqlite3.Row]] = []
-            skipped_zero_cosine = False
-            for row in rows:
-                candidate = decode_vector_payload(
-                    row["embedding"],
-                    dimensions=space["dimensions"],
-                    metadata=_decode_mapping(space["metadata_json"], "space.metadata"),
-                    registry=self._codec_registry,
-                )
-                if space["metric"] == "cosine" and self._norm(candidate) == 0.0:
-                    skipped_zero_cosine = True
-                    continue
-                score = self._score(query, candidate, space["metric"], branch.branch_id)
-                scored.append((score, row))
-            if skipped_zero_cosine and not scored:
+            result = self._vector_backend.search(
+                self.connection,
+                branch=branch,
+                dimensions=space["dimensions"],
+                metric=space["metric"],
+                metadata=metadata,
+                clauses=clauses,
+                params=params,
+            )
+            if result.all_candidates_zero_cosine:
                 raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
-            scored.sort(key=lambda item: (-item[0], item[1]["unit_id"]))
             return [
                 self._candidate(row, rank=index, score=score, branch_id=branch.branch_id)
-                for index, (score, row) in enumerate(scored[: branch.candidate_limit], start=1)
+                for index, (score, row) in enumerate(result.scored_rows, start=1)
             ]
         except (BranchExecutionError, CatalogExecutionError):
             raise
@@ -929,22 +912,3 @@ class SQLiteResourceStore:
     @staticmethod
     def _norm(vector: Sequence[float]) -> float:
         return math.hypot(*vector)
-
-    @classmethod
-    def _score(
-        cls,
-        query: Sequence[float],
-        candidate: Sequence[float],
-        metric: str,
-        branch_id: str,
-    ) -> float:
-        if metric == "dot":
-            return sum(left * right for left, right in zip(query, candidate, strict=True))
-        if metric == "l2":
-            return -math.sqrt(sum((left - right) ** 2 for left, right in zip(query, candidate, strict=True)))
-        if metric == "cosine":
-            denominator = cls._norm(query) * cls._norm(candidate)
-            if denominator == 0.0:
-                raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch_id)
-            return sum(left * right for left, right in zip(query, candidate, strict=True)) / denominator
-        raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch_id)

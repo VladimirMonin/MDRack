@@ -74,6 +74,10 @@ extension inferred from an existing protocol or reserved field.
 
 - Resource-core search/write requires a verified ready generation. Candidate
   creation/cutover is not an automatic side effect of ordinary legacy commands.
+- `storage rebuild-fresh` discovers configured Markdown only. Transcript,
+  frame-caption, and image-text rebuild material must be supplied explicitly to the
+  application service as immutable-source inputs; the CLI has no media-source
+  manifest or fallback to rows from an old generation.
 - Retained legacy generations are not automatically deleted; cleanup requires
   separate destructive authorization.
 - Linux unit/offline, local SQLite/filesystem, and installed-wheel evidence does

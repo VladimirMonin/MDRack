@@ -1,0 +1,77 @@
+{
+  "contract": "mdrack.stage9-dimension-capability-v2",
+  "schema_version": 2,
+  "status": "completed",
+  "evidence_boundary": "local_components",
+  "executed_at_utc": "2026-07-24T13:59:47Z",
+  "revision": {
+    "head": "d049af0cf5edbf2c2eb4fd996b53232eff8401c6",
+    "working_tree": "dirty",
+    "active_plan_sha256": "sha256:eb452656a3ca08c3792343aa6be916602aa6f08c5329f8d2292d332fb00e1d16",
+    "runner_sha256": "sha256:d94d78d37f372a380efe63b39e25e78542dd8fe859b9dd424a26241a61f15319",
+    "provider_client_sha256": "sha256:fbd957ce8a8a8e4de467f088bdf9ca5ca02ac22f184f30ad070f976d5a754f5c"
+  },
+  "runtime": {
+    "lm_studio_cli_build": "4ecb9cd",
+    "model_id": "text-embedding-qwen3-embedding-0.6b",
+    "native_dimensions": 1024,
+    "request_probe_sha256": "sha256:500557bf797bf1ed4d5547a1998ba671c38a2672f4c5c47a9cb864f70e62f476",
+    "safe_runner_report_sha256": "sha256:636c55df6a80c661663b1cdec3d06f5a471891bfca6c4090d7a1b59b22e95115",
+    "calls_attempted": 9,
+    "matrix": [
+      {
+        "requested_dimensions": 1024,
+        "returned_dimensions": 1024,
+        "vector_length_valid": true,
+        "status": "returned_requested"
+      },
+      {
+        "requested_dimensions": 768,
+        "returned_dimensions": 1024,
+        "vector_length_valid": false,
+        "status": "returned_other_dimension"
+      },
+      {
+        "requested_dimensions": 512,
+        "returned_dimensions": 1024,
+        "vector_length_valid": false,
+        "status": "returned_other_dimension"
+      },
+      {
+        "requested_dimensions": 384,
+        "returned_dimensions": 1024,
+        "vector_length_valid": false,
+        "status": "returned_other_dimension"
+      }
+    ],
+    "all_reduced_dimensions_supported": false,
+    "cleanup": {
+      "model_loaded_by_runner": true,
+      "unload_status": "unloaded",
+      "loaded_models_after_cleanup": 0,
+      "gpu_memory_used_mib_after_cleanup": 234,
+      "gpu_memory_total_mib": 12288
+    }
+  },
+  "selection": {
+    "selected_dimensions": 1024,
+    "reason": "reduced_dimension_requests_returned_native_1024",
+    "quality_budget_applied": false,
+    "quality_budget_reason": "no_reduced_dimension_vectors_available"
+  },
+  "privacy": {
+    "probe_input_kind": "fixed_synthetic",
+    "raw_query_included": false,
+    "raw_content_included": false,
+    "paths_included": false,
+    "vectors_included": false,
+    "endpoint_included": false,
+    "provider_response_included": false,
+    "raw_exception_included": false
+  },
+  "non_claims": [
+    "No reduced-dimension retrieval-quality run was executed because LM Studio returned native 1024 for every reduced request.",
+    "No private corpus, user query, source path, vector payload, endpoint, credential, or raw provider response is included.",
+    "This artifact does not claim Windows, live-external, universal-quality, or sqlite-vec evidence."
+  ]
+}
