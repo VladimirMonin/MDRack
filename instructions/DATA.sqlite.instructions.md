@@ -83,7 +83,18 @@ current schema advances.
 - Per-file failures may yield `partial_success`, but must not leave a half-replaced file.
 - FTS rows are maintained with chunk writes/deletes; do not assume automatic triggers.
 - Embedding profile name, fingerprint, and dimensions must match before vector use.
-- Vectors remain JSON-encoded float arrays in SQLite and are scanned in Python.
+- Vector payloads are generation-specific. The legacy app compatibility schema keeps
+  canonical JSON-encoded finite float arrays in its `chunk_embeddings` BLOB column
+  and scans them in Python. Standalone/generic catalogs, including fresh v2, use
+  little-endian IEEE-754 float64 bytes by default: an explicit
+  `ieee754-f64-le-v1` codec or missing codec/value-policy metadata both select this
+  compatibility mode. When metadata is entirely absent, a canonical legacy JSON
+  payload may be decoded read-only; explicit codec metadata never enables JSON
+  writes. App-owned fresh-v2 spaces instead carry the explicit
+  `vector_value_policy=ieee754-f32-canonical-v1` and
+  `vector_codec=ieee754-f32-le-v1` pair, with values canonicalized once before
+  storage. Every mode remains an exact Python linear scan; no ANN or sqlite-vec
+  extension is used, and existing databases are not migrated, backfilled, or copied.
 - Current Markdown indexing treats eligible image alt/alias text as prose only. It
   does not resolve image targets or create, update, or delete rows in the dormant
   `0005` asset/reference tables. Explicit direct-image ingestion persists a typed

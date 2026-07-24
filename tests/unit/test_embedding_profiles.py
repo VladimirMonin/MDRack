@@ -46,9 +46,16 @@ def test_profile_fingerprint_is_stable_and_covers_every_identity_field() -> None
         "normalization_mode",
         "endpoint_family",
         "schema_version",
+        "vector_value_policy",
     ):
         current = getattr(profile, field_name)
-        replacement = current + "-other" if isinstance(current, str) else current + 1
+        replacement = (
+            current + "-other"
+            if isinstance(current, str)
+            else "ieee754-f32-canonical-v1"
+            if field_name == "vector_value_policy"
+            else current + 1
+        )
         assert replace(profile, **{field_name: replacement}).fingerprint != profile.fingerprint
 
 

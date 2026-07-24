@@ -54,6 +54,7 @@ def embedding_profile_from_config(
         endpoint_family=config.embedding.endpoint_family,
         instruction_profile=config.embedding.instruction_profile,
         schema_version=config.embedding.profile_schema_version,
+        vector_value_policy=config.embedding.vector_value_policy,
     )
 
 

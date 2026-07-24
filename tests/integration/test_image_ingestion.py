@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -71,6 +72,18 @@ class ZeroVectorEmbeddingProvider(CountingFakeEmbeddingProvider):
         del profile
         self.document_calls += 1
         return [[0.0] * self.dimensions for _text in texts]
+
+
+class NonCanonicalEmbeddingProvider(CountingFakeEmbeddingProvider):
+    async def embed(self, texts, profile: str = "default"):  # type: ignore[no-untyped-def]
+        del profile
+        self.document_calls += 1
+        return [[1.0 + 2**-30, *([0.0] * (self.dimensions - 1))] for _text in texts]
+
+    async def embed_query(self, text: str, profile: str = "default"):  # type: ignore[no-untyped-def]
+        del text, profile
+        self.query_calls += 1
+        return [1.0 + 2**-30, *([0.0] * (self.dimensions - 1))]
 
 
 def _document_trap(store: SQLiteResourceStore, text: str) -> None:
@@ -317,6 +330,58 @@ async def test_image_failures_preserve_the_previous_complete_graph_and_sanitize_
     ):
         assert sentinel not in observed
     assert provider.network_requests == 0
+
+
+async def test_image_text_embeddings_canonicalize_f32_values_and_queries_at_the_catalog_boundary(
+    tmp_path: Path,
+    sqlite_store,
+) -> None:
+    _database_path, connection, store = sqlite_store
+    image = tmp_path / "f32-image.png"
+    image.write_bytes(b"f32 image bytes")
+    provider = NonCanonicalEmbeddingProvider()
+    space = ImageEmbeddingSpace(
+        "image-f32-space",
+        8,
+        "f32-image-fingerprint",
+        profile_name="default",
+        vector_value_policy="ieee754-f32-canonical-v1",
+    )
+    service = ImageIngestionService(
+        store,
+        extractor=StaticImageExtractor(
+            (ExtractedImageText("caption_text", "f32 image caption", "caption-f32-v1"),)
+        ),
+        text_embedding_provider=provider,
+        text_space=space,
+    )
+
+    result = await service.ingest(
+        image,
+        resource_id="image-f32-resource",
+        source_namespace="fixture",
+        source_ref="image-f32-ref",
+    )
+    semantic = await service.search_semantic("f32 image caption", limit=1)
+    metadata = json.loads(
+        connection.execute(
+            "SELECT metadata_json FROM core_embedding_spaces WHERE space_id=?",
+            (space.space_id,),
+        ).fetchone()[0]
+    )
+
+    assert result.text_space_id == space.space_id
+    assert semantic.degraded is False
+    assert [item.resource_id for item in semantic.results] == ["image-f32-resource"]
+    assert metadata["vector_value_policy"] == "ieee754-f32-canonical-v1"
+    assert metadata["vector_codec"] == "ieee754-f32-le-v1"
+    assert [
+        tuple(row)
+        for row in connection.execute(
+            "SELECT DISTINCT length(embedding) FROM core_unit_embeddings WHERE space_id=?",
+            (space.space_id,),
+        ).fetchall()
+    ] == [(32,)]
 
 
 async def test_image_provider_failure_degrades_search_and_preserves_graph_before_replace(

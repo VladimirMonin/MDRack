@@ -8,6 +8,7 @@ from dataclasses import replace
 from enum import StrEnum
 from typing import Any, NoReturn, cast
 
+from mdrack.application.vector_values import canonicalize_prepared_batch_vectors
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.domain import (
     CoreError,
@@ -591,7 +592,7 @@ class PreparedResourceFacade:
         self._indexing = CoreIndexingService(catalog)
 
     def index_prepared_resource(self, batch: PreparedResourceBatch) -> None:
-        self._indexing.index(batch)
+        self._indexing.index(canonicalize_prepared_batch_vectors(batch))
 
     def export_manifest(
         self,
@@ -611,7 +612,10 @@ class PreparedResourceFacade:
     def import_manifest(self, payload: bytes) -> PreparedResourceBatch:
         batch = decode_prepared_resource_manifest(payload)
         try:
+            batch = canonicalize_prepared_batch_vectors(batch)
             self._indexing.index(batch)
+        except ValueError:
+            raise ManifestError(ManifestErrorCode.INVALID_GRAPH) from None
         except CoreError as error:
             if error.category is ErrorCategory.VALIDATION:
                 raise ManifestError(ManifestErrorCode.INVALID_GRAPH) from None

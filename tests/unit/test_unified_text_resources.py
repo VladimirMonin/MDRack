@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from mdrack.application.resources import (
     ResourceQueryService,
     TextualWholeResourceProjection,
     UnifiedTextSearchService,
     resolve_unified_text_scope,
+)
+from mdrack.application.vector_values import (
+    FLOAT32_VALUE_POLICY,
+    canonicalize_float32,
+    value_policy_metadata,
 )
 from mdrack_core.domain import (
     EmbeddingSpaceRecord,
@@ -17,6 +23,7 @@ from mdrack_core.domain import (
     SearchUnitRecord,
     VectorRecord,
 )
+from mdrack_sqlite import SQLiteCatalog
 from tests.core.fakes.memory_store import MemoryCatalog
 
 _SPACE = EmbeddingSpaceRecord("text-space", 2, "cosine", "text-fingerprint", {})
@@ -26,6 +33,12 @@ class _QueryProvider:
     async def embed_query(self, text: str, profile: str = "default") -> list[float]:
         del text, profile
         return [1.0, 0.0]
+
+
+class _NonCanonicalQueryProvider:
+    async def embed_query(self, text: str, profile: str = "default") -> list[float]:
+        del text, profile
+        return [1.0 + 2**-30, 0.0]
 
 
 @dataclass(frozen=True)
@@ -248,6 +261,38 @@ async def test_unified_semantic_search_fuses_all_compatible_embedding_spaces() -
 
     assert result.degraded is False
     assert {item.resource_id for item in result.results} == {"document-1", "video-1"}
+
+
+async def test_unified_semantic_search_canonicalizes_a_noncanonical_query_for_a_real_f32_catalog(
+    tmp_path: Path,
+) -> None:
+    canonical = canonicalize_float32((1.0 + 2**-30, 0.0))
+    space = EmbeddingSpaceRecord(
+        "f32-text-space",
+        2,
+        "cosine",
+        "f32-text-fingerprint",
+        value_policy_metadata(FLOAT32_VALUE_POLICY),
+    )
+    with SQLiteCatalog.create_v2(tmp_path / "f32-unified.sqlite3") as catalog:
+        catalog.replace_resource(
+            _batch(
+                resource_id="document-f32",
+                resource_kind="document",
+                unit_id="document-f32-unit",
+                text="canonical float32 text",
+                vector=(canonical[0], canonical[1]),
+                space=space,
+            )
+        )
+        result = await UnifiedTextSearchService(
+            catalog,
+            embedding_provider=_NonCanonicalQueryProvider(),  # type: ignore[arg-type]
+            embedding_fingerprint="f32-text-fingerprint",
+        ).search("canonical", scope="notes", mode="semantic")
+
+    assert result.degraded is False
+    assert [item.resource_id for item in result.results] == ["document-f32"]
 
 
 def test_resource_similarity_resolves_only_one_textual_whole_unit_and_rejects_frames() -> None:

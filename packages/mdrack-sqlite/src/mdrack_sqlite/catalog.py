@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
@@ -22,12 +23,18 @@ from mdrack_core.domain import (
     VectorRecord,
 )
 from mdrack_sqlite.contract import SQLITE_BRIDGE_SCHEMA_ID, SQLITE_CATALOG_SCHEMA_ID
+from mdrack_sqlite.contract_v2 import SQLITE_CATALOG_V2_SCHEMA_ID
 from mdrack_sqlite.errors import SQLiteCatalogError, SQLiteErrorCode
 from mdrack_sqlite.migrations import (
     SQLiteMigrationError,
     apply_migrations,
     validate_clean_identity,
     validate_clean_schema,
+)
+from mdrack_sqlite.migrations_v2 import (
+    apply_v2_migrations,
+    validate_v2_clean_identity,
+    validate_v2_clean_schema,
 )
 from mdrack_sqlite.resource_store import SQLiteResourceStore
 
@@ -63,6 +70,10 @@ _REQUIRED_INDEXES = frozenset(
         "idx_core_resource_facets_resource",
     }
 )
+_REQUIRED_V2_TABLES = _REQUIRED_TABLES | frozenset(
+    {"mdrack_vector_codecs", "mdrack_vector_backends"}
+)
+_REQUIRED_V2_INDEXES = _REQUIRED_INDEXES | frozenset({"idx_mdrack_vector_codecs_component"})
 _REQUIRED_FOREIGN_KEYS = frozenset(
     {
         ("core_representations", "resource_id", "core_resources", "resource_id", "CASCADE"),
@@ -132,6 +143,45 @@ class SQLiteCatalog(SQLiteResourceStore):
         timeout: float = 5.0,
     ) -> SQLiteCatalog:
         """Create one new clean ``mdrack_sqlite_catalog_v1`` database."""
+        return cls._create_clean(
+            database_path,
+            timeout=timeout,
+            schema_id=SQLITE_CATALOG_SCHEMA_ID,
+            migrate=apply_migrations,
+        )
+
+    @classmethod
+    def create_v2(
+        cls,
+        database_path: str | Path,
+        *,
+        timeout: float = 5.0,
+        failure_hook: Callable[[str], None] | None = None,
+    ) -> SQLiteCatalog:
+        """Create one fresh immutable ``mdrack_sqlite_catalog_v2`` database.
+
+        ``failure_hook`` is a failure-injection seam. It is called only after the
+        exclusive path reservation and after the durable package migrations; any
+        failure removes the candidate database and its SQLite sidecars.
+        """
+        return cls._create_clean(
+            database_path,
+            timeout=timeout,
+            schema_id=SQLITE_CATALOG_V2_SCHEMA_ID,
+            migrate=apply_v2_migrations,
+            failure_hook=failure_hook,
+        )
+
+    @classmethod
+    def _create_clean(
+        cls,
+        database_path: str | Path,
+        *,
+        timeout: float,
+        schema_id: str,
+        migrate: Callable[[sqlite3.Connection], None],
+        failure_hook: Callable[[str], None] | None = None,
+    ) -> SQLiteCatalog:
         connection: sqlite3.Connection | None = None
         path: Path | None = None
         created = False
@@ -143,6 +193,8 @@ class SQLiteCatalog(SQLiteResourceStore):
             descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             os.close(descriptor)
             created = True
+            if failure_hook is not None:
+                failure_hook("after_exclusive_create")
             connection = sqlite3.connect(
                 f"{path.as_uri()}?mode=rw",
                 uri=True,
@@ -151,12 +203,14 @@ class SQLiteCatalog(SQLiteResourceStore):
             cls._configure_connection(connection, timeout_value=timeout_value, readonly=False)
             connection.execute("PRAGMA synchronous=FULL")
             connection.execute("PRAGMA journal_mode=WAL")
-            apply_migrations(connection)
+            migrate(connection)
+            if failure_hook is not None:
+                failure_hook("after_catalog_migrations")
             catalog = cls(
                 connection,
                 readonly=False,
                 owns_connection=True,
-                schema_id=SQLITE_CATALOG_SCHEMA_ID,
+                schema_id=schema_id,
             )
             catalog.verify()
             return catalog
@@ -190,10 +244,10 @@ class SQLiteCatalog(SQLiteResourceStore):
         *,
         timeout: float = 5.0,
     ) -> SQLiteCatalog:
-        """Open an existing bridge catalog for reads and writes.
+        """Open an existing recognized catalog for reads and writes.
 
-        This Stage-3A API never creates or migrates a database. Clean standalone
-        schema creation is owned by the subsequent migration slice.
+        This API never creates or migrates a database. It accepts only the frozen
+        app bridge plus complete clean package identities (v1 or v2).
         """
         return cls._open(database_path, timeout=timeout, readonly=False)
 
@@ -351,6 +405,11 @@ class SQLiteCatalog(SQLiteResourceStore):
                     validate_clean_schema(self.connection)
                 except SQLiteMigrationError:
                     raise ValueError from None
+            elif self._schema_id == SQLITE_CATALOG_V2_SCHEMA_ID:
+                try:
+                    validate_v2_clean_schema(self.connection)
+                except SQLiteMigrationError:
+                    raise ValueError from None
             integrity = [row[0] for row in self.connection.execute("PRAGMA integrity_check")]
             if integrity != ["ok"]:
                 raise ValueError
@@ -364,7 +423,13 @@ class SQLiteCatalog(SQLiteResourceStore):
                 for row in self.connection.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
             }
             indexes = {row[0] for row in self.connection.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-            if not _REQUIRED_TABLES <= objects or not _REQUIRED_INDEXES <= indexes:
+            required_tables = (
+                _REQUIRED_V2_TABLES if self._schema_id == SQLITE_CATALOG_V2_SCHEMA_ID else _REQUIRED_TABLES
+            )
+            required_indexes = (
+                _REQUIRED_V2_INDEXES if self._schema_id == SQLITE_CATALOG_V2_SCHEMA_ID else _REQUIRED_INDEXES
+            )
+            if not required_tables <= objects or not required_indexes <= indexes:
                 raise ValueError
 
             actual_foreign_keys: set[tuple[str, str, str, str, str]] = set()
@@ -447,6 +512,12 @@ class SQLiteCatalog(SQLiteResourceStore):
             except SQLiteMigrationError:
                 raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
             return
+        if self._schema_id == SQLITE_CATALOG_V2_SCHEMA_ID:
+            try:
+                validate_v2_clean_identity(self.connection)
+            except SQLiteMigrationError:
+                raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
+            return
         if self._schema_id != SQLITE_BRIDGE_SCHEMA_ID:
             raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
         versions = [row[0] for row in self.connection.execute("SELECT version FROM schema_migrations ORDER BY version")]
@@ -481,11 +552,19 @@ class SQLiteCatalog(SQLiteResourceStore):
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
         }
         if {"mdrack_sqlite_migrations", "mdrack_sqlite_schema"} <= objects:
+            identity = connection.execute(
+                "SELECT schema_id FROM mdrack_sqlite_schema WHERE singleton=1"
+            ).fetchone()
             try:
-                validate_clean_identity(connection)
+                if identity is not None and identity[0] == SQLITE_CATALOG_SCHEMA_ID:
+                    validate_clean_identity(connection)
+                    return SQLITE_CATALOG_SCHEMA_ID
+                if identity is not None and identity[0] == SQLITE_CATALOG_V2_SCHEMA_ID:
+                    validate_v2_clean_identity(connection)
+                    return SQLITE_CATALOG_V2_SCHEMA_ID
             except SQLiteMigrationError:
                 raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
-            return SQLITE_CATALOG_SCHEMA_ID
+            raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
         if "schema_migrations" in objects:
             versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version")]
             if versions == [f"{version:04d}" for version in range(8)]:

@@ -30,15 +30,19 @@ The runner validates a compiled ordered filename/content manifest and digest bef
 touching a connection. `apply_migrations` is intentionally bounded at `0006` for
 the legacy database; only explicit candidate composition may apply `0007`.
 
-The standalone package has a separate immutable clean history named
-`mdrack_sqlite_catalog_v1`: `0000_identity`, `0001_catalog`,
-`0002_vectors_facets`, and `0003_search`. It persists exact filename/content
-digests in `mdrack_sqlite_migrations` and the final schema/version/manifest identity
-in `mdrack_sqlite_schema`. It reuses the `core_*` DDL semantics from frozen app
-bridge migration `0007`; it does not copy the app history or make the clean catalog
-the app default. `SQLiteCatalog.create()` is exclusive, while `open()` and
-`open_readonly()` accept only a complete recognized clean identity or the frozen
-app bridge and verify integrity before use.
+The standalone package has two separate immutable clean histories. Legacy
+`mdrack_sqlite_catalog_v1` ends at `0003_search`. Fresh compact app generations
+use `mdrack_sqlite_catalog_v2`: `0000_identity`, `0001_catalog`,
+`0002_vectors_facets`, `0003_search`, and `0004_vector_encoding`. V2 adds exact
+codec and backend registries (`mdrack_vector_codecs`, `mdrack_vector_backends`) to
+the same `core_*` graph and persists filename/content digests plus the final
+schema/version/manifest identity in `mdrack_sqlite_migrations` and
+`mdrack_sqlite_schema`. It is created directly from its own history; it never opens,
+upgrades, or copies a v1/app-bridge `0007` database as a rebuild source.
+
+`SQLiteCatalog.create()` remains the v1 compatibility API; `create_v2()` exclusively
+creates the fresh v2 catalog. `open()` and `open_readonly()` accept only a complete
+recognized clean identity or the frozen app bridge and verify integrity before use.
 
 For the clean identity only, verification binds the ledger to a compiled normalized
 `sqlite_master` fingerprint derived from those immutable package migrations. It
@@ -55,12 +59,13 @@ version, producer fingerprints, verification time, and a stable failure reason.
 States are `legacy_only`, `rebuild_required`, `building`, `ready`, and `failed`;
 only `ready` may serve core-backed search/write.
 
-A candidate is created exclusively, migrated, rebuilt, verified (FK/integrity,
-canonical records, FTS/vector/facet graph), checkpointed, closed and fsynced before
-its ready metadata becomes durable. Under one-writer quiescence, the active pointer
-is replaced and its directory fsynced. Readers see the old or new generation only.
-Rollback switches the pointer to the untouched retained legacy generation. Cleanup
-is a separate destructive action and is not part of rollback or release acceptance.
+A fresh candidate is created exclusively with the v2 package manifest, rebuilt,
+verified (identity/digest, FK/integrity, canonical records, vector codec/backend
+registry, FTS/vector/facet graph), checkpointed, closed and fsynced before its ready
+metadata becomes durable. Under one-writer quiescence, the active pointer is replaced
+and its directory fsynced. Readers see the old or new generation only. Retained
+legacy stores remain preservation-only: runtime pointer rollback is unsupported, and
+cleanup is a separate destructive action outside release acceptance.
 
 ## Current ER model
 
@@ -219,10 +224,20 @@ failure preserves the previous complete graph. Delete is atomic and idempotent.
 there are no triggers. Text search uses FTS5 rank and highlighted snippets, with
 a quoted-phrase retry only for plain invalid syntax.
 
-Embedding vectors are JSON-encoded float arrays stored in a BLOB column. Search
-loads vectors for the active profile/fingerprint and computes cosine similarity
-in Python. Profile name, fingerprint, and dimensions are validated before use.
-This is a linear scan; no ANN or SQLite vector extension is present.
+Vector payloads are generation-specific. The legacy app compatibility schema keeps
+canonical JSON-encoded finite float arrays in its `chunk_embeddings` BLOB column.
+Standalone/generic catalogs, including fresh v2, use little-endian IEEE-754
+float64 bytes by default: an explicit `ieee754-f64-le-v1` codec or missing
+codec/value-policy metadata both select that compatibility mode. With metadata
+entirely absent, a canonical legacy JSON payload may be decoded read-only; explicit
+codec metadata never enables JSON writes. App-owned fresh-v2 spaces instead carry
+the explicit `vector_value_policy=ieee754-f32-canonical-v1` and
+`vector_codec=ieee754-f32-le-v1` pair, with values canonicalized once before
+storage. Search loads vectors for the active profile/fingerprint and computes
+similarity in Python after validating the profile, fingerprint, dimensions, codec,
+and value policy. Every mode is an exact linear scan; no ANN or SQLite vector
+extension is present, and existing databases are not migrated, backfilled, or
+copied.
 
 ## Identity and source persistence
 

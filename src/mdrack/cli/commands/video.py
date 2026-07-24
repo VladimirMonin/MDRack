@@ -91,20 +91,24 @@ def ingest_video(
         manifest = read_video_resource_manifest(_read_bounded(manifest_path))
         storage, catalog = _open_catalog(ctx, catalog_path)
         embedding_fingerprint = None
+        vector_value_policy = None
         if not no_embeddings and not dry_run:
             if config is None:
                 raise ValueError("config_unavailable")
             provider = create_embedding_provider(provider_name or config.embedding.provider, config)
-            embedding_fingerprint = embedding_profile_from_config(
+            embedding_profile = embedding_profile_from_config(
                 config,
                 provider,
                 profile,
-            ).fingerprint
+            )
+            embedding_fingerprint = embedding_profile.fingerprint
+            vector_value_policy = embedding_profile.vector_value_policy
         service = VideoCompositionService(
             catalog,
             embedding_provider=provider,
             embedding_fingerprint=embedding_fingerprint,
             profile=profile,
+            vector_value_policy=vector_value_policy,
         )
         if dry_run:
             batch = service.prepare(

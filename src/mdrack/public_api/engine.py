@@ -50,6 +50,7 @@ from mdrack.application.video_composition import (
     VideoCompositionResult,
     VideoCompositionService,
 )
+from mdrack.diagnostics.storage import StorageAnalysis, analyze_application_storage
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.runtime import embedding_profile_from_config
@@ -481,10 +482,15 @@ class MDRackEngine:
                 self.profile,
             )
             text_space = ImageEmbeddingSpace(
-                embedding_space_id(profile.name, profile.fingerprint),
+                embedding_space_id(
+                    profile.name,
+                    profile.fingerprint,
+                    profile.vector_value_policy,
+                ),
                 profile.output_dimensions,
                 profile.fingerprint,
                 profile_name=profile.name,
+                vector_value_policy=profile.vector_value_policy,
             )
         self._images = ImageIngestionService(
             catalog,
@@ -613,12 +619,22 @@ class MDRackEngine:
             self.profile,
         ).fingerprint
 
+    def _transcript_embedding_value_policy(self) -> str | None:
+        if self.embedding_provider is None:
+            return None
+        return embedding_profile_from_config(
+            self.config,
+            self.embedding_provider,
+            self.profile,
+        ).vector_value_policy
+
     def _transcript_ingestion_service(self) -> TranscriptIngestionService:
         return TranscriptIngestionService(
             self._transcript_catalog(),
             embedding_provider=self.embedding_provider,
             embedding_fingerprint=self._transcript_embedding_fingerprint(),
             profile=self.profile,
+            vector_value_policy=self._transcript_embedding_value_policy(),
         )
 
     def _timed_retrieval_service(self) -> TimedRetrievalService:
@@ -638,7 +654,12 @@ class MDRackEngine:
             embedding_provider=self.embedding_provider,
             embedding_fingerprint=self._transcript_embedding_fingerprint(),
             profile=self.profile,
+            vector_value_policy=self._transcript_embedding_value_policy(),
         )
+
+    def analyze_storage(self) -> StorageAnalysis:
+        """Return read-only aggregate diagnostics for the active application store."""
+        return analyze_application_storage(self.root, self.config)
 
     def close(self) -> None:
         self.storage.close()

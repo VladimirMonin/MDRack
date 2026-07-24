@@ -23,6 +23,7 @@ class GenerationContractKind(StrEnum):
 
     LEGACY_V0_2 = "legacy_v0_2"
     RESOURCE_CORE_V1 = "resource_core_v1"
+    RESOURCE_CORE_V2 = "resource_core_v2"
 
 
 class GenerationState(StrEnum):

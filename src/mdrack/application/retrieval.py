@@ -15,6 +15,7 @@ from mdrack.application.resources import (
     ResourcePresetSearchItem,
     ResourcePresetSearchResult,
 )
+from mdrack.application.vector_values import canonicalize_for_space
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 from mdrack.domain.retrieval import (
     RetrievalCandidate,
@@ -275,6 +276,7 @@ class ResourcePresetSearchService:
                             degraded_reason = "incompatible_embedding_profile"
                             vector = None
                         else:
+                            vector = canonicalize_for_space(vector, resolved_space)
                             space_id = resolved_space.space_id
         if vector is None and mode == "semantic":
             return ResourcePresetSearchResult(
@@ -574,6 +576,7 @@ class RetrievalService:
                     "incompatible_embedding_profile",
                 )
             try:
+                vector = self._canonicalize_query_vector(space_id, vector)
                 core = self.storage.search_core(
                     SearchRequest(
                         lexical_branches=(),
@@ -594,6 +597,8 @@ class RetrievalService:
                 )
             except BranchExecutionError as error:
                 return self._empty_degraded(query, "semantic", error.category.value)
+            except ValueError:
+                return self._empty_degraded(query, "semantic", "incompatible_embedding_profile")
             return self.compatibility_mapper.retrieval_result(
                 query=query,
                 mode="semantic",
@@ -641,16 +646,21 @@ class RetrievalService:
                 if space_id is None:
                     degraded_reason = "incompatible_embedding_profile"
                 else:
-                    vector_branches = (
-                        VectorBranch(
-                            "semantic",
-                            space_id,
-                            vector,
-                            weight=self.semantic_weight,
-                            candidate_limit=limit * 2,
-                            expected_fingerprint=self.profile_fingerprint,
-                        ),
-                    )
+                    try:
+                        vector = self._canonicalize_query_vector(space_id, vector)
+                    except ValueError:
+                        degraded_reason = "incompatible_embedding_profile"
+                    else:
+                        vector_branches = (
+                            VectorBranch(
+                                "semantic",
+                                space_id,
+                                vector,
+                                weight=self.semantic_weight,
+                                candidate_limit=limit * 2,
+                                expected_fingerprint=self.profile_fingerprint,
+                            ),
+                        )
             request = SearchRequest(
                 lexical_branches=(
                     (
@@ -778,6 +788,19 @@ class RetrievalService:
             return None
         value = resolver(self.profile, self.profile_fingerprint)
         return value if isinstance(value, str) and value else None
+
+    def _canonicalize_query_vector(
+        self,
+        space_id: str,
+        vector: tuple[float, ...],
+    ) -> tuple[float, ...]:
+        canonicalizer = getattr(self.storage, "canonicalize_vector_for_space", None)
+        if not callable(canonicalizer):
+            return vector
+        value = canonicalizer(space_id, vector)
+        if not isinstance(value, tuple):
+            raise ValueError("embedding space returned an invalid query vector")
+        return value
 
     @staticmethod
     def _empty_degraded(

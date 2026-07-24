@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from mdrack.application.compatibility import (
     CoreCompatibilityMapper,
+    embedding_space_id,
     prepared_file_to_resource_batch,
 )
+from mdrack.application.vector_values import FLOAT32_VALUE_POLICY, canonicalize_float32
 from mdrack.domain.indexing import PreparedFile, StoredChunk, StoredSection
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack_core.domain import (
@@ -113,6 +117,28 @@ def test_prepared_file_projects_one_deterministic_complete_core_graph() -> None:
     serialized = repr(first)
     for internal_id in ("internal-file-row", "internal-section-row", "internal-chunk-row", "internal-run-row"):
         assert internal_id not in serialized
+
+
+def test_f32_policy_changes_profile_space_and_producer_identity_and_canonicalizes_vectors() -> None:
+    baseline = prepared_file_to_resource_batch(_prepared())
+    profile = replace(_profile(), vector_value_policy=FLOAT32_VALUE_POLICY)
+    prepared = replace(_prepared(), embedding_profile=profile, vectors=((1.0 + 2**-30, -0.0),))
+
+    batch = prepared_file_to_resource_batch(prepared)
+
+    assert batch.spaces[0].space_id == embedding_space_id(
+        profile.name,
+        profile.fingerprint,
+        FLOAT32_VALUE_POLICY,
+    )
+    assert batch.spaces[0].space_id != baseline.spaces[0].space_id
+    assert batch.spaces[0].metadata == {
+        "profile": profile.name,
+        "vector_codec": "ieee754-f32-le-v1",
+        "vector_value_policy": FLOAT32_VALUE_POLICY,
+    }
+    assert batch.representations[0].producer_fingerprint != baseline.representations[0].producer_fingerprint
+    assert all(vector.vector == canonicalize_float32(vector.vector) for vector in batch.vectors)
 
 
 def test_prepared_file_default_projection_has_deterministic_whole_text_similarity_basis() -> None:

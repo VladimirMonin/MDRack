@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol, cast
 
+from mdrack.application.vector_values import canonicalize_for_space
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core.application.retrieval import ResourceDiscoveryService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
@@ -640,7 +641,7 @@ class UnifiedTextSearchService:
                 VectorBranch(
                     "unified_semantic" if len(spaces) == 1 else f"unified_semantic_{index}",
                     space.space_id,
-                    vector,
+                    canonicalize_for_space(vector, space),
                     candidate_limit=candidate_limit,
                     expected_fingerprint=space.fingerprint,
                 )

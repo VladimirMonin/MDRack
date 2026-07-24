@@ -1749,6 +1749,7 @@ unit-target search methods.
 | `CONFIG_ERROR` | Configuration missing or failed to load. |
 | `STATUS_ERROR` | Status generation, storage, projection, or serialization failed. |
 | `DOCTOR_ERROR` | Doctor connection, execution, projection, or serialization failed. |
+| `STORAGE_ANALYSIS_ERROR` | Storage-analyzer input, read-only SQLite access, or aggregate serialization failed. |
 | `STORAGE_ERROR` | Database file not found or inaccessible. |
 | `EMBEDDING_ERROR` | LM Studio unavailable or model error during embedding. |
 | `NOT_FOUND` | Requested ID does not exist in the store. |
@@ -1783,19 +1784,30 @@ mdrack facets [--namespace NAME]
 mdrack resources search <query> [--target unit|resource]
 mdrack resources facets [--namespace NAME]
 mdrack benchmark --catalog PATH
+mdrack storage-analyze [--catalog PATH]
 ```
 
 `similar`, `facets`, and `resources` query the configured ready resource-core
 generation and apply categorical and facet filters before limiting results.
 `benchmark` verifies an explicitly named local catalog and reports aggregate counts
 plus elapsed time; it makes no retrieval-quality, provider, live-network, or
-real-source claim. All commands return one JSON envelope and fixed error categories.
+real-source claim. `storage-analyze` reads either the configured active application
+database or an explicit clean standalone catalog and returns a point-in-time,
+read-only aggregate. It reports main/WAL/SHM file bytes separately from vector
+payload bytes, SQLite page and freelist metrics, legacy/core record counts, anonymous
+per-space vector payload and registered codec/backend summaries, dual-write totals, and
+FTS bytes only when SQLite
+`dbstat` is available. It never returns document text, locators, titles, source paths,
+identifiers, metadata values, embeddings, or raw SQLite exception details. The embedded
+equivalent is `MDRackEngine.analyze_storage()`, which returns the
+`mdrack.diagnostics.storage.StorageAnalysis` DTO.
+All commands return one JSON envelope and fixed error categories.
 
 ---
 
 ## Database File Summary
 
-All commands read and write the same database file:
+Commands use database files as follows; `storage-analyze` is read-only:
 
 | Command | Database file |
 |---|---|
@@ -1819,6 +1831,7 @@ All commands read and write the same database file:
 | `metadata show/facets/projection-check` | Ready resource-core generation for reads; source file only for read-only projection preview |
 | `similar`, `facets` | Ready resource-core generation selected by `<store>/active-generation.json` |
 | `benchmark` | Explicit clean standalone database supplied by `--catalog PATH` |
+| `storage-analyze` | Active application database, or an explicit clean standalone catalog supplied by `--catalog PATH` |
 
 Relative store paths are resolved against the selected `--root`.
 

@@ -7,12 +7,13 @@ import math
 import shutil
 import sqlite3
 import struct
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
 
 from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
+from mdrack.application.vector_values import FLOAT32_VALUE_POLICY, canonicalize_float32
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import (
     EXPECTED_MIGRATION_MANIFEST,
@@ -164,6 +165,7 @@ def _batch(
     content_hash: str = "sha256:shared",
     facets: tuple[Facet, ...] = (Facet("tag", "python"),),
     space_id: str = "space",
+    space_metadata: Mapping[str, str] | None = None,
 ) -> PreparedResourceBatch:
     representation_id = f"representation-{resource_id}"
     unit_id = f"unit-{resource_id}"
@@ -202,7 +204,13 @@ def _batch(
         "estimated",
         {"unit": True},
     )
-    space = EmbeddingSpaceRecord(space_id, len(vector), metric, fingerprint, {"model": "fake"})
+    space = EmbeddingSpaceRecord(
+        space_id,
+        len(vector),
+        metric,
+        fingerprint,
+        {"model": "fake"} if space_metadata is None else space_metadata,
+    )
     assignments = tuple(ResourceFacet(resource_id, facet, "user", None, -0.0) for facet in facets)
     return PreparedResourceBatch(
         resource,
@@ -301,6 +309,49 @@ def test_catalog_round_trip_signed_zero_facets_hash_scope_and_delete(store: SQLi
     assert store.read_resource("resource-1") is None
     assert store.read_unit("unit-resource-1") is None
     assert store.read_vector("unit-resource-1", "space") is None
+
+
+def test_f32_space_uses_canonical_payloads_and_rejects_mixed_or_corrupt_data(
+    connection: sqlite3.Connection,
+    store: SQLiteResourceStore,
+) -> None:
+    vector = canonicalize_float32((1.0 + 2**-30, -0.0))
+    metadata = {
+        "model": "fake",
+        "vector_codec": "ieee754-f32-le-v1",
+        "vector_value_policy": FLOAT32_VALUE_POLICY,
+    }
+    batch = _batch("f32", vector=vector, space_id="f32-space", space_metadata=metadata)
+
+    store.replace_resource(batch)
+
+    payload = connection.execute(
+        "SELECT embedding FROM core_unit_embeddings WHERE unit_id=? AND space_id=?",
+        ("unit-f32", "f32-space"),
+    ).fetchone()[0]
+    assert payload == struct.pack("<2f", *vector)
+    actual = store.read_vector("unit-f32", "f32-space")
+    assert actual is not None
+    assert actual.vector == vector
+    assert math.copysign(1.0, actual.vector[1]) == -1.0
+
+    with pytest.raises(BranchExecutionError) as noncanonical_query:
+        store.search_vector(
+            VectorBranch("f32", "f32-space", (1.0 + 2**-30, -0.0)),
+            scope=SearchScope(),
+        )
+    assert noncanonical_query.value.category is ErrorCategory.ADAPTER_ERROR
+
+    with pytest.raises(CatalogExecutionError):
+        store.replace_resource(_batch("mixed", vector=vector, space_id="f32-space"))
+
+    connection.execute(
+        "UPDATE core_unit_embeddings SET embedding=? WHERE unit_id=? AND space_id=?",
+        (struct.pack("<2d", *vector), "unit-f32", "f32-space"),
+    )
+    connection.commit()
+    with pytest.raises(CatalogExecutionError):
+        store.read_vector("unit-f32", "f32-space")
 
 
 def test_resolve_embedding_spaces_accepts_canonical_sha256_equivalence(
@@ -570,7 +621,7 @@ def test_vector_metrics_scope_facets_and_cosine_zero_boundary(
     cosine_store.replace_resource(_batch("corrupt", metric="cosine", vector=(1.0, 0.0), space_id="cosine-space"))
     connection.execute(
         "UPDATE core_unit_embeddings SET embedding=? WHERE unit_id='unit-corrupt'",
-        (b"[0.0,-0.0]",),
+        (struct.pack("<2d", 0.0, -0.0),),
     )
     connection.commit()
 
@@ -579,7 +630,7 @@ def test_vector_metrics_scope_facets_and_cosine_zero_boundary(
 
     connection.execute(
         "UPDATE core_unit_embeddings SET embedding=? WHERE unit_id='unit-valid'",
-        (b"[0.0,0.0]",),
+        (struct.pack("<2d", 0.0, 0.0),),
     )
     connection.commit()
     with pytest.raises(BranchExecutionError) as error:

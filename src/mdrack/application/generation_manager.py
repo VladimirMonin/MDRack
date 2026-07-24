@@ -36,6 +36,10 @@ from mdrack.storage.sqlite.migrations import (
     EXPECTED_MIGRATION_VERSION,
     get_migrations_dir,
 )
+from mdrack_sqlite.contract_v2 import (
+    SQLITE_CATALOG_V2_SCHEMA_VERSION,
+    SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
+)
 
 FailureHook = Callable[[str], None]
 RebuildCallback = Callable[[sqlite3.Connection], None]
@@ -164,9 +168,9 @@ class StoreGenerationManager:
                 raise StoreGenerationManagerError("candidate_identity_exists")
             generation = StoreGeneration(
                 generation_id=generation_id,
-                contract_kind=GenerationContractKind.RESOURCE_CORE_V1,
-                migration_manifest_digest=EXPECTED_MIGRATION_MANIFEST_DIGEST,
-                schema_version=EXPECTED_MIGRATION_VERSION,
+                contract_kind=GenerationContractKind.RESOURCE_CORE_V2,
+                migration_manifest_digest=SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
+                schema_version=SQLITE_CATALOG_V2_SCHEMA_VERSION,
                 state=GenerationState.BUILDING,
                 created_at=self._clock(),
                 fingerprints=tuple(sorted(fingerprints)),
@@ -264,9 +268,10 @@ class StoreGenerationManager:
             self.resolve_active()
             generation = self.load_generation(generation_id)
             self._verify_ready_generation(generation)
+            _manifest_digest, schema_version = _core_contract_expectations(generation.contract_kind)
             self.runtime.verify_database_path(
                 self.database_path(generation_id),
-                expected_version=EXPECTED_MIGRATION_VERSION,
+                expected_version=schema_version,
                 expected_fingerprints=tuple(item.value for item in generation.fingerprints),
             )
             pointer = ActiveGenerationPointer(generation_id, generation.contract_kind)
@@ -275,18 +280,9 @@ class StoreGenerationManager:
             return pointer
 
     def rollback(self, legacy_generation_id: str) -> ActiveGenerationPointer:
-        """Atomically return the pointer to a verified retained untouched v0.2 generation."""
-        with self._writer_lease():
-            self.resolve_active()
-            generation = self.load_generation(legacy_generation_id)
-            self._verify_rollback_target(generation)
-            pointer = ActiveGenerationPointer(
-                legacy_generation_id,
-                GenerationContractKind.LEGACY_V0_2,
-            )
-            self._persist_pointer(pointer)
-            logger.info("store.generation.rollback.completed")
-            return pointer
+        """Reject runtime pointer rollback; retained stores are preservation-only."""
+        del legacy_generation_id
+        raise StoreGenerationManagerError("rollback_unsupported")
 
     def resolve_active(self) -> tuple[ActiveGenerationPointer, StoreGeneration, Path]:
         """Recover active truth from the durable pointer and fail closed on contradiction."""
@@ -294,20 +290,26 @@ class StoreGenerationManager:
             pointer = ActiveGenerationPointer.from_bytes(self.pointer_path.read_bytes())
             generation = self.load_generation(pointer.generation_id)
             database_path = self.database_path(pointer.generation_id)
-            if pointer.contract_kind is GenerationContractKind.RESOURCE_CORE_V1:
+            if pointer.contract_kind in {
+                GenerationContractKind.RESOURCE_CORE_V1,
+                GenerationContractKind.RESOURCE_CORE_V2,
+            }:
+                manifest_digest, schema_version = _core_contract_expectations(pointer.contract_kind)
                 assert_pointer_serves_generation(
                     pointer,
                     generation,
-                    expected_manifest_digest=EXPECTED_MIGRATION_MANIFEST_DIGEST,
-                    expected_schema_version=EXPECTED_MIGRATION_VERSION,
+                    expected_manifest_digest=manifest_digest,
+                    expected_schema_version=schema_version,
                 )
                 self.runtime.verify_database_path(
                     database_path,
-                    expected_version=EXPECTED_MIGRATION_VERSION,
+                    expected_version=schema_version,
                     expected_fingerprints=tuple(item.value for item in generation.fingerprints),
                 )
-            else:
+            elif pointer.contract_kind is GenerationContractKind.LEGACY_V0_2:
                 self._verify_rollback_target(generation)
+            else:
+                raise StoreGenerationManagerError("active_generation_invalid")
             return pointer, generation, database_path
         except Exception as exc:
             if isinstance(exc, StoreGenerationManagerError):
@@ -376,13 +378,14 @@ class StoreGenerationManager:
     def _verify_ready_generation(self, generation: StoreGeneration) -> None:
         pointer = ActiveGenerationPointer(generation.generation_id, generation.contract_kind)
         try:
+            manifest_digest, schema_version = _core_contract_expectations(generation.contract_kind)
             assert_pointer_serves_generation(
                 pointer,
                 generation,
-                expected_manifest_digest=EXPECTED_MIGRATION_MANIFEST_DIGEST,
-                expected_schema_version=EXPECTED_MIGRATION_VERSION,
+                expected_manifest_digest=manifest_digest,
+                expected_schema_version=schema_version,
             )
-        except StoreGenerationContractError as exc:
+        except (StoreGenerationContractError, StoreGenerationManagerError) as exc:
             raise StoreGenerationManagerError("candidate_not_ready") from exc
 
     def _verify_rollback_target(self, generation: StoreGeneration) -> None:
@@ -532,6 +535,14 @@ def _unlock_descriptor(descriptor: int) -> None:
         import fcntl
 
         fcntl.flock(descriptor, fcntl.LOCK_UN)
+
+
+def _core_contract_expectations(contract_kind: GenerationContractKind) -> tuple[str, str]:
+    if contract_kind is GenerationContractKind.RESOURCE_CORE_V2:
+        return SQLITE_V2_MIGRATION_MANIFEST_DIGEST, SQLITE_CATALOG_V2_SCHEMA_VERSION
+    if contract_kind is GenerationContractKind.RESOURCE_CORE_V1:
+        return EXPECTED_MIGRATION_MANIFEST_DIGEST, EXPECTED_MIGRATION_VERSION
+    raise StoreGenerationManagerError("candidate_contract_unsupported")
 
 
 def _legacy_manifest_digest() -> str:

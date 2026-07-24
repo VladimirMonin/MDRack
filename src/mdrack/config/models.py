@@ -160,6 +160,9 @@ class EmbeddingConfig(BaseModel):
     endpoint_family: str = Field(default="openai_embeddings", min_length=1)
     instruction_profile: str = Field(default="retrieval-query-v1", min_length=1)
     profile_schema_version: int = Field(default=1, ge=1)
+    vector_value_policy: Literal["ieee754-f32-canonical-v1"] | None = Field(
+        default="ieee754-f32-canonical-v1"
+    )
 
     model_config = {"frozen": True}
 

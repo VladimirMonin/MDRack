@@ -17,6 +17,7 @@ from mdrack.application.store_generations import (
 )
 from mdrack.cli import main
 from mdrack.config.models import EmbeddingConfig, MDRackConfig, PathsConfig
+from mdrack.embeddings.fake import FakeEmbeddingProvider
 from mdrack.ingestion.frame_captions import read_frame_captions
 from mdrack.ingestion.transcripts import read_transcript
 from mdrack.public_api import MDRackEngine
@@ -189,7 +190,11 @@ def test_active_store_unified_search_finds_all_five_text_material_classes_with_c
     note_before = b"# Note\n\nPRIVATE_NOTE_CONTENT needle from Markdown.\n"
     note.write_bytes(note_before)
 
-    with MDRackEngine(root=root, config=config) as engine:
+    with MDRackEngine(
+        root=root,
+        config=config,
+        embedding_provider=FakeEmbeddingProvider(dimensions=8),
+    ) as engine:
         indexed = engine.scan(force_reindex=True)
     assert indexed.status == "success"
 
@@ -226,12 +231,13 @@ def test_active_store_unified_search_finds_all_five_text_material_classes_with_c
             "fixture",
             "--source-ref",
             "audio-v12",
-            "--no-embeddings",
+            "--provider",
+            "fake",
         ],
     )
     video = runner.invoke(
         main,
-        [*common, "ingest", "video", str(video_source), "--no-embeddings"],
+        [*common, "ingest", "video", str(video_source), "--provider", "fake"],
     )
     image = runner.invoke(
         main,
@@ -258,6 +264,32 @@ def test_active_store_unified_search_finds_all_five_text_material_classes_with_c
     assert audio_source.read_bytes() == audio_before
     assert video_source.read_bytes() == video_before
     assert note.read_bytes() == note_before
+    with MDRackEngine(root=root, config=config) as engine:
+        manifest = engine.export_resource_manifest(audio_resource)
+        imported = engine.import_resource_manifest(manifest)
+    assert imported.resource_id == audio_resource
+    database_path = store_dir / "generations" / "generation-g-v12-public.sqlite3"
+    connection = get_connection(database_path)
+    try:
+        assert connection.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0] == 0
+        vectorized_kinds = {
+            (str(row["resource_kind"]), str(row["unit_kind"]))
+            for row in connection.execute(
+                "SELECT DISTINCT r.resource_kind,u.unit_kind "
+                "FROM core_unit_embeddings e "
+                "JOIN core_search_units u ON u.unit_id=e.unit_id "
+                "JOIN core_resources r ON r.resource_id=u.resource_id"
+            )
+        }
+    finally:
+        connection.close()
+    assert {
+        ("document", "text_chunk"),
+        ("audio", "time_segment"),
+        ("video", "time_segment"),
+        ("video", "frame"),
+        ("image", "whole_resource"),
+    } <= vectorized_kinds
 
     expected = {
         "notes": ("document", "text_chunk"),

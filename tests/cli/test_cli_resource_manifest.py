@@ -97,6 +97,28 @@ def _create_catalog(path: Path) -> None:
         pass
 
 
+def test_standalone_resource_search_canonicalizes_an_explicit_f32_query(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "catalog.sqlite3"
+    manifest_path = tmp_path / "manifest.json"
+    value = _manifest()
+    value["spaces"][0]["metadata"] = {
+        "vector_value_policy": "ieee754-f32-canonical-v1",
+        "vector_codec": "ieee754-f32-le-v1",
+    }
+    value["vectors"][0]["vector"] = [1.0 + 2**-30, 0.0]
+    _create_catalog(catalog_path)
+    _write_manifest(manifest_path, value)
+
+    with PreparedResourceCatalog.open(catalog_path) as catalog:
+        catalog.import_file(manifest_path)
+        result = catalog.search_vector((1.0 + 2**-30, 0.0), "space-1")
+
+    assert [(item["resource_id"], item["unit_id"]) for item in result.results] == [
+        ("resource-1", "unit-1")
+    ]
+    assert result.degraded is False
+
+
 def test_benchmark_missing_catalog_returns_fixed_private_error_envelope(tmp_path: Path) -> None:
     catalog_path = tmp_path / "missing-catalog.sqlite3"
 

@@ -159,6 +159,7 @@ def ingest_transcript(
         artifact = read_result.artifact  # type: ignore[attr-defined]
         storage, catalog = _open_catalog(ctx, catalog_path)
         embedding_fingerprint = None
+        vector_value_policy = None
         if not no_embeddings and not dry_run:
             if config is None:
                 raise ValueError("config_unavailable")
@@ -166,16 +167,19 @@ def ingest_transcript(
                 provider_name or config.embedding.provider,
                 config,
             )
-            embedding_fingerprint = embedding_profile_from_config(
+            embedding_profile = embedding_profile_from_config(
                 config,
                 embedding_provider,
                 profile,
-            ).fingerprint
+            )
+            embedding_fingerprint = embedding_profile.fingerprint
+            vector_value_policy = embedding_profile.vector_value_policy
         service = TranscriptIngestionService(
             catalog,
             embedding_provider=embedding_provider,
             embedding_fingerprint=embedding_fingerprint,
             profile=profile,
+            vector_value_policy=vector_value_policy,
         )
         locator = Locator(
             "external_record",

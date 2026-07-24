@@ -22,6 +22,7 @@ from mdrack.application.manifest import (
 )
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.application.metadata_projection import FACET_SCALAR_CODEC, MetadataScalar
+from mdrack.application.vector_values import canonicalize_for_space
 from mdrack_core.application.retrieval import RetrievalService
 from mdrack_core.domain import (
     TARGET_RESOURCE,
@@ -42,6 +43,7 @@ from mdrack_core.domain import (
     VectorRecord,
 )
 from mdrack_sqlite import SQLITE_CATALOG_SCHEMA_ID, SQLiteCatalog
+from mdrack_sqlite.vector_codecs import decode_vector_payload
 
 
 class ResourceCatalogErrorCode(StrEnum):
@@ -481,7 +483,8 @@ class PreparedResourceExportService:
                 (resource_id,),
             ).fetchall()
             vector_rows = connection.execute(
-                "SELECT e.unit_id,e.space_id,e.embedding FROM core_unit_embeddings e "
+                "SELECT e.unit_id,e.space_id,e.embedding,s.dimensions,s.metadata_json "
+                "FROM core_unit_embeddings e JOIN core_embedding_spaces s USING(space_id) "
                 "JOIN core_search_units u USING(unit_id) "
                 "WHERE u.resource_id=? ORDER BY e.unit_id,e.space_id",
                 (resource_id,),
@@ -544,7 +547,11 @@ class PreparedResourceExportService:
                     VectorRecord(
                         unit_id=row["unit_id"],
                         space_id=row["space_id"],
-                        vector=_decode_json_vector(row["embedding"]),
+                        vector=decode_vector_payload(
+                            row["embedding"],
+                            dimensions=row["dimensions"],
+                            metadata=_decode_json_mapping(row["metadata_json"]),
+                        ),
                     )
                     for row in vector_rows
                 ),
@@ -869,6 +876,20 @@ class PreparedResourceCatalog:
             raise ValueError("target must be unit or resource")
         if type(limit) is not int or limit < 1:
             raise ValueError("limit must be a positive integer")
+        row = self._catalog.connection.execute(
+            "SELECT space_id,dimensions,metric,fingerprint,metadata_json "
+            "FROM core_embedding_spaces WHERE space_id=?",
+            (space_id,),
+        ).fetchone()
+        if row is not None:
+            space = EmbeddingSpaceRecord(
+                space_id=str(row["space_id"]),
+                dimensions=int(row["dimensions"]),
+                metric=str(row["metric"]),
+                fingerprint=str(row["fingerprint"]),
+                metadata=_decode_json_mapping(row["metadata_json"]),
+            )
+            vector = canonicalize_for_space(vector, space)
         request = SearchRequest(
             lexical_branches=(),
             vector_branches=(VectorBranch("semantic", space_id, vector, candidate_limit=max(limit, 100)),),

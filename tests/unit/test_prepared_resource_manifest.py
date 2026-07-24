@@ -35,6 +35,7 @@ from mdrack.application.resource_catalog import (
     ResourceCatalogError,
     ResourceCatalogErrorCode,
 )
+from mdrack.application.vector_values import FLOAT32_VALUE_POLICY, canonicalize_float32
 from mdrack_core.domain import PreparedResourceBatch
 
 
@@ -189,6 +190,22 @@ def test_valid_manifest_round_trips_to_typed_batch_and_one_adapter_call() -> Non
     assert len(catalog.calls) == 1
     assert catalog.calls[0] is batch
     assert catalog.transactions_opened == 1
+
+
+def test_f32_manifest_vectors_are_canonicalized_before_the_catalog_boundary() -> None:
+    value = _manifest()
+    value["spaces"][0]["metadata"] = {
+        "vector_value_policy": FLOAT32_VALUE_POLICY,
+        "vector_codec": "ieee754-f32-le-v1",
+    }
+    value["vectors"][0]["vector"] = [1.0 + 2**-30, 0.0]
+    catalog = CatalogSpy()
+
+    batch = import_manifest(catalog, _encode(value))
+
+    expected = canonicalize_float32((1.0 + 2**-30, 0.0))
+    assert batch.vectors[0].vector == expected
+    assert catalog.calls[0].vectors[0].vector == expected
 
 
 def test_manifest_v1_export_is_deterministic_and_semantically_round_trips() -> None:

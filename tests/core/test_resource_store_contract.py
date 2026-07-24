@@ -9,6 +9,7 @@ from typing import Protocol
 import pytest
 from fakes.memory_store import MemoryCatalog
 
+from mdrack.application.vector_values import FLOAT32_VALUE_POLICY, canonicalize_float32
 from mdrack_core.domain import (
     BranchExecutionError,
     CatalogExecutionError,
@@ -280,6 +281,41 @@ def test_generic_catalog_and_search_contract(
         assert store.read_resource("included") is None
         assert store.read_unit("unit-included") is None
         assert store.read_vector("unit-included", "space") is None
+    finally:
+        if catalog is not None:
+            catalog.close()
+
+
+@pytest.mark.parametrize("backend", ["memory", "sqlite"])
+def test_f32_value_policy_has_memory_sqlite_contract_parity(backend: str, tmp_path: Path) -> None:
+    catalog: SQLiteCatalog | None = None
+    if backend == "memory":
+        store: ContractStore = MemoryCatalog(enforce_resource_contract=True)
+    else:
+        catalog = SQLiteCatalog.create(tmp_path / "f32-contract.db")
+        store = catalog
+    try:
+        vector = canonicalize_float32((1.0 + 2**-30, -0.0))
+        batch = _batch("f32", "vault", "needle", vector)
+        object.__setattr__(
+            batch.spaces[0],
+            "metadata",
+            {
+                "vector_codec": "ieee754-f32-le-v1",
+                "vector_value_policy": FLOAT32_VALUE_POLICY,
+            },
+        )
+
+        store.replace_resource(batch)
+
+        actual = store.read_vector("unit-f32", "space")
+        assert actual is not None
+        assert actual.vector == vector
+        assert math.copysign(1.0, actual.vector[1]) == -1.0
+        assert [item.unit_id for item in store.search_vector(
+            VectorBranch("f32", "space", vector, candidate_limit=1),
+            scope=SearchScope(),
+        )] == ["unit-f32"]
     finally:
         if catalog is not None:
             catalog.close()

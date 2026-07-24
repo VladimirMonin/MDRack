@@ -35,6 +35,12 @@ from mdrack_core.domain.common import (
     require_utf8_encodable,
 )
 from mdrack_sqlite.fts import plain_query_fallback
+from mdrack_sqlite.vector_codecs import (
+    VectorCodec,
+    VectorCodecRegistry,
+    codec_id_from_metadata,
+    decode_vector_payload,
+)
 
 FailureHook = Callable[[str], None]
 
@@ -96,27 +102,6 @@ def _decode_float(value: object, field_name: str, *, confidence: bool = False) -
     return float(decoded)
 
 
-def _encode_vector(vector: object, dimensions: int) -> bytes:
-    if not isinstance(vector, (list, tuple)) or not vector:
-        raise ValueError("vector must be a non-empty ordered sequence")
-    values = tuple(_decode_numeric(item, "vector") for item in vector)
-    if len(values) != dimensions:
-        raise ValueError("vector dimension mismatch")
-    return json.dumps(values, allow_nan=False, separators=(",", ":")).encode("utf-8")
-
-
-def _decode_vector(value: object, dimensions: int) -> tuple[float, ...]:
-    if not isinstance(value, bytes):
-        raise ValueError("embedding must be bytes")
-    decoded = json.loads(value.decode("utf-8", "strict"))
-    if not isinstance(decoded, list):
-        raise ValueError("embedding must be a JSON array")
-    vector = tuple(_decode_numeric(item, "embedding") for item in decoded)
-    if _encode_vector(vector, dimensions) != value:
-        raise ValueError("embedding is not canonical")
-    return vector
-
-
 def _decode_numeric(value: object, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field_name} must contain finite numbers")
@@ -124,6 +109,10 @@ def _decode_numeric(value: object, field_name: str) -> float:
     if not math.isfinite(number):
         raise ValueError(f"{field_name} must contain finite numbers")
     return number
+
+
+def _codec_id_for_space_metadata(metadata: Mapping[str, object]) -> str:
+    return codec_id_from_metadata(metadata)
 
 
 def _is_busy(error: sqlite3.OperationalError) -> bool:
@@ -141,14 +130,28 @@ def _validate_token_pair(count: object, kind: object) -> None:
 class SQLiteResourceStore:
     """One logical-ID-only SQLite owner for core catalog and search ports."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        codec_registry: VectorCodecRegistry | None = None,
+    ) -> None:
         if not isinstance(connection, sqlite3.Connection):
             raise TypeError("connection must be sqlite3.Connection")
+        if codec_registry is not None and not isinstance(codec_registry, VectorCodecRegistry):
+            raise TypeError("codec_registry must be VectorCodecRegistry")
         self.connection = connection
         self.connection.row_factory = sqlite3.Row
         self._writer_lock = threading.Lock()
         self._failure_hook: FailureHook | None = None
+        self._codec_registry = codec_registry or VectorCodecRegistry.default()
         self.transaction_open_count = 0
+
+    def _codec_for_metadata(self, metadata: Mapping[str, object]) -> VectorCodec:
+        return self._codec_registry.get(_codec_id_for_space_metadata(metadata))
+
+    def _codec_for_space(self, space: EmbeddingSpaceRecord) -> VectorCodec:
+        return self._codec_for_metadata(space.metadata)
 
     def set_failure_hook(self, hook: FailureHook | None) -> None:
         """Install an adapter-local deterministic failure hook for atomicity tests."""
@@ -241,14 +244,23 @@ class SQLiteResourceStore:
             unit_id = require_non_empty(unit_id, "unit_id")
             space_id = require_non_empty(space_id, "space_id")
             row = self.connection.execute(
-                "SELECT e.unit_id, e.space_id, e.embedding, s.dimensions "
+                "SELECT e.unit_id, e.space_id, e.embedding, s.dimensions, s.metadata_json "
                 "FROM core_unit_embeddings e JOIN core_embedding_spaces s USING(space_id) "
                 "WHERE e.unit_id = ? AND e.space_id = ?",
                 (unit_id, space_id),
             ).fetchone()
             if row is None:
                 return None
-            return VectorRecord(row["unit_id"], row["space_id"], _decode_vector(row["embedding"], row["dimensions"]))
+            return VectorRecord(
+                row["unit_id"],
+                row["space_id"],
+                decode_vector_payload(
+                    row["embedding"],
+                    dimensions=row["dimensions"],
+                    metadata=_decode_mapping(row["metadata_json"], "space.metadata"),
+                    registry=self._codec_registry,
+                ),
+            )
         except sqlite3.OperationalError as error:
             category = ErrorCategory.ADAPTER_TIMEOUT if _is_busy(error) else ErrorCategory.CATALOG_ERROR
             raise CatalogExecutionError(category) from None
@@ -389,7 +401,9 @@ class SQLiteResourceStore:
                 or (branch.expected_fingerprint is not None and branch.expected_fingerprint != space["fingerprint"])
             ):
                 raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
+            codec = self._codec_for_metadata(_decode_mapping(space["metadata_json"], "space.metadata"))
             query = tuple(_decode_numeric(value, "query vector") for value in branch.vector)
+            codec.encode(query, dimensions=space["dimensions"])
             if space["metric"] == "cosine" and self._norm(query) == 0.0:
                 raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
             clauses, params = self._scope_clauses(scope)
@@ -406,7 +420,12 @@ class SQLiteResourceStore:
             scored: list[tuple[float, sqlite3.Row]] = []
             skipped_zero_cosine = False
             for row in rows:
-                candidate = _decode_vector(row["embedding"], space["dimensions"])
+                candidate = decode_vector_payload(
+                    row["embedding"],
+                    dimensions=space["dimensions"],
+                    metadata=_decode_mapping(space["metadata_json"], "space.metadata"),
+                    registry=self._codec_registry,
+                )
                 if space["metric"] == "cosine" and self._norm(candidate) == 0.0:
                     skipped_zero_cosine = True
                     continue
@@ -582,6 +601,7 @@ class SQLiteResourceStore:
             raise ValueError("every representation must own a unit")
         space_values = []
         spaces: dict[str, EmbeddingSpaceRecord] = {}
+        codecs: dict[str, VectorCodec] = {}
         for space_record in batch.spaces:
             if space_record.space_id in spaces:
                 raise ValueError("duplicate space_id")
@@ -590,6 +610,7 @@ class SQLiteResourceStore:
             if space_record.metric not in {"cosine", "dot", "l2"}:
                 raise ValueError("space metric is invalid")
             spaces[space_record.space_id] = space_record
+            codecs[space_record.space_id] = self._codec_for_space(space_record)
             space_values.append(
                 (
                     require_non_empty(space_record.space_id, "space_id"),
@@ -610,9 +631,9 @@ class SQLiteResourceStore:
                 or vector_record.space_id not in spaces
             ):
                 raise ValueError("invalid vector ownership or identity")
-            encoded = _encode_vector(
+            encoded = codecs[vector_record.space_id].encode(
                 vector_record.vector,
-                spaces[vector_record.space_id].dimensions,
+                dimensions=spaces[vector_record.space_id].dimensions,
             )
             if spaces[vector_record.space_id].metric == "cosine" and self._norm(vector_record.vector) == 0.0:
                 raise ValueError("cosine vector norm must be non-zero")
@@ -766,11 +787,16 @@ class SQLiteResourceStore:
             self._unit_from_row(row)
         for vector in batch.vectors:
             row = self.connection.execute(
-                "SELECT e.embedding,s.dimensions FROM core_unit_embeddings e "
+                "SELECT e.embedding,s.dimensions,s.metadata_json FROM core_unit_embeddings e "
                 "JOIN core_embedding_spaces s USING(space_id) WHERE e.unit_id=? AND e.space_id=?",
                 (vector.unit_id, vector.space_id),
             ).fetchone()
-            _decode_vector(row["embedding"], row["dimensions"])
+            decode_vector_payload(
+                row["embedding"],
+                dimensions=row["dimensions"],
+                metadata=_decode_mapping(row["metadata_json"], "space.metadata"),
+                registry=self._codec_registry,
+            )
         for row in self.connection.execute(
             "SELECT producer_is_null,producer_value,confidence_json FROM core_resource_facets WHERE resource_id=?",
             (resource_id,),

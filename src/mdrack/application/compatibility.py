@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
@@ -28,6 +29,12 @@ from mdrack.application.store_generations import (
     GenerationContractKind,
     GenerationState,
     assert_pointer_serves_generation,
+)
+from mdrack.application.vector_values import (
+    apply_vector_value_policy,
+    canonicalize_for_value_policy,
+    value_policy_from_space_metadata,
+    value_policy_metadata,
 )
 from mdrack.domain.identifiers import logical_id
 from mdrack.domain.indexing import PreparedFile, SourceLocator
@@ -65,6 +72,11 @@ from mdrack_core.domain import (
     VectorRecord,
 )
 from mdrack_media import AggregationFingerprint, WholeResourceTextPolicy, weighted_centroid
+from mdrack_sqlite.contract_v2 import (
+    SQLITE_CATALOG_V2_SCHEMA_VERSION,
+    SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
+)
+from mdrack_sqlite.migrations_v2 import validate_v2_clean_identity
 
 _DOCUMENT_LOCATOR = "document"
 _DOCUMENT_SPAN_LOCATOR = "document_span"
@@ -76,9 +88,13 @@ _DIRECT_TEXT_AGGREGATION = "direct_text_v1"
 _CENTROID_TEXT_AGGREGATION = "token_weighted_centroid_v1"
 
 
-def embedding_space_id(profile_name: str, fingerprint: str) -> str:
+def embedding_space_id(
+    profile_name: str,
+    fingerprint: str,
+    vector_value_policy: str | None = None,
+) -> str:
     """Return the app-owned deterministic identity for one ready text-vector space."""
-    return logical_id("embedding-space", profile_name, fingerprint)
+    return logical_id("embedding-space", profile_name, fingerprint, vector_value_policy)
 
 
 def prepared_file_to_resource_batch(
@@ -191,6 +207,8 @@ def prepared_file_to_resource_batch(
             prepared.parser_version,
             prepared.chunk_strategy_name,
             prepared.chunk_strategy_version,
+            None if prepared.embedding_profile is None else prepared.embedding_profile.fingerprint,
+            None if prepared.embedding_profile is None else prepared.embedding_profile.vector_value_policy,
         ),
         metadata={},
     )
@@ -240,14 +258,18 @@ def prepared_file_to_resource_batch(
             raise ValueError("embedding profile is required when vectors are present")
         if len(prepared.vectors) != len(units):
             raise ValueError("embedding count must match the search-unit count")
-        space_id = embedding_space_id(profile.name, profile.fingerprint)
+        space_id = embedding_space_id(
+            profile.name,
+            profile.fingerprint,
+            profile.vector_value_policy,
+        )
         spaces = (
             EmbeddingSpaceRecord(
                 space_id=space_id,
                 dimensions=profile.output_dimensions,
                 metric=METRIC_COSINE,
                 fingerprint=profile.fingerprint,
-                metadata={"profile": profile.name},
+                metadata={"profile": profile.name, **value_policy_metadata(profile.vector_value_policy)},
             ),
         )
         vectors = tuple(
@@ -391,6 +413,7 @@ def prepared_file_to_resource_batch(
                 space_id = embedding_space_id(
                     prepared.embedding_profile.name,
                     prepared.embedding_profile.fingerprint,
+                    prepared.embedding_profile.vector_value_policy,
                 )
                 spaces = (
                     EmbeddingSpaceRecord(
@@ -398,7 +421,10 @@ def prepared_file_to_resource_batch(
                         dimensions=prepared.embedding_profile.output_dimensions,
                         metric=METRIC_COSINE,
                         fingerprint=prepared.embedding_profile.fingerprint,
-                        metadata={"profile": prepared.embedding_profile.name},
+                        metadata={
+                            "profile": prepared.embedding_profile.name,
+                            **value_policy_metadata(prepared.embedding_profile.vector_value_policy),
+                        },
                     ),
                 )
                 if len(whole_vector) != spaces[0].dimensions:
@@ -406,7 +432,7 @@ def prepared_file_to_resource_batch(
                 vectors = (VectorRecord(whole_unit_id, space_id, tuple(whole_vector)),)
         representations = representations + (whole_representation,)
 
-    return PreparedResourceBatch(
+    batch = PreparedResourceBatch(
         resource=resource,
         representations=representations,
         units=units,
@@ -421,6 +447,10 @@ def prepared_file_to_resource_batch(
             )
             for facet in projection.facets
         ),
+    )
+    return apply_vector_value_policy(
+        batch,
+        None if prepared.embedding_profile is None else prepared.embedding_profile.vector_value_policy,
     )
 
 
@@ -556,20 +586,24 @@ def _optional_int(payload: Mapping[str, object], key: str) -> int | None:
 
 
 class CoreCompatibilityStorage:
-    """One active-generation composition for core writes/search and legacy reads."""
+    """Active resource-core composition with feature-gated legacy vector writes."""
 
     def __init__(
         self,
         connection: _AtomicProjectionConnection,
         *,
         metadata_policy: MetadataProjectionPolicy | None = None,
+        write_legacy_vectors: bool = False,
     ) -> None:
+        if not isinstance(write_legacy_vectors, bool):
+            raise TypeError("write_legacy_vectors must be a bool")
         self.connection = connection
         self.legacy = SQLiteIndexStorage(connection)
         self.resource_store = SQLiteResourceStore(connection)
         self.core_indexing = CoreIndexingService(self.resource_store)
         self.core_retrieval = CoreRetrievalService(self.resource_store)
         self.metadata_policy = metadata_policy or DEFAULT_METADATA_PROJECTION_POLICY
+        self._write_legacy_vectors = write_legacy_vectors
         self._closed = False
 
     def start_run(self, **kwargs: Any) -> str:
@@ -596,7 +630,10 @@ class CoreCompatibilityStorage:
             self.core_indexing.index(
                 prepared_file_to_resource_batch(prepared, metadata_policy=self.metadata_policy)
             )
-            self.legacy.replace_file(prepared)
+            self.legacy.replace_file(
+                prepared,
+                write_legacy_vectors=self._write_legacy_vectors,
+            )
 
     def resolve_textual_whole_resource_units(
         self,
@@ -725,6 +762,25 @@ class CoreCompatibilityStorage:
             ).fetchall()
         return str(rows[0][0]) if len(rows) == 1 else None
 
+    def canonicalize_vector_for_space(
+        self,
+        space_id: str,
+        vector: Sequence[float],
+    ) -> tuple[float, ...]:
+        row = self.connection.execute(
+            "SELECT metadata_json FROM core_embedding_spaces WHERE space_id=?",
+            (space_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("embedding space is unavailable")
+        metadata = json.loads(str(row[0]))
+        if not isinstance(metadata, Mapping):
+            raise ValueError("embedding space metadata is invalid")
+        return canonicalize_for_value_policy(
+            vector,
+            value_policy_from_space_metadata(metadata),
+        )
+
     def retrieve_text_candidates(
         self,
         query: str,
@@ -801,7 +857,8 @@ def _resolve_application_database(
     if pointer.contract_kind is GenerationContractKind.LEGACY_V0_2:
         return database_path, pointer.contract_kind
     if (
-        generation.contract_kind is not GenerationContractKind.RESOURCE_CORE_V1
+        generation.contract_kind
+        not in {GenerationContractKind.RESOURCE_CORE_V1, GenerationContractKind.RESOURCE_CORE_V2}
         or generation.state is not GenerationState.READY
     ):
         raise StoreGenerationManagerError("active_generation_not_ready")
@@ -821,30 +878,29 @@ def create_active_generation_rebuild_storage(root: Path, config: Any) -> CoreCom
     try:
         pointer = ActiveGenerationPointer.from_bytes(manager.pointer_path.read_bytes())
         generation = manager.load_generation(pointer.generation_id)
+        if pointer.contract_kind is GenerationContractKind.RESOURCE_CORE_V2:
+            manifest_digest = SQLITE_V2_MIGRATION_MANIFEST_DIGEST
+            schema_version = SQLITE_CATALOG_V2_SCHEMA_VERSION
+        elif pointer.contract_kind is GenerationContractKind.RESOURCE_CORE_V1:
+            manifest_digest = EXPECTED_MIGRATION_MANIFEST_DIGEST
+            schema_version = EXPECTED_MIGRATION_VERSION
+        else:
+            raise StoreGenerationManagerError("active_generation_not_core")
         assert_pointer_serves_generation(
             pointer,
             generation,
-            expected_manifest_digest=EXPECTED_MIGRATION_MANIFEST_DIGEST,
-            expected_schema_version=EXPECTED_MIGRATION_VERSION,
+            expected_manifest_digest=manifest_digest,
+            expected_schema_version=schema_version,
         )
     except Exception as exc:
         if isinstance(exc, StoreGenerationManagerError):
             raise
         raise StoreGenerationManagerError("active_generation_invalid") from exc
-    if pointer.contract_kind is not GenerationContractKind.RESOURCE_CORE_V1:
-        raise StoreGenerationManagerError("active_generation_not_core")
     database_path = manager.database_path(pointer.generation_id)
     if not database_path.is_file():
         raise StoreGenerationManagerError("active_generation_invalid")
     connection = _get_atomic_projection_connection(database_path)
     try:
-        versions = [
-            str(row[0])
-            for row in connection.execute(
-                "SELECT version FROM schema_migrations ORDER BY version"
-            ).fetchall()
-        ]
-        expected = [f"{index:04d}" for index in range(int(EXPECTED_MIGRATION_VERSION) + 1)]
         required = {"core_search_units", "core_search_units_fts"}
         objects = {
             str(row[0])
@@ -852,7 +908,19 @@ def create_active_generation_rebuild_storage(root: Path, config: Any) -> CoreCom
                 "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
             ).fetchall()
         }
-        if versions != expected or not required <= objects:
+        if pointer.contract_kind is GenerationContractKind.RESOURCE_CORE_V2:
+            validate_v2_clean_identity(connection)
+        else:
+            versions = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations ORDER BY version"
+                ).fetchall()
+            ]
+            expected = [f"{index:04d}" for index in range(int(EXPECTED_MIGRATION_VERSION) + 1)]
+            if versions != expected:
+                raise StoreGenerationManagerError("active_generation_invalid")
+        if not required <= objects:
             raise StoreGenerationManagerError("active_generation_invalid")
     except Exception as exc:
         connection.close()

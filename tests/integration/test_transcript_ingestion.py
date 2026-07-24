@@ -48,6 +48,19 @@ class _FailingProvider(FakeEmbeddingProvider):
         raise RuntimeError("private provider failure")
 
 
+class _NonCanonicalProvider(FakeEmbeddingProvider):
+    def __init__(self) -> None:
+        super().__init__(dimensions=8)
+
+    async def embed(self, texts, profile: str = "default"):  # type: ignore[no-untyped-def]
+        del profile
+        return [[1.0 + 2**-30, *([0.0] * 7)] for _text in texts]
+
+    async def embed_query(self, text: str, profile: str = "default"):  # type: ignore[no-untyped-def]
+        del text, profile
+        return [1.0 + 2**-30, *([0.0] * 7)]
+
+
 class _OrderedCatalog:
     def __init__(self, catalog: SQLiteCatalog, provider: _OrderedProvider) -> None:
         self._catalog = catalog
@@ -298,6 +311,58 @@ def test_injected_token_counter_requires_explicit_provenance(tmp_path: Path) -> 
     with SQLiteCatalog.create(tmp_path / "counter-contract.sqlite3") as catalog:
         with pytest.raises(ValueError, match="token_count_kind"):
             TranscriptIngestionService(catalog, token_counter=_ExactCounter())
+
+
+@pytest.mark.asyncio
+async def test_transcript_ingestion_canonicalizes_f32_audio_vectors_and_timed_queries(
+    tmp_path: Path,
+    transcript_source: bytes,
+) -> None:
+    resource = resource_id("fixture", "f32-audio")
+    artifact = read_transcript(
+        transcript_source,
+        resource_id=resource,
+        producer_fingerprint=ProducerFingerprint.from_payload({"producer": "f32", "version": 1}),
+    ).artifact
+    provider = _NonCanonicalProvider()
+    fingerprint = EmbeddingFingerprint.from_payload(
+        {"provider": "fake", "dimensions": 8, "value_policy": "ieee754-f32-canonical-v1"}
+    ).value
+    with SQLiteCatalog.create_v2(tmp_path / "f32-audio.sqlite3") as catalog:
+        service = TranscriptIngestionService(
+            catalog,
+            embedding_provider=provider,
+            embedding_fingerprint=fingerprint,
+            vector_value_policy="ieee754-f32-canonical-v1",
+        )
+        result = await service.ingest(
+            artifact,
+            resource_kind="audio",
+            media_type="audio/wav",
+            source_namespace="fixture",
+            source_locator=Locator("external_record", {"source_ref": "f32-audio"}),
+            chunking_policy=_policy(),
+        )
+        timed = await TimedRetrievalService(
+            catalog,
+            embedding_provider=provider,
+            embedding_fingerprint=fingerprint,
+        ).search("transaction", mode="semantic")
+        metadata = json.loads(
+            catalog.connection.execute(
+                "SELECT metadata_json FROM core_embedding_spaces"
+            ).fetchone()[0]
+        )
+        payload_sizes = catalog.connection.execute(
+            "SELECT DISTINCT length(embedding) FROM core_unit_embeddings"
+        ).fetchall()
+
+    assert result.vector_count > 0
+    assert timed.degraded is False
+    assert timed.results
+    assert metadata["vector_value_policy"] == "ieee754-f32-canonical-v1"
+    assert metadata["vector_codec"] == "ieee754-f32-le-v1"
+    assert [tuple(row) for row in payload_sizes] == [(32,)]
 
 
 @pytest.mark.asyncio

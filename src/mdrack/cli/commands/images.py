@@ -57,10 +57,15 @@ def _open_catalog(ctx: click.Context) -> tuple[Any, Any]:
 def _text_space(config: Any, provider: EmbeddingProvider, profile_name: str) -> ImageEmbeddingSpace:
     profile = embedding_profile_from_config(config, provider, profile_name)
     return ImageEmbeddingSpace(
-        embedding_space_id(profile.name, profile.fingerprint),
+        embedding_space_id(
+            profile.name,
+            profile.fingerprint,
+            profile.vector_value_policy,
+        ),
         profile.output_dimensions,
         profile.fingerprint,
         profile_name=profile.name,
+        vector_value_policy=profile.vector_value_policy,
     )
 
 

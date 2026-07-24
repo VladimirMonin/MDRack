@@ -58,6 +58,15 @@ class _CountingProvider(FakeEmbeddingProvider):
         return await super().embed(texts, profile)
 
 
+class _NonCanonicalProvider(FakeEmbeddingProvider):
+    def __init__(self) -> None:
+        super().__init__(dimensions=8)
+
+    async def embed(self, texts, profile="default"):  # type: ignore[no-untyped-def]
+        del profile
+        return [[1.0 + 2**-30, *([0.0] * 7)] for _text in texts]
+
+
 def _invalid_frames(frames: object, *, defect: str) -> FrameCaptionArtifact:
     payload = frames.to_dict()  # type: ignore[attr-defined]
     observations = payload["observations"]
@@ -219,6 +228,61 @@ async def test_default_video_composition_flags_oversized_atom_without_losing_fra
     }
     assert passage.metadata["unsplittable"] is True
     assert passage.metadata["hard_limit_exceeded"] is True
+
+
+@pytest.mark.asyncio
+async def test_video_composition_canonicalizes_f32_transcript_and_frame_caption_vectors(
+    tmp_path: Path,
+    video_inputs: tuple[object, object, bytes, str],
+) -> None:
+    transcript, frames, _private_source, resource = video_inputs
+    provider = _NonCanonicalProvider()
+    fingerprint = EmbeddingFingerprint.from_payload(
+        {"provider": "fake", "dimensions": 8, "value_policy": "ieee754-f32-canonical-v1"}
+    ).value
+    with SQLiteCatalog.create_v2(tmp_path / "f32-video.sqlite3") as catalog:
+        result = await VideoCompositionService(
+            catalog,
+            embedding_provider=provider,
+            embedding_fingerprint=fingerprint,
+            vector_value_policy="ieee754-f32-canonical-v1",
+        ).ingest(
+            transcript,  # type: ignore[arg-type]
+            frames,  # type: ignore[arg-type]
+            media_type="video/mp4",
+            source_namespace="fixture",
+            source_locator=Locator("external_record", {"source_ref": "f32-video"}),
+            chunking_policy=_policy(),
+        )
+        metadata = json.loads(
+            catalog.connection.execute(
+                "SELECT metadata_json FROM core_embedding_spaces"
+            ).fetchone()[0]
+        )
+        vector_kinds = {
+            str(row[0])
+            for row in catalog.connection.execute(
+                """
+                SELECT DISTINCT representations.representation_kind
+                FROM core_unit_embeddings AS embeddings
+                JOIN core_search_units AS units ON units.unit_id = embeddings.unit_id
+                JOIN core_representations AS representations
+                  ON representations.representation_id = units.representation_id
+                WHERE units.resource_id=?
+                """,
+                (resource,),
+            ).fetchall()
+        }
+        payload_sizes = catalog.connection.execute(
+            "SELECT DISTINCT length(embedding) FROM core_unit_embeddings"
+        ).fetchall()
+
+    assert result.transcript_unit_count > 0
+    assert result.frame_unit_count > 0
+    assert {"timed_passage", "frame_caption"} <= vector_kinds
+    assert metadata["vector_value_policy"] == "ieee754-f32-canonical-v1"
+    assert metadata["vector_codec"] == "ieee754-f32-le-v1"
+    assert [tuple(row) for row in payload_sizes] == [(32,)]
 
 
 @pytest.mark.asyncio

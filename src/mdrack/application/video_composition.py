@@ -14,6 +14,7 @@ from mdrack.application.transcript_ingestion import (
     _persist_whole_aggregation,
     _whole_text_aggregation,
 )
+from mdrack.application.vector_values import apply_vector_value_policy, validate_vector_value_policy
 from mdrack.ingestion.frame_captions import validate_frame_caption_artifact
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core import (
@@ -74,6 +75,7 @@ class VideoCompositionService:
         embedding_provider: EmbeddingProvider | None = None,
         embedding_fingerprint: str | None = None,
         profile: str = "default",
+        vector_value_policy: str | None = None,
     ) -> None:
         if not callable(getattr(catalog, "replace_resource", None)):
             raise TypeError("catalog must support complete resource replacement")
@@ -91,6 +93,7 @@ class VideoCompositionService:
             )
         )
         self._profile = profile
+        self._vector_value_policy = validate_vector_value_policy(vector_value_policy)
         self._counter = DeterministicWhitespaceCounter()
         self._indexing = CoreIndexingService(catalog)  # type: ignore[arg-type]
 
@@ -234,7 +237,7 @@ class VideoCompositionService:
                 previous = spaces_by_id.setdefault(space.space_id, space)
                 if previous != space:
                     raise ValueError("video branches produced incompatible embedding spaces")
-        return PreparedResourceBatch(
+        batch = PreparedResourceBatch(
             resource=ResourceRecord(
                 resource_id=descriptor.resource_id,
                 resource_kind="video",
@@ -251,6 +254,7 @@ class VideoCompositionService:
             vectors=tuple(vector for batch in batches for vector in batch.vectors),
             facets=(),
         )
+        return apply_vector_value_policy(batch, self._vector_value_policy)
 
     async def ingest(
         self,

@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
+from mdrack.application.vector_values import (
+    canonicalize_for_space,
+    validate_vector_value_policy,
+    value_policy_metadata,
+)
 from mdrack.domain.identifiers import logical_id
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core.application.indexing import CoreIndexingService
@@ -75,6 +80,7 @@ class ImageEmbeddingSpace:
     fingerprint: str
     metric: str = METRIC_COSINE
     profile_name: str | None = None
+    vector_value_policy: str | None = None
 
     def __post_init__(self) -> None:
         EmbeddingSpaceRecord(
@@ -83,6 +89,7 @@ class ImageEmbeddingSpace:
             self.metric,
             self.fingerprint,
         )
+        validate_vector_value_policy(self.vector_value_policy)
 
     def core_record(self, *, modality: str) -> EmbeddingSpaceRecord:
         metadata = (
@@ -90,6 +97,7 @@ class ImageEmbeddingSpace:
             if modality == MODALITY_TEXT and self.profile_name is not None
             else {"modality": modality}
         )
+        metadata.update(value_policy_metadata(self.vector_value_policy))
         return EmbeddingSpaceRecord(
             self.space_id,
             self.dimensions,
@@ -300,7 +308,11 @@ class ImageIngestionService:
             )
             if text_vectors:
                 assert self._text_space is not None
-                vector = self._validated_vector(text_vectors[index], self._text_space.dimensions)
+                vector = self._validated_vector(
+                    text_vectors[index],
+                    self._text_space,
+                    modality=MODALITY_TEXT,
+                )
                 vectors.append(VectorRecord(unit_id, self._text_space.space_id, vector))
 
         if extracted:
@@ -372,7 +384,11 @@ class ImageIngestionService:
                         VectorRecord(
                             aggregate_unit_id,
                             self._text_space.space_id,
-                            aggregate_vector,
+                            self._validated_vector(
+                                aggregate_vector,
+                                self._text_space,
+                                modality=MODALITY_TEXT,
+                            ),
                         )
                     )
 
@@ -393,7 +409,11 @@ class ImageIngestionService:
                     extra={"reason": "visual_embedding_provider_error"},
                 )
                 raise EmbeddingError("visual_embedding_provider_error") from None
-            vector = self._validated_vector(visual, self._visual_space.dimensions)
+            vector = self._validated_vector(
+                visual,
+                self._visual_space,
+                modality=MODALITY_IMAGE,
+            )
             representations.append(
                 RepresentationRecord(
                     representation_id,
@@ -523,7 +543,11 @@ class ImageIngestionService:
             return None, "embedding_provider_unavailable"
         try:
             vector = await self._text_provider.embed_query(query, profile=self._profile)
-            return self._validated_vector(vector, self._text_space.dimensions), None
+            return self._validated_vector(
+                vector,
+                self._text_space,
+                modality=MODALITY_TEXT,
+            ), None
         except EmbeddingError:
             logger.warning("image.search.degraded", extra={"reason": "embedding_provider_error"})
             return None, "embedding_provider_error"
@@ -608,7 +632,12 @@ class ImageIngestionService:
         return media_type
 
     @staticmethod
-    def _validated_vector(vector: Sequence[float], dimensions: int) -> tuple[float, ...]:
+    def _validated_vector(
+        vector: Sequence[float],
+        space: ImageEmbeddingSpace,
+        *,
+        modality: str,
+    ) -> tuple[float, ...]:
         if not isinstance(vector, (list, tuple)):
             raise ValueError("embedding provider must return an ordered vector")
         if any(
@@ -619,11 +648,11 @@ class ImageIngestionService:
         ):
             raise ValueError("embedding vector must contain finite numbers")
         frozen = tuple(float(value) for value in vector)
-        if len(frozen) != dimensions:
+        if len(frozen) != space.dimensions:
             raise ValueError("embedding vector dimension mismatch")
-        EmbeddingSpaceRecord("validation", dimensions, METRIC_COSINE, "validation")
+        EmbeddingSpaceRecord("validation", space.dimensions, METRIC_COSINE, "validation")
         VectorRecord("validation", "validation", frozen)
-        return frozen
+        return canonicalize_for_space(frozen, space.core_record(modality=modality))
 
     @staticmethod
     def _estimated_tokens(text: str) -> int:

@@ -60,7 +60,11 @@ def test_generation_state_and_contract_kind_inventory_is_exact() -> None:
         "ready",
         "failed",
     ]
-    assert [kind.value for kind in GenerationContractKind] == ["legacy_v0_2", "resource_core_v1"]
+    assert [kind.value for kind in GenerationContractKind] == [
+        "legacy_v0_2",
+        "resource_core_v1",
+        "resource_core_v2",
+    ]
 
 
 @pytest.mark.parametrize(

@@ -34,6 +34,7 @@ class EmbeddingProfile:
     endpoint_family: str
     instruction_profile: str = "default"
     schema_version: int = 1
+    vector_value_policy: str | None = None
 
     def __post_init__(self) -> None:
         identity = (
@@ -54,6 +55,8 @@ class EmbeddingProfile:
             raise ValueError("output_dimensions must be positive")
         if self.schema_version < 1:
             raise ValueError("schema_version must be positive")
+        if self.vector_value_policy not in {None, "ieee754-f32-canonical-v1"}:
+            raise ValueError("vector_value_policy is unsupported")
 
     @property
     def fingerprint(self) -> str:
@@ -69,6 +72,7 @@ class EmbeddingProfile:
             "query_instruction_hash": self.query_instruction_hash,
             "runtime": self.runtime,
             "schema_version": self.schema_version,
+            "vector_value_policy": self.vector_value_policy,
         }
         canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

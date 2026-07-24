@@ -12,7 +12,7 @@
       {"path": "scripts/offline_release_matrix.py", "sha256": "5b04b347e738924ccbbf064a80f2d62dd404b9e91fc6fdc10bce1ca14216c65f"},
       {"path": "scripts/verify.ps1", "sha256": "938ba7bef2ed791b24289976fca95154939b000bd4f3f267ea933ec1149cbe45"},
       {"path": "scripts/verify.sh", "sha256": "9bd0983ff2693bba26cf7982e59b8fa0c4479acb10a4c41c8ad9dce52297793b"},
-      {"path": "tests/cli/test_cli_resource_manifest.py", "sha256": "8a2abe7347b2a256af2fc686acb74f885b184809b157fd1aa729bcc3701b7f41"},
+      {"path": "tests/cli/test_cli_resource_manifest.py", "sha256": "88e15de862fc64b26529507a97b5866c4f99a9236ba3fce346c9eb1851481eef"},
       {"path": "tests/e2e/conftest.py", "sha256": "f8aaee8fc47f18bbbaad22512053b06905b95a534fcc0414caea738c0b4f59f0"},
       {"path": "tests/unit/conftest.py", "sha256": "fb40934028aaf76809b277c296e5c416e95f32fe602da7e8da26e29b2458f5b5"},
       {"path": "tests/unit/test_eval_privacy.py", "sha256": "1d0af27ec2cb906019ed128d916492511c17f3ab34d33aa0e87645ec6a20a4d9"},

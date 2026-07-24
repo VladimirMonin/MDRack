@@ -12,6 +12,7 @@ from typing import Any
 
 import click
 
+from mdrack.application.compatibility import CoreCompatibilityStorage, create_application_storage
 from mdrack.cli.commands.rebuild import rebuild_embeddings_in_db
 from mdrack.config.loader import write_config
 from mdrack.embeddings.runtime import close_async_resource, create_lmstudio_control_client
@@ -481,6 +482,12 @@ def _run_switch_rebuild(
             "reason": "database_missing",
         }
 
+    storage = create_application_storage(root, switched_config)
+    try:
+        active_resource_core = isinstance(storage, CoreCompatibilityStorage)
+    finally:
+        storage.close()
+
     provider = LMStudioProvider(
         endpoint=switched_config.embedding.endpoint,
         model=model_name,
@@ -490,7 +497,7 @@ def _run_switch_rebuild(
         dimensions_capability=switched_config.embedding.dimensions_capability,
     )
     try:
-        if rebuild_mode == "full":
+        if rebuild_mode == "full" or active_resource_core:
             result = run_indexer(
                 root=root,
                 config=switched_config,

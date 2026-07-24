@@ -29,6 +29,10 @@ from mdrack.cli.commands.sections import sections as sections_group
 from mdrack.cli.commands.transcript import ingest as ingest_group
 from mdrack.cli.commands.video import ingest_video
 from mdrack.config.loader import load_config, resolve_config_path
+from mdrack.diagnostics.storage import (
+    analyze_application_storage,
+    analyze_standalone_catalog,
+)
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, MDRackError
@@ -43,6 +47,7 @@ CTX_JSON = "json_output"
 CTX_STORE_DIR = "store_dir"
 CTX_DB_PATH = "db_path"
 CTX_CONFIG_PATH = "config_path"
+CTX_CONFIG_FILE = "config_file"
 
 
 def _resolve_store_dir(root: Path, store: str) -> Path:
@@ -140,8 +145,9 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
     resolved_root = Path(root).resolve()
     ctx.obj[CTX_ROOT] = resolved_root
     ctx.obj[CTX_JSON] = json_output
+    ctx.obj[CTX_CONFIG_FILE] = config_file
 
-    if ctx.invoked_subcommand == "resource":
+    if ctx.invoked_subcommand in {"resource", "storage-analyze"}:
         return
 
     # Load configuration
@@ -479,6 +485,53 @@ def benchmark(ctx: click.Context, catalog_path: str) -> None:
     finally:
         if catalog is not None:
             catalog.close()
+
+
+def _load_storage_analyzer_config(ctx: click.Context) -> Any:
+    root = ctx.obj[CTX_ROOT]
+    config_file = ctx.obj[CTX_CONFIG_FILE]
+    if not isinstance(root, Path) or (config_file is not None and not isinstance(config_file, str)):
+        raise ConfigError("Configuration could not be loaded")
+    toml_path = Path(config_file) if config_file else None
+    resolved_config_path = resolve_config_path(root=root, toml_path=toml_path)
+    if toml_path is not None and not resolved_config_path.is_file():
+        raise ConfigError("Configuration could not be loaded")
+    return load_config(toml_path=toml_path, root=root)
+
+
+@main.command(name="storage-analyze")
+@click.option(
+    "--catalog",
+    "catalog_path",
+    type=click.Path(exists=False, dir_okay=False),
+    default=None,
+    help="Analyze an explicit clean standalone catalog instead of the configured application store.",
+)
+@click.pass_context
+def storage_analyze(ctx: click.Context, catalog_path: str | None) -> None:
+    """Report privacy-safe aggregate storage diagnostics without modifying SQLite."""
+    command = "storage-analyze"
+    try:
+        if catalog_path is not None:
+            report = analyze_standalone_catalog(Path(catalog_path))
+        else:
+            config = _load_storage_analyzer_config(ctx)
+            report = analyze_application_storage(ctx.obj[CTX_ROOT], config)
+        _output(ctx, envelope_success(report.to_dict(), command=command))
+    except Exception:
+        logger.error(
+            "cli.storage_analyze.failed",
+            extra={"status": "failed", "reason": "storage_analysis_failed"},
+        )
+        _output(
+            ctx,
+            envelope_error(
+                "Storage analysis could not be completed",
+                "STORAGE_ANALYSIS_ERROR",
+                command,
+            ),
+        )
+        ctx.exit(1)
 
 
 # ---------------------------------------------------------------------------

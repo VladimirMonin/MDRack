@@ -10,21 +10,23 @@ from pathlib import Path
 import pytest
 
 from mdrack.adapters.sqlite.generation_runtime import SQLiteGenerationRuntime
-from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
-from mdrack.application.compatibility import create_application_storage
 from mdrack.application.generation_manager import (
     StoreGenerationManager,
     StoreGenerationManagerError,
 )
 from mdrack.application.store_generations import (
+    GenerationContractKind,
     GenerationFingerprint,
     GenerationState,
     StoreGeneration,
 )
-from mdrack.config.models import MDRackConfig, PathsConfig
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
+from mdrack_sqlite.contract_v2 import (
+    SQLITE_CATALOG_V2_SCHEMA_VERSION,
+    SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
+)
 
 
 def _manager(store_dir: Path, *, generation_id: str = "candidate-1") -> StoreGenerationManager:
@@ -259,6 +261,9 @@ def test_candidate_build_cutover_reader_visibility_rollback_and_retention(tmp_pa
     )
 
     assert candidate.state is GenerationState.READY
+    assert candidate.contract_kind is GenerationContractKind.RESOURCE_CORE_V2
+    assert candidate.schema_version == SQLITE_CATALOG_V2_SCHEMA_VERSION
+    assert candidate.migration_manifest_digest == SQLITE_V2_MIGRATION_MANIFEST_DIGEST
     candidate_path = manager.database_path(candidate.generation_id)
     assert candidate_path.is_file()
     assert not candidate_path.with_name(candidate_path.name + "-wal").exists()
@@ -283,30 +288,21 @@ def test_candidate_build_cutover_reader_visibility_rollback_and_retention(tmp_pa
     old_reader.close()
     new_reader.close()
 
-    manager.rollback("legacy-1")
-    pointer, legacy, rolled_back_path = manager.resolve_active()
-    assert pointer.generation_id == "legacy-1"
-    assert legacy.state is GenerationState.LEGACY_ONLY
-    legacy_reader = sqlite3.connect(f"file:{rolled_back_path.as_posix()}?mode=ro", uri=True)
-    assert legacy_reader.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == "0006"
-    legacy_reader.close()
-
-    storage = create_application_storage(
-        tmp_path,
-        MDRackConfig(paths=PathsConfig(root=".", store=str(manager.store_dir))),
-    )
-    assert isinstance(storage, SQLiteIndexStorage)
-    legacy_file = storage.get_file_by_path("fixture.md")
-    assert legacy_file is not None
-    assert legacy_file["id"] == "legacy-file"
-    with pytest.raises(sqlite3.OperationalError, match="readonly"):
-        storage.start_run(
-            parser_name="parser",
-            parser_version="1",
-            chunk_strategy_name="strategy",
-            chunk_strategy_version="1",
-        )
-    storage.close()
+    with pytest.raises(StoreGenerationManagerError, match="rollback_unsupported"):
+        manager.rollback("legacy-1")
+    pointer, active, active_path = manager.resolve_active()
+    assert pointer.generation_id == candidate.generation_id
+    assert active.contract_kind is GenerationContractKind.RESOURCE_CORE_V2
+    v2_reader = sqlite3.connect(f"file:{active_path.as_posix()}?mode=ro", uri=True)
+    try:
+        assert v2_reader.execute(
+            "SELECT schema_version FROM mdrack_sqlite_schema WHERE singleton=1"
+        ).fetchone()[0] == SQLITE_CATALOG_V2_SCHEMA_VERSION
+        assert v2_reader.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='schema_migrations'"
+        ).fetchone()[0] == 0
+    finally:
+        v2_reader.close()
 
     assert legacy_path.stat().st_ino == legacy_inode
     assert hashlib.sha256(legacy_path.read_bytes()).hexdigest() == legacy_digest
@@ -541,6 +537,28 @@ def test_candidate_verification_accepts_valid_multi_resource_graph(tmp_path: Pat
         assert store.read_unit("unit-resource-2") is not None
     finally:
         connection.close()
+
+
+def test_candidate_activation_rejects_wrong_v2_contract_metadata_without_switching_pointer(
+    tmp_path: Path,
+) -> None:
+    manager = _manager(tmp_path / "store", generation_id="wrong-v2-contract")
+    _prepare_legacy(manager)
+    old_pointer = manager.pointer_path.read_bytes()
+    candidate = manager.build_candidate(_seed_candidate)
+    corrupt = {
+        **json.loads(candidate.to_bytes()),
+        "schema_version": "0007",
+    }
+    manager.metadata_path(candidate.generation_id).write_bytes(
+        json.dumps(corrupt, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
+
+    with pytest.raises(StoreGenerationManagerError, match="candidate_not_ready"):
+        manager.activate_candidate(candidate.generation_id)
+
+    assert manager.pointer_path.read_bytes() == old_pointer
+    assert manager.resolve_active()[0].generation_id == "legacy-1"
 
 
 @pytest.mark.parametrize(

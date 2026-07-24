@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -22,6 +24,7 @@ from mdrack.application.store_generations import (
     StoreGeneration,
 )
 from mdrack.cli import main
+from mdrack.cli.commands.model import _run_switch_rebuild
 from mdrack.config.models import MDRackConfig, PathsConfig
 from mdrack.embeddings.fake import FakeEmbeddingProvider
 from mdrack.embeddings.runtime import embedding_profile_from_config
@@ -88,7 +91,7 @@ def _assert_public_results_equivalent(
                 else:
                     assert isinstance(actual_score, (int, float))
                     assert isinstance(expected_score, (int, float))
-                    assert actual_score == pytest.approx(expected_score, abs=1e-12)
+                    assert actual_score == pytest.approx(expected_score, abs=1e-7)
             assert actual_fields == expected_fields
 
 
@@ -106,6 +109,23 @@ def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(t
     profile = embedding_profile_from_config(config, provider, "default")
 
     scan = run_indexer(root, config, provider=provider)
+    connection = get_connection(database_path)
+    try:
+        assert connection.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM core_unit_embeddings").fetchone()[0] == (
+            scan.chunks_created + 1
+        )
+        embedding_metadata = json.loads(
+            connection.execute("SELECT metadata_json FROM core_embedding_spaces").fetchone()[0]
+        )
+        payload_sizes = connection.execute(
+            "SELECT DISTINCT length(embedding) FROM core_unit_embeddings"
+        ).fetchall()
+        assert embedding_metadata["vector_value_policy"] == "ieee754-f32-canonical-v1"
+        assert embedding_metadata["vector_codec"] == "ieee754-f32-le-v1"
+        assert [tuple(row) for row in payload_sizes] == [(32,)]
+    finally:
+        connection.close()
     config_path = root / "mdrack.toml"
     config_path.write_text(
         f'[paths]\nstore = "{store_dir}"\n[embedding]\ndimensions = 8\n',
@@ -167,6 +187,7 @@ def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(t
 
     connection = get_connection(database_path)
     try:
+        assert connection.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM core_resources").fetchone()[0] == 1
         assert connection.execute("SELECT COUNT(*) FROM core_search_units").fetchone()[0] == scan.chunks_created + 1
         assert connection.execute("SELECT COUNT(*) FROM core_unit_embeddings").fetchone()[0] == scan.chunks_created + 1
@@ -187,10 +208,64 @@ def test_scan_and_all_query_modes_use_ready_core_generation_with_legacy_parity(t
     assert deleted.files_deleted == 1
     connection = get_connection(database_path)
     try:
+        assert connection.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM core_resources").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
     finally:
         connection.close()
+
+
+def test_active_generation_model_embedding_rebuild_uses_core_reindex(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "vault"
+    root.mkdir()
+    store_dir = tmp_path / "store"
+    database_path = _generation(store_dir, state=GenerationState.READY)
+    config = MDRackConfig(paths=PathsConfig(root=".", store=str(store_dir)))
+    context = click.Context(click.Command("model"), obj={"root": root, "db_path": database_path})
+    called: dict[str, object] = {}
+
+    def fake_reindex(**kwargs: object) -> SimpleNamespace:
+        called.update(kwargs)
+        return SimpleNamespace(
+            files_seen=1,
+            files_changed=1,
+            files_deleted=0,
+            chunks_created=2,
+            errors_count=0,
+            run_id="core-reindex",
+        )
+
+    monkeypatch.setattr("mdrack.cli.commands.model.run_indexer", fake_reindex)
+    monkeypatch.setattr(
+        "mdrack.cli.commands.model.rebuild_embeddings_in_db",
+        lambda *args, **kwargs: pytest.fail("active core rebuild must not write legacy vectors"),
+    )
+
+    result = _run_switch_rebuild(
+        ctx=context,
+        config=config,
+        switched_config=config,
+        model_name="fixture-model",
+        dimensions=8,
+        rebuild_mode="embeddings",
+    )
+
+    assert result == {
+        "performed": True,
+        "mode": "embeddings",
+        "files_seen": 1,
+        "files_changed": 1,
+        "files_deleted": 0,
+        "chunks_created": 2,
+        "errors_count": 0,
+        "run_id": "core-reindex",
+    }
+    assert called["root"] == root
+    assert called["config"] is config
+    assert called["force_reindex"] is True
 
 
 def test_ready_core_resolves_provider_free_textual_resource_similarity(tmp_path: Path) -> None:

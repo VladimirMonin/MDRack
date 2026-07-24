@@ -134,8 +134,13 @@ class SQLiteIndexStorage:
             "source_locator": locator.to_dict(),
         }
 
-    def replace_file(self, prepared: PreparedFile) -> None:
-        """Replace one file and all derived rows atomically."""
+    def replace_file(self, prepared: PreparedFile, *, write_legacy_vectors: bool = True) -> None:
+        """Replace one file and all derived rows atomically.
+
+        The resource-core compatibility composition retains legacy document and
+        lexical rows, but must not duplicate vectors into ``chunk_embeddings``.
+        Direct legacy storage keeps the historical default write behavior.
+        """
         savepoint = "replace_file"
         self.connection.execute(f"SAVEPOINT {savepoint}")
         try:
@@ -162,10 +167,11 @@ class SQLiteIndexStorage:
                     ),
                 )
 
-            self._ensure_embedding_profile(prepared)
+            if write_legacy_vectors:
+                self._ensure_embedding_profile(prepared)
             for index, chunk in enumerate(prepared.chunks):
                 self._write_chunk(prepared, chunk)
-                if prepared.vectors:
+                if write_legacy_vectors and prepared.vectors:
                     if prepared.embedding_profile is None:
                         raise ValueError("embedding profile is required when vectors are present")
                     self._write_vector(chunk.record_id, prepared.embedding_profile, prepared.vectors[index])

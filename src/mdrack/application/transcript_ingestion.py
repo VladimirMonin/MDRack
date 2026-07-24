@@ -9,6 +9,11 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from mdrack.application.retrieval import validate_embedding_vector
+from mdrack.application.vector_values import (
+    apply_vector_value_policy,
+    canonicalize_for_space,
+    validate_vector_value_policy,
+)
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core import (
     TARGET_RESOURCE,
@@ -150,6 +155,7 @@ class TranscriptIngestionService:
         embedding_provider: EmbeddingProvider | None = None,
         embedding_fingerprint: str | None = None,
         profile: str = "default",
+        vector_value_policy: str | None = None,
         token_counter: object | None = None,
         token_count_kind: Literal["exact", "estimated"] | None = None,
     ) -> None:
@@ -169,6 +175,7 @@ class TranscriptIngestionService:
             )
         )
         self._profile = profile
+        self._vector_value_policy = validate_vector_value_policy(vector_value_policy)
         if token_counter is None:
             if token_count_kind not in {None, "estimated"}:
                 raise ValueError("the default whitespace counter is estimated")
@@ -408,7 +415,9 @@ class TranscriptIngestionService:
             vectors=vectors,
             unsplittable="flag",
         )
-        return batch if aggregation is None else _persist_whole_aggregation(batch, aggregation)
+        if aggregation is not None:
+            batch = _persist_whole_aggregation(batch, aggregation)
+        return apply_vector_value_policy(batch, self._vector_value_policy)
 
 
 def _whole_text_aggregation(
@@ -552,20 +561,25 @@ class TimedRetrievalService:
                 if space is None:
                     degraded_reason = "incompatible_embedding_profile"
                 else:
-                    vector_branches = (
-                        VectorBranch(
-                            "transcript_semantic",
-                            space.space_id,
-                            vector,
-                            weight=self._semantic_weight,
-                            candidate_limit=max(limit * 10, 100),
-                            expected_fingerprint=self._embedding_fingerprint,
-                            scope_override=BranchScopeOverride(
-                                representation_kinds=("timed_passage",),
-                                unit_kinds=("time_segment",),
+                    try:
+                        canonical = canonicalize_for_space(vector, space)
+                    except ValueError:
+                        degraded_reason = "incompatible_embedding_profile"
+                    else:
+                        vector_branches = (
+                            VectorBranch(
+                                "transcript_semantic",
+                                space.space_id,
+                                canonical,
+                                weight=self._semantic_weight,
+                                candidate_limit=max(limit * 10, 100),
+                                expected_fingerprint=self._embedding_fingerprint,
+                                scope_override=BranchScopeOverride(
+                                    representation_kinds=("timed_passage",),
+                                    unit_kinds=("time_segment",),
+                                ),
                             ),
-                        ),
-                    )
+                        )
         if not lexical and not vector_branches:
             return TimedSearchResult(
                 query,

@@ -13,8 +13,6 @@ from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import (
     EXPECTED_MIGRATION_VERSION,
-    apply_candidate_migrations,
-    get_migrations_dir,
 )
 from mdrack_core.domain import (
     EmbeddingSpaceRecord,
@@ -30,6 +28,9 @@ from mdrack_core.domain.common import (
     require_optional_non_empty,
     require_utf8_encodable,
 )
+from mdrack_sqlite.contract_v2 import SQLITE_CATALOG_V2_SCHEMA_VERSION
+from mdrack_sqlite.migrations_v2 import apply_v2_migrations, validate_v2_clean_identity
+from mdrack_sqlite.vector_codecs import decode_vector_payload
 
 FailureHook = Callable[[str], None]
 
@@ -69,9 +70,9 @@ class SQLiteGenerationRuntime:
             raise GenerationRuntimeError("candidate_open_failed") from exc
 
     def migrate_candidate(self, connection: sqlite3.Connection) -> None:
-        """Apply the exact compiled candidate migration manifest through 0007."""
+        """Create the exact independent v2 clean catalog; never upgrade a source database."""
         try:
-            apply_candidate_migrations(connection, get_migrations_dir())
+            apply_v2_migrations(connection)
             self._fail("after_candidate_migrations")
         except Exception as exc:
             if isinstance(exc, GenerationRuntimeError):
@@ -83,18 +84,29 @@ class SQLiteGenerationRuntime:
         connection: sqlite3.Connection,
         *,
         expected_fingerprints: Sequence[str] = (),
+        expected_schema_version: str = SQLITE_CATALOG_V2_SCHEMA_VERSION,
     ) -> dict[str, int]:
         """Verify exact schema, integrity, graph, FTS, and vector contracts."""
         try:
             if connection.in_transaction:
                 raise GenerationRuntimeError("candidate_transaction_open")
-            versions = [
-                row["version"]
-                for row in connection.execute(
-                    "SELECT version FROM schema_migrations ORDER BY version"
-                ).fetchall()
-            ]
-            if versions != [f"{index:04d}" for index in range(int(EXPECTED_MIGRATION_VERSION) + 1)]:
+            if expected_schema_version == SQLITE_CATALOG_V2_SCHEMA_VERSION:
+                try:
+                    validate_v2_clean_identity(connection)
+                except Exception as exc:
+                    raise GenerationRuntimeError("candidate_manifest_mismatch") from exc
+            elif expected_schema_version == EXPECTED_MIGRATION_VERSION:
+                versions = [
+                    row["version"]
+                    for row in connection.execute(
+                        "SELECT version FROM schema_migrations ORDER BY version"
+                    ).fetchall()
+                ]
+                if versions != [
+                    f"{index:04d}" for index in range(int(EXPECTED_MIGRATION_VERSION) + 1)
+                ]:
+                    raise GenerationRuntimeError("candidate_manifest_mismatch")
+            else:
                 raise GenerationRuntimeError("candidate_manifest_mismatch")
             integrity = [row[0] for row in connection.execute("PRAGMA integrity_check").fetchall()]
             if integrity != ["ok"] or connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
@@ -110,6 +122,8 @@ class SQLiteGenerationRuntime:
                 "core_resource_facets",
                 "core_search_units_fts",
             }
+            if expected_schema_version == SQLITE_CATALOG_V2_SCHEMA_VERSION:
+                required |= {"mdrack_vector_codecs", "mdrack_vector_backends"}
             objects = {
                 row[0]
                 for row in connection.execute(
@@ -118,6 +132,8 @@ class SQLiteGenerationRuntime:
             }
             if not required <= objects:
                 raise GenerationRuntimeError("candidate_schema_missing")
+            if expected_schema_version == SQLITE_CATALOG_V2_SCHEMA_VERSION:
+                self._verify_v2_vector_registry(connection)
 
             incomplete_resources = connection.execute(
                 "SELECT 1 FROM core_resources resource "
@@ -167,11 +183,11 @@ class SQLiteGenerationRuntime:
                 raise GenerationRuntimeError("candidate_fts_invalid")
 
             vector_rows = connection.execute(
-                "SELECT e.embedding,s.dimensions FROM core_unit_embeddings e "
+                "SELECT e.embedding,s.dimensions,s.metadata_json FROM core_unit_embeddings e "
                 "JOIN core_embedding_spaces s ON s.space_id=e.space_id"
             ).fetchall()
             for row in vector_rows:
-                self._validate_vector(row[0], row[1])
+                self._validate_vector(row[0], row[1], row[2])
             confidence_rows = connection.execute(
                 "SELECT confidence_json FROM core_resource_facets WHERE confidence_json IS NOT NULL"
             ).fetchall()
@@ -245,6 +261,16 @@ class SQLiteGenerationRuntime:
         except sqlite3.Error as exc:
             raise GenerationRuntimeError("generation_open_failed") from exc
         try:
+            if expected_version == SQLITE_CATALOG_V2_SCHEMA_VERSION:
+                try:
+                    validate_v2_clean_identity(connection)
+                except Exception as exc:
+                    raise GenerationRuntimeError("generation_schema_mismatch") from exc
+                return self.verify_candidate(
+                    connection,
+                    expected_fingerprints=expected_fingerprints,
+                    expected_schema_version=SQLITE_CATALOG_V2_SCHEMA_VERSION,
+                )
             versions = [
                 row["version"]
                 for row in connection.execute(
@@ -257,6 +283,7 @@ class SQLiteGenerationRuntime:
                 return self.verify_candidate(
                     connection,
                     expected_fingerprints=expected_fingerprints,
+                    expected_schema_version=EXPECTED_MIGRATION_VERSION,
                 )
             integrity = [row[0] for row in connection.execute("PRAGMA integrity_check").fetchall()]
             if integrity != ["ok"] or connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
@@ -264,6 +291,31 @@ class SQLiteGenerationRuntime:
             return {"resources": 0, "representations": 0, "units": 0, "vectors": 0, "fts_rows": 0}
         finally:
             connection.close()
+
+    @staticmethod
+    def _verify_v2_vector_registry(connection: sqlite3.Connection) -> None:
+        codecs = [
+            tuple(row)
+            for row in connection.execute(
+                "SELECT codec_id,codec_version,component_type,byte_order,lossy "
+                "FROM mdrack_vector_codecs ORDER BY codec_id"
+            ).fetchall()
+        ]
+        if codecs != [
+            ("ieee754-f32-le-v1", 1, "float32", "little", 0),
+            ("ieee754-f64-le-v1", 1, "float64", "little", 0),
+        ]:
+            raise GenerationRuntimeError("candidate_manifest_mismatch")
+        backends = [
+            tuple(row)
+            for row in connection.execute(
+                "SELECT backend_id,backend_schema_version,extension_required,"
+                "supports_atomic_replace,supports_atomic_delete "
+                "FROM mdrack_vector_backends ORDER BY backend_id"
+            ).fetchall()
+        ]
+        if backends != [("builtin-exact-v1", 1, 0, 1, 1)]:
+            raise GenerationRuntimeError("candidate_manifest_mismatch")
 
     @staticmethod
     def _verify_adapter_graph(
@@ -399,26 +451,14 @@ class SQLiteGenerationRuntime:
             self._failure_hook(point)
 
     @staticmethod
-    def _validate_vector(payload: object, dimensions: object) -> None:
+    def _validate_vector(payload: object, dimensions: object, metadata_payload: object) -> None:
         if not isinstance(payload, bytes) or type(dimensions) is not int:
             raise GenerationRuntimeError("candidate_vector_invalid")
         try:
-            value = json.loads(payload.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            metadata = _decode_canonical_mapping(metadata_payload, "space.metadata")
+            decode_vector_payload(payload, dimensions=dimensions, metadata=metadata)
+        except (TypeError, ValueError) as exc:
             raise GenerationRuntimeError("candidate_vector_invalid") from exc
-        if (
-            not isinstance(value, list)
-            or len(value) != dimensions
-            or not value
-            or any(isinstance(item, bool) or not isinstance(item, (int, float)) for item in value)
-        ):
-            raise GenerationRuntimeError("candidate_vector_invalid")
-        floats = [float(item) for item in value]
-        if any(not math.isfinite(item) for item in floats):
-            raise GenerationRuntimeError("candidate_vector_invalid")
-        canonical = json.dumps(floats, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
-        if canonical != payload:
-            raise GenerationRuntimeError("candidate_vector_invalid")
 
     @staticmethod
     def _validate_confidence(payload: object) -> None:
