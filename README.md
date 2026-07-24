@@ -1,6 +1,6 @@
 # MDRack
 
-MDRack 1.1 is a local Python 3.11+ command-line and embedded retrieval rack for
+MDRack 1.2 is a local Python 3.11+ command-line and embedded retrieval rack for
 Markdown, typed metadata, timed transcripts, frame-caption text, and explicitly
 supplied images.
 
@@ -49,6 +49,7 @@ LM Studio model-management commands. Host applications can use
 - [Asset handling](docs/current-architecture/assets.md)
 - [CLI and embedded interfaces](docs/current-architecture/public-interfaces.md)
 - [Current limitations](docs/current-architecture/limitations.md)
+- [Active MDRack 1.3 compact-storage and optional sqlite-vec plan](docs/plans/2026-07-24-v1.3-compact-storage-sqlite-vec.md)
 - [MDRack 1.1 local release](docs/release-1.1.md)
 - [CLI contracts](docs/cli-contracts.md)
 - [v0.3 compatibility registry](docs/compatibility/v0.3-compatibility-registry.md)
