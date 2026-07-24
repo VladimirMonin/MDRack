@@ -90,18 +90,11 @@ class _TextualSimilaritySearchPort:
                 and candidate.metadata.get("aggregation") in _TEXTUAL_AGGREGATIONS
             ]
             raw_ids = tuple(candidate.unit_id for candidate in raw)
-            if (
-                len(selected) >= candidate_limit
-                or len(raw) < fetch_limit
-                or raw_ids == previous_ids
-            ):
+            if len(selected) >= candidate_limit or len(raw) < fetch_limit or raw_ids == previous_ids:
                 break
             previous_ids = raw_ids
             fetch_limit *= 2
-        return [
-            replace(candidate, rank=rank)
-            for rank, candidate in enumerate(selected[:candidate_limit], start=1)
-        ]
+        return [replace(candidate, rank=rank) for rank, candidate in enumerate(selected[:candidate_limit], start=1)]
 
 
 @dataclass(frozen=True)
@@ -131,9 +124,7 @@ class ResourceQueryScope:
     def __post_init__(self) -> None:
         for field_name in ("facets_any", "facets_all", "facets_none"):
             values = getattr(self, field_name)
-            if not isinstance(values, (list, tuple)) or any(
-                not isinstance(item, FacetFilter) for item in values
-            ):
+            if not isinstance(values, (list, tuple)) or any(not isinstance(item, FacetFilter) for item in values):
                 raise ValueError(f"{field_name} must contain FacetFilter values")
             object.__setattr__(self, field_name, tuple(values))
         core = self.core()
@@ -533,7 +524,7 @@ class UnifiedTextSearchService:
         if type(limit) is not int or limit < 1:
             raise ValueError("limit must be a positive integer")
         resolved_scope = resolve_unified_text_scope(scope)
-        vector, space_id, reason = await self._semantic_query_vector(query, mode)
+        vector, spaces, reason = await self._semantic_query_vector(query, mode)
         if mode == "semantic" and vector is None:
             return UnifiedTextSearchResult(query, mode, scope, (), True, reason or "branch_unavailable")
         effective_mode: UnifiedTextSearchMode = "text" if vector is None and mode == "hybrid" else mode
@@ -543,7 +534,7 @@ class UnifiedTextSearchService:
             scope=resolved_scope.core(),
             limit=limit,
             vector=vector,
-            space_id=space_id,
+            spaces=spaces,
         )
         try:
             result = CoreRetrievalService(self._catalog).search(request)  # type: ignore[arg-type]
@@ -557,7 +548,7 @@ class UnifiedTextSearchService:
                 scope=resolved_scope.core(),
                 limit=limit,
                 vector=None,
-                space_id=None,
+                spaces=(),
             )
             try:
                 result = CoreRetrievalService(self._catalog).search(request)  # type: ignore[arg-type]
@@ -578,40 +569,55 @@ class UnifiedTextSearchService:
         self,
         query: str,
         mode: UnifiedTextSearchMode,
-    ) -> tuple[tuple[float, ...] | None, str | None, str | None]:
+    ) -> tuple[tuple[float, ...] | None, tuple[EmbeddingSpaceRecord, ...], str | None]:
         if mode == "text":
-            return None, None, None
+            return None, (), None
         if self._provider is None or self._fingerprint is None:
-            return None, None, "embedding_provider_unavailable"
+            return None, (), "embedding_provider_unavailable"
         try:
             raw_vector = await self._provider.embed_query(query, profile=self._profile)
             vector = self._validated_query_vector(raw_vector)
         except EmbeddingError:
-            return None, None, "embedding_provider_error"
+            return None, (), "embedding_provider_error"
         except Exception:
-            return None, None, "semantic_search_error"
-        resolver = getattr(self._catalog, "resolve_embedding_space", None)
+            return None, (), "semantic_search_error"
+        plural_resolver = getattr(self._catalog, "resolve_embedding_spaces", None)
+        singular_resolver = getattr(self._catalog, "resolve_embedding_space", None)
         try:
-            resolved = (
-                resolver(fingerprint=self._fingerprint, dimensions=len(vector))
-                if callable(resolver)
-                else None
-            )
+            if callable(plural_resolver):
+                resolved = plural_resolver(
+                    fingerprint=self._fingerprint,
+                    dimensions=len(vector),
+                )
+            elif callable(singular_resolver):
+                single = singular_resolver(
+                    fingerprint=self._fingerprint,
+                    dimensions=len(vector),
+                )
+                resolved = () if single is None else (single,)
+            else:
+                resolved = ()
         except CatalogExecutionError as error:
-            return None, None, _CATALOG_ERROR_TO_DEGRADED_REASON[error.category]
+            return None, (), _CATALOG_ERROR_TO_DEGRADED_REASON[error.category]
         except TimeoutError:
-            return None, None, "adapter_timeout"
+            return None, (), "adapter_timeout"
         except Exception:
-            return None, None, "adapter_error"
-        if not isinstance(resolved, EmbeddingSpaceRecord):
-            return None, None, "incompatible_embedding_profile"
-        resolved_space = resolved
+            return None, (), "adapter_error"
         if (
-            resolved_space.fingerprint != self._fingerprint
-            or resolved_space.dimensions != len(vector)
+            not isinstance(resolved, Sequence)
+            or not resolved
+            or any(not isinstance(space, EmbeddingSpaceRecord) for space in resolved)
         ):
-            return None, None, "incompatible_embedding_profile"
-        return vector, resolved_space.space_id, None
+            return None, (), "incompatible_embedding_profile"
+        spaces = tuple(cast(Sequence[EmbeddingSpaceRecord], resolved))
+        fingerprint_variants = {self._fingerprint}
+        raw_digest = self._fingerprint.removeprefix("sha256:")
+        if len(raw_digest) == 64 and all(character in "0123456789abcdef" for character in raw_digest.lower()):
+            fingerprint_variants.update({raw_digest, f"sha256:{raw_digest}"})
+        if any(space.fingerprint not in fingerprint_variants or space.dimensions != len(vector) for space in spaces):
+            return None, (), "incompatible_embedding_profile"
+        unique_spaces = {space.space_id: space for space in spaces}
+        return vector, tuple(unique_spaces.values()), None
 
     def _request(
         self,
@@ -621,7 +627,7 @@ class UnifiedTextSearchService:
         scope: SearchScope,
         limit: int,
         vector: tuple[float, ...] | None,
-        space_id: str | None,
+        spaces: Sequence[EmbeddingSpaceRecord],
     ) -> SearchRequest:
         candidate_limit = max(100, limit * 10)
         lexical = (
@@ -630,16 +636,17 @@ class UnifiedTextSearchService:
             else ()
         )
         vectors = (
-            (
+            tuple(
                 VectorBranch(
-                    "unified_semantic",
-                    space_id,
+                    "unified_semantic" if len(spaces) == 1 else f"unified_semantic_{index}",
+                    space.space_id,
                     vector,
                     candidate_limit=candidate_limit,
-                    expected_fingerprint=self._fingerprint,
-                ),
+                    expected_fingerprint=space.fingerprint,
+                )
+                for index, space in enumerate(spaces, start=1)
             )
-            if mode in {"semantic", "hybrid"} and vector is not None and space_id is not None
+            if mode in {"semantic", "hybrid"} and vector is not None and spaces
             else ()
         )
         return SearchRequest(lexical, vectors, scope, TARGET_RESOURCE, limit, self._rrf_k, allow_partial=True)
@@ -825,9 +832,7 @@ class ResourceQueryService:
         try:
             projections = self._whole_resource_resolver.resolve_textual_whole_resource_units(resource_id)
             candidates = tuple(
-                projection
-                for projection in projections
-                if self._is_unified_textual_projection(projection, resource_id)
+                projection for projection in projections if self._is_unified_textual_projection(projection, resource_id)
             )
         except CatalogExecutionError as error:
             return self._textual_unavailable(
@@ -928,9 +933,7 @@ class ResourceQueryService:
     ) -> TextualSimilarityResult:
         """Search explicit whole-resource text vectors through the core owner."""
         if aggregation not in _TEXTUAL_AGGREGATIONS:
-            raise ValueError(
-                "aggregation must be direct_text_v1 or token_weighted_centroid_v1"
-            )
+            raise ValueError("aggregation must be direct_text_v1 or token_weighted_centroid_v1")
         if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
             raise ValueError("expected_fingerprint must be a non-empty string")
         try:
@@ -1046,10 +1049,7 @@ class ResourceQueryService:
                     item.unit_id or item.evidence[0].unit_id,
                     item.score,
                     item.rank,
-                    tuple(
-                        ResourcePresetEvidence.from_candidate(candidate)
-                        for candidate in item.evidence
-                    ),
+                    tuple(ResourcePresetEvidence.from_candidate(candidate) for candidate in item.evidence),
                 )
                 for item in result.items
             ),

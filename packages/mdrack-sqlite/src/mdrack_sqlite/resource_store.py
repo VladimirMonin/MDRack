@@ -204,8 +204,7 @@ class SQLiteResourceStore:
             if row is None:
                 return None
             for facet_row in self.connection.execute(
-                "SELECT producer_is_null,producer_value,confidence_json "
-                "FROM core_resource_facets WHERE resource_id=?",
+                "SELECT producer_is_null,producer_value,confidence_json FROM core_resource_facets WHERE resource_id=?",
                 (resource_id,),
             ):
                 self._validate_facet_row(facet_row)
@@ -253,6 +252,45 @@ class SQLiteResourceStore:
         except sqlite3.OperationalError as error:
             category = ErrorCategory.ADAPTER_TIMEOUT if _is_busy(error) else ErrorCategory.CATALOG_ERROR
             raise CatalogExecutionError(category) from None
+        except Exception:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+
+    def resolve_embedding_spaces(
+        self,
+        *,
+        fingerprint: str,
+        dimensions: int,
+    ) -> tuple[EmbeddingSpaceRecord, ...]:
+        """Resolve all compatible vector spaces in deterministic identity order."""
+        if not isinstance(fingerprint, str) or not fingerprint:
+            raise ValueError("fingerprint must be non-empty")
+        if type(dimensions) is not int or dimensions < 1:
+            raise ValueError("dimensions must be a positive integer")
+        try:
+            fingerprints: tuple[str, ...] = (fingerprint,)
+            raw_digest = fingerprint.removeprefix("sha256:")
+            if len(raw_digest) == 64 and all(character in "0123456789abcdef" for character in raw_digest.lower()):
+                alternate = raw_digest if fingerprint.startswith("sha256:") else f"sha256:{raw_digest}"
+                fingerprints = (fingerprint, alternate)
+            placeholders = ",".join("?" for _ in fingerprints)
+            rows = self.connection.execute(
+                "SELECT space_id,dimensions,metric,fingerprint,metadata_json "
+                f"FROM core_embedding_spaces WHERE fingerprint IN ({placeholders}) AND dimensions=? "
+                "ORDER BY space_id",
+                (*fingerprints, dimensions),
+            ).fetchall()
+            return tuple(
+                EmbeddingSpaceRecord(
+                    str(row["space_id"]),
+                    int(row["dimensions"]),
+                    str(row["metric"]),
+                    str(row["fingerprint"]),
+                    _decode_mapping(row["metadata_json"], "space.metadata"),
+                )
+                for row in rows
+            )
+        except sqlite3.OperationalError:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
         except Exception:
             raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
 
@@ -348,19 +386,12 @@ class SQLiteResourceStore:
             if (
                 space is None
                 or len(branch.vector) != space["dimensions"]
-                or (
-                    branch.expected_fingerprint is not None
-                    and branch.expected_fingerprint != space["fingerprint"]
-                )
+                or (branch.expected_fingerprint is not None and branch.expected_fingerprint != space["fingerprint"])
             ):
-                raise BranchExecutionError(
-                    ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id
-                )
+                raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
             query = tuple(_decode_numeric(value, "query vector") for value in branch.vector)
             if space["metric"] == "cosine" and self._norm(query) == 0.0:
-                raise BranchExecutionError(
-                    ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id
-                )
+                raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
             clauses, params = self._scope_clauses(scope)
             rows = self.connection.execute(
                 "SELECT u.*, p.resource_id AS representation_resource_id, "
@@ -382,9 +413,7 @@ class SQLiteResourceStore:
                 score = self._score(query, candidate, space["metric"], branch.branch_id)
                 scored.append((score, row))
             if skipped_zero_cosine and not scored:
-                raise BranchExecutionError(
-                    ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id
-                )
+                raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch.branch_id)
             scored.sort(key=lambda item: (-item[0], item[1]["unit_id"]))
             return [
                 self._candidate(row, rank=index, score=score, branch_id=branch.branch_id)
@@ -495,9 +524,7 @@ class SQLiteResourceStore:
                     require_non_empty(representation.resource_id, "resource_id"),
                     require_non_empty(representation.representation_kind, "representation_kind"),
                     require_non_empty(representation.modality, "modality"),
-                    None
-                    if representation.text is None
-                    else require_utf8_encodable(representation.text, "text"),
+                    None if representation.text is None else require_utf8_encodable(representation.text, "text"),
                     require_optional_non_empty(representation.language, "language"),
                     require_optional_non_empty(
                         representation.producer_fingerprint,
@@ -587,10 +614,7 @@ class SQLiteResourceStore:
                 vector_record.vector,
                 spaces[vector_record.space_id].dimensions,
             )
-            if (
-                spaces[vector_record.space_id].metric == "cosine"
-                and self._norm(vector_record.vector) == 0.0
-            ):
+            if spaces[vector_record.space_id].metric == "cosine" and self._norm(vector_record.vector) == 0.0:
                 raise ValueError("cosine vector norm must be non-zero")
             vector_keys.add(vector_key)
             vector_units.add(vector_record.unit_id)
@@ -618,8 +642,10 @@ class SQLiteResourceStore:
             )
             producer_is_null = 1 if producer is None else 0
             producer_value = "" if producer is None else producer
-            confidence = None if facet_assignment.confidence is None else _encode_float(
-                facet_assignment.confidence, "confidence", confidence=True
+            confidence = (
+                None
+                if facet_assignment.confidence is None
+                else _encode_float(facet_assignment.confidence, "confidence", confidence=True)
             )
             facet_key = (namespace, value, origin, producer_is_null, producer_value)
             if facet_key in facet_keys:
@@ -773,10 +799,8 @@ class SQLiteResourceStore:
         resource_id = require_non_empty(row["resource_id"], "resource_id")
         modality = require_non_empty(row["modality"], "modality")
         if (
-            require_non_empty(row["representation_resource_id"], "representation.resource_id")
-            != resource_id
-            or require_non_empty(row["representation_modality"], "representation.modality")
-            != modality
+            require_non_empty(row["representation_resource_id"], "representation.resource_id") != resource_id
+            or require_non_empty(row["representation_modality"], "representation.modality") != modality
         ):
             raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR)
         return SearchUnitRecord(
@@ -891,14 +915,10 @@ class SQLiteResourceStore:
         if metric == "dot":
             return sum(left * right for left, right in zip(query, candidate, strict=True))
         if metric == "l2":
-            return -math.sqrt(
-                sum((left - right) ** 2 for left, right in zip(query, candidate, strict=True))
-            )
+            return -math.sqrt(sum((left - right) ** 2 for left, right in zip(query, candidate, strict=True)))
         if metric == "cosine":
             denominator = cls._norm(query) * cls._norm(candidate)
             if denominator == 0.0:
-                raise BranchExecutionError(
-                    ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch_id
-                )
+                raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch_id)
             return sum(left * right for left, right in zip(query, candidate, strict=True)) / denominator
         raise BranchExecutionError(ErrorCategory.INCOMPATIBLE_VECTOR_SPACE, branch_id=branch_id)

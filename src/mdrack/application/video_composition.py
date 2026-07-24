@@ -78,9 +78,7 @@ class VideoCompositionService:
         if not callable(getattr(catalog, "replace_resource", None)):
             raise TypeError("catalog must support complete resource replacement")
         if (embedding_provider is None) != (embedding_fingerprint is None):
-            raise ValueError(
-                "embedding_provider and embedding_fingerprint must be supplied together"
-            )
+            raise ValueError("embedding_provider and embedding_fingerprint must be supplied together")
         self._catalog = catalog
         self._provider = embedding_provider
         self._embedding_fingerprint = (
@@ -146,13 +144,20 @@ class VideoCompositionService:
             embedding_fingerprint=None,
             whole_text_policy=whole_text_policy if include_whole else None,
             aggregation_fingerprint=(
-                _aggregation_fingerprint(aggregation, whole_text_policy)
-                if include_whole
-                else None
+                _aggregation_fingerprint(aggregation, whole_text_policy) if include_whole else None
             ),
         )
+        lexical_transcript_input = (
+            replace(
+                transcript_input,
+                whole_text_policy=None,
+                aggregation_fingerprint=None,
+            )
+            if vectors is not None and aggregation != "direct_text_v1"
+            else transcript_input
+        )
         lexical_transcript = build_video_transcript_batch(
-            transcript_input,
+            lexical_transcript_input,
             token_counter=self._counter,
             token_count_kind="estimated",
             unsplittable="flag",
@@ -192,11 +197,7 @@ class VideoCompositionService:
             )
             frame_batch = build_video_frame_caption_batch(
                 frame_input,
-                vectors=(
-                    None
-                    if vectors is None
-                    else {unit_id: vectors[unit_id] for unit_id in frame_ids}
-                ),
+                vectors=(None if vectors is None else {unit_id: vectors[unit_id] for unit_id in frame_ids}),
             )
 
         source = dict(source_metadata or {})
@@ -214,15 +215,18 @@ class VideoCompositionService:
                 "frame_unit_count": len(frames.observations),
             },
         }
-        content_hash = "sha256:" + hashlib.sha256(
-            canonical_json(
-                {
-                    "frames": frames.to_dict(),
-                    "source": source,
-                    "transcript": transcript.to_dict(),
-                }
-            ).encode("utf-8")
-        ).hexdigest()
+        content_hash = (
+            "sha256:"
+            + hashlib.sha256(
+                canonical_json(
+                    {
+                        "frames": frames.to_dict(),
+                        "source": source,
+                        "transcript": transcript.to_dict(),
+                    }
+                ).encode("utf-8")
+            ).hexdigest()
+        )
         batches = (transcript_batch,) if frame_batch is None else (transcript_batch, frame_batch)
         spaces_by_id: dict[str, EmbeddingSpaceRecord] = {}
         for batch in batches:
@@ -241,9 +245,7 @@ class VideoCompositionService:
                 title=title,
                 metadata=metadata,
             ),
-            representations=tuple(
-                representation for batch in batches for representation in batch.representations
-            ),
+            representations=tuple(representation for batch in batches for representation in batch.representations),
             units=tuple(unit for batch in batches for unit in batch.units),
             spaces=tuple(spaces_by_id.values()),
             vectors=tuple(vector for batch in batches for vector in batch.vectors),

@@ -47,11 +47,7 @@ class MemoryCatalog:
             resource_id = batch.resource.resource_id
             source_key = self._source_key(batch)
             current = self._batches.get(resource_id)
-            if (
-                self._enforce_resource_contract
-                and current is not None
-                and self._source_key(current) != source_key
-            ):
+            if self._enforce_resource_contract and current is not None and self._source_key(current) != source_key:
                 raise ValueError("resource_id is bound to another source identity")
             for other_id, other in self._batches.items():
                 if (
@@ -102,6 +98,34 @@ class MemoryCatalog:
                 if vector.unit_id == unit_id and vector.space_id == space_id:
                     return vector
         return None
+
+    def resolve_embedding_spaces(
+        self,
+        *,
+        fingerprint: str,
+        dimensions: int,
+    ) -> tuple[EmbeddingSpaceRecord, ...]:
+        fingerprints = {fingerprint}
+        raw_digest = fingerprint.removeprefix("sha256:")
+        if len(raw_digest) == 64 and all(character in "0123456789abcdef" for character in raw_digest.lower()):
+            fingerprints.update({raw_digest, f"sha256:{raw_digest}"})
+        return tuple(
+            space
+            for space in sorted(self._spaces.values(), key=lambda item: item.space_id)
+            if space.fingerprint in fingerprints and space.dimensions == dimensions
+        )
+
+    def resolve_embedding_space(
+        self,
+        *,
+        fingerprint: str,
+        dimensions: int,
+    ) -> EmbeddingSpaceRecord | None:
+        spaces = self.resolve_embedding_spaces(
+            fingerprint=fingerprint,
+            dimensions=dimensions,
+        )
+        return spaces[0] if len(spaces) == 1 else None
 
     def find_by_content_hash(
         self,
@@ -159,12 +183,8 @@ class MemoryCatalog:
             space = spaces.get(branch.space_id)
             if space is None:
                 continue
-            if (
-                len(branch.vector) != space.dimensions
-                or (
-                    branch.expected_fingerprint is not None
-                    and branch.expected_fingerprint != space.fingerprint
-                )
+            if len(branch.vector) != space.dimensions or (
+                branch.expected_fingerprint is not None and branch.expected_fingerprint != space.fingerprint
             ):
                 raise BranchExecutionError(
                     ErrorCategory.INCOMPATIBLE_VECTOR_SPACE,
@@ -245,10 +265,7 @@ class MemoryCatalog:
         representation = next(
             item for item in batch.representations if item.representation_id == unit.representation_id
         )
-        if (
-            scope.representation_kinds
-            and representation.representation_kind not in scope.representation_kinds
-        ):
+        if scope.representation_kinds and representation.representation_kind not in scope.representation_kinds:
             return False
         if scope.modalities and unit.modality not in scope.modalities:
             return False
@@ -274,9 +291,7 @@ class MemoryCatalog:
         if metric == "dot":
             return sum(left * right for left, right in zip(query, candidate, strict=True))
         if metric == "l2":
-            return -math.sqrt(
-                sum((left - right) ** 2 for left, right in zip(query, candidate, strict=True))
-            )
+            return -math.sqrt(sum((left - right) ** 2 for left, right in zip(query, candidate, strict=True)))
         denominator = math.sqrt(sum(value * value for value in query)) * math.sqrt(
             sum(value * value for value in candidate)
         )

@@ -77,14 +77,10 @@ class TestLMStudioProviderEmbed:
         )
 
     @pytest.mark.asyncio
-    async def test_embed_single_text(
-        self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_embed_single_text(self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch) -> None:
         """Embedding a single text should return a list with one vector."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         _patch_async_client(monkeypatch, response=mock_response)
 
@@ -100,9 +96,7 @@ class TestLMStudioProviderEmbed:
     ) -> None:
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         clients = _patch_async_client(monkeypatch, response=mock_response)
 
@@ -128,9 +122,7 @@ class TestLMStudioProviderEmbed:
         )
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 64, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 64, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         clients = _patch_async_client(monkeypatch, response=mock_response)
 
@@ -154,9 +146,7 @@ class TestLMStudioProviderEmbed:
         )
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 64, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 64, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         _patch_async_client(monkeypatch, response=mock_response)
 
@@ -184,9 +174,7 @@ class TestLMStudioProviderEmbed:
         assert provider.mrl_status == "unsupported_by_runtime"
 
     @pytest.mark.asyncio
-    async def test_embed_multiple_texts(
-        self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_embed_multiple_texts(self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch) -> None:
         """Embedding multiple texts should return one vector per text."""
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -205,14 +193,37 @@ class TestLMStudioProviderEmbed:
         assert len(vectors[1]) == 128
 
     @pytest.mark.asyncio
+    async def test_embed_splits_large_input_without_reordering(
+        self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.side_effect = [
+            {"data": [{"embedding": [float(index)] * 128, "index": index} for index in range(start, stop)]}
+            for start, stop in ((0, 32), (32, 64), (64, 65))
+        ]
+        clients = _patch_async_client(monkeypatch, response=mock_response)
+
+        texts = [f"text-{index}" for index in range(65)]
+        vectors = await provider.embed(texts)
+
+        assert len(clients) == 3
+        batches: list[object] = []
+        for client in clients:
+            payload = client.calls[0][1]["json"]
+            assert isinstance(payload, dict)
+            batches.append(payload["input"])
+        assert batches == [texts[:32], texts[32:64], texts[64:]]
+        assert [vector[0] for vector in vectors] == [float(index) for index in range(65)]
+
+    @pytest.mark.asyncio
     async def test_embed_normalizes_base_endpoint(
         self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Base endpoint input should produce a single /v1/embeddings path."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         clients = _patch_async_client(monkeypatch, response=mock_response)
 
@@ -230,9 +241,7 @@ class TestLMStudioProviderEmbed:
             timeout=10,
         )
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         clients = _patch_async_client(monkeypatch, response=mock_response)
 
@@ -249,9 +258,7 @@ class TestLMStudioProviderEmbed:
             timeout=10,
         )
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         clients = _patch_async_client(monkeypatch, response=mock_response)
 
@@ -349,14 +356,10 @@ class TestLMStudioProviderEmbedQuery:
         )
 
     @pytest.mark.asyncio
-    async def test_embed_query_adds_prefix(
-        self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_embed_query_adds_prefix(self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch) -> None:
         """embed_query should add retrieval prefix to the text."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         clients = _patch_async_client(monkeypatch, response=mock_response)
 
@@ -372,9 +375,7 @@ class TestLMStudioProviderEmbedQuery:
     ) -> None:
         """embed_query should return a single vector."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         _patch_async_client(monkeypatch, response=mock_response)
 
@@ -398,14 +399,10 @@ class TestLMStudioProviderHealth:
         )
 
     @pytest.mark.asyncio
-    async def test_health_success(
-        self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_health_success(self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch) -> None:
         """Health check should return ok=True when API responds."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"embedding": [0.1] * 128, "index": 0}]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
         mock_response.raise_for_status = MagicMock()
         _patch_async_client(monkeypatch, response=mock_response)
 
@@ -419,9 +416,7 @@ class TestLMStudioProviderHealth:
         assert health.error is None
 
     @pytest.mark.asyncio
-    async def test_health_failure(
-        self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_health_failure(self, provider: LMStudioProvider, monkeypatch: pytest.MonkeyPatch) -> None:
         """Health check should return ok=False when API fails."""
         _patch_async_client(
             monkeypatch,
@@ -532,9 +527,7 @@ class TestLMStudioControlClient:
         assert result.download_id == "download-1"
         assert clients[0].requests[0][0] == "POST"
         assert clients[0].calls[0][0][0] == "http://localhost:1234/api/v1/models/download"
-        assert clients[0].calls[0][1]["json"] == {
-            "model": "Qwen/Qwen3-Embedding-0.6B-GGUF"
-        }
+        assert clients[0].calls[0][1]["json"] == {"model": "Qwen/Qwen3-Embedding-0.6B-GGUF"}
 
     @pytest.mark.asyncio
     async def test_get_download_status_parses_progress(

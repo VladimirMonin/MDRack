@@ -31,6 +31,8 @@ _KNOWN_API_SUFFIXES = (
     "/api/v1",
 )
 
+_MAX_EMBEDDING_BATCH_SIZE = 32
+
 
 @dataclass(frozen=True)
 class LMStudioModelInfo:
@@ -270,9 +272,7 @@ def _parse_download_info(download_payload: dict[str, Any]) -> LMStudioDownloadIn
             or download_payload.get("progress_percent")
             or download_payload.get("progress_percentage")
         ),
-        downloaded_bytes=_coerce_int(
-            download_payload.get("downloaded_bytes") or download_payload.get("downloaded")
-        ),
+        downloaded_bytes=_coerce_int(download_payload.get("downloaded_bytes") or download_payload.get("downloaded")),
         total_bytes=_coerce_int(download_payload.get("total_bytes") or download_payload.get("total")),
         error=_first_string(download_payload, "error", "message"),
     )
@@ -469,9 +469,7 @@ class LMStudioControlClient:
                 elapsed_ms=int((perf_counter() - started_at) * 1000),
                 **safe_fields,
             )
-            raise LMStudioControlError(
-                f"LM Studio returned HTTP {status_code} for {operation} request"
-            ) from exc
+            raise LMStudioControlError(f"LM Studio returned HTTP {status_code} for {operation} request") from exc
         except httpx.RequestError as exc:
             _log_event(
                 logging.ERROR,
@@ -484,9 +482,7 @@ class LMStudioControlClient:
                 elapsed_ms=int((perf_counter() - started_at) * 1000),
                 **safe_fields,
             )
-            raise LMStudioControlError(
-                f"Failed to reach LM Studio {operation} endpoint"
-            ) from exc
+            raise LMStudioControlError(f"Failed to reach LM Studio {operation} endpoint") from exc
 
         _log_event(
             logging.INFO,
@@ -516,9 +512,7 @@ class LMStudioControlClient:
                 elapsed_ms=int((perf_counter() - started_at) * 1000),
                 **safe_fields,
             )
-            raise LMStudioControlError(
-                f"Failed to parse LM Studio {operation} response"
-            ) from exc
+            raise LMStudioControlError(f"Failed to parse LM Studio {operation} response") from exc
 
 
 class LMStudioProvider:
@@ -579,9 +573,7 @@ class LMStudioProvider:
         """
         return None
 
-    async def embed(
-        self, texts: list[str], profile: str = "default"
-    ) -> list[list[float]]:
+    async def embed(self, texts: list[str], profile: str = "default") -> list[list[float]]:
         """Embed a batch of texts via LM Studio API.
 
         Args:
@@ -595,6 +587,17 @@ class LMStudioProvider:
             EmbeddingError: On timeout, connection error, HTTP error,
                 or dimension mismatch.
         """
+        if len(texts) > _MAX_EMBEDDING_BATCH_SIZE:
+            embeddings: list[list[float]] = []
+            for start in range(0, len(texts), _MAX_EMBEDDING_BATCH_SIZE):
+                embeddings.extend(
+                    await self.embed(
+                        texts[start : start + _MAX_EMBEDDING_BATCH_SIZE],
+                        profile,
+                    )
+                )
+            return embeddings
+
         payload: dict[str, Any] = {
             "model": self._model,
             "input": texts,
@@ -628,8 +631,7 @@ class LMStudioProvider:
                 response.raise_for_status()
         except httpx.TimeoutException as exc:
             logger.error(
-                "llm.request.failed provider=%s model=%s profile=%s reason=timeout "
-                "input_count=%d elapsed_ms=%d",
+                "llm.request.failed provider=%s model=%s profile=%s reason=timeout input_count=%d elapsed_ms=%d",
                 self._provider_name,
                 self._model,
                 profile,
@@ -649,9 +651,7 @@ class LMStudioProvider:
                 len(texts),
                 int((perf_counter() - started_at) * 1000),
             )
-            raise EmbeddingError(
-                f"LM Studio returned HTTP {status_code} for embeddings request"
-            ) from exc
+            raise EmbeddingError(f"LM Studio returned HTTP {status_code} for embeddings request") from exc
         except httpx.RequestError as exc:
             logger.error(
                 "llm.request.failed provider=%s model=%s profile=%s reason=request_error "
@@ -732,8 +732,7 @@ class LMStudioProvider:
                     int((perf_counter() - started_at) * 1000),
                 )
                 raise EmbeddingError(
-                    f"Dimension mismatch: expected {self._dimensions}, "
-                    f"got {len(emb)} for text index {i}"
+                    f"Dimension mismatch: expected {self._dimensions}, got {len(emb)} for text index {i}"
                 )
 
         logger.info(

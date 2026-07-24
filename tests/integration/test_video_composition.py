@@ -102,9 +102,7 @@ def video_inputs() -> tuple[object, object, bytes, str]:
     transcript = read_transcript(
         transcript_source,
         resource_id=resource,
-        producer_fingerprint=ProducerFingerprint.from_payload(
-            {"producer": "fixture-transcript", "version": 1}
-        ),
+        producer_fingerprint=ProducerFingerprint.from_payload({"producer": "fixture-transcript", "version": 1}),
     ).artifact
     frame_source = json.dumps(
         {
@@ -167,9 +165,7 @@ async def test_default_video_composition_flags_oversized_atom_without_losing_fra
             }
         ).encode(),
         resource_id=resource,
-        producer_fingerprint=ProducerFingerprint.from_payload(
-            {"producer": "fixture-transcript", "version": 1}
-        ),
+        producer_fingerprint=ProducerFingerprint.from_payload({"producer": "fixture-transcript", "version": 1}),
     ).artifact
     frames = read_frame_captions(
         json.dumps(
@@ -192,9 +188,7 @@ async def test_default_video_composition_flags_oversized_atom_without_losing_fra
             }
         ).encode()
     ).artifact
-    fingerprint = EmbeddingFingerprint.from_payload(
-        {"provider": "fake", "dimensions": 8, "version": 1}
-    ).value
+    fingerprint = EmbeddingFingerprint.from_payload({"provider": "fake", "dimensions": 8, "version": 1}).value
 
     with SQLiteCatalog.create(tmp_path / "oversized-video.sqlite3") as catalog:
         service = VideoCompositionService(
@@ -207,13 +201,10 @@ async def test_default_video_composition_flags_oversized_atom_without_losing_fra
             frames,
             media_type="video/mp4",
             source_namespace="fixture",
-            source_locator=Locator(
-                "external_record", {"source_ref": "oversized-video-atom"}
-            ),
+            source_locator=Locator("external_record", {"source_ref": "oversized-video-atom"}),
         )
         passage_id = catalog.connection.execute(
-            "SELECT unit_id FROM core_search_units "
-            "WHERE resource_id=? AND unit_kind='time_segment'",
+            "SELECT unit_id FROM core_search_units WHERE resource_id=? AND unit_kind='time_segment'",
             (resource,),
         ).fetchone()[0]
         passage = catalog.read_unit(passage_id)
@@ -239,9 +230,7 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
     transcript, frames, private_source, resource = video_inputs
     database = tmp_path / "video.sqlite3"
     provider = FakeEmbeddingProvider(dimensions=8)
-    fingerprint = EmbeddingFingerprint.from_payload(
-        {"provider": "fake", "dimensions": 8, "version": 1}
-    ).value
+    fingerprint = EmbeddingFingerprint.from_payload({"provider": "fake", "dimensions": 8, "version": 1}).value
     caplog.set_level(logging.INFO)
 
     with SQLiteCatalog.create(database) as sqlite_catalog:
@@ -279,9 +268,7 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
             "WHERE resource_id=? ORDER BY unit_kind,ordinal",
             (resource,),
         ).fetchall()
-        transcript_search = await TimedRetrievalService(sqlite_catalog).search(
-            "transaction", mode="text"
-        )
+        transcript_search = await TimedRetrievalService(sqlite_catalog).search("transaction", mode="text")
         frame_search = RetrievalService(sqlite_catalog).search(
             SearchRequest(
                 lexical_branches=(
@@ -322,11 +309,7 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
     assert prepared_whole.metadata["aggregation"] == "direct_text_v1"
     assert stored_whole is not None
     assert stored_whole.metadata["aggregation"] == "direct_text_v1"
-    frame_locators = [
-        json.loads(row["evidence_locator_json"])
-        for row in rows
-        if row["unit_kind"] == "frame"
-    ]
+    frame_locators = [json.loads(row["evidence_locator_json"]) for row in rows if row["unit_kind"] == "frame"]
     assert [item["timestamp_ms"] for item in frame_locators] == [500, 1_500]
     assert transcript_search.results[0].resource_id == resource
     assert frame_search.items[0].resource_id == resource
@@ -335,6 +318,73 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
     assert "unique architecture diagram" not in captured
     assert "video-complete" not in captured
     assert private_source
+
+
+@pytest.mark.asyncio
+async def test_long_video_builds_centroid_only_after_passage_vectors_exist(
+    tmp_path: Path,
+) -> None:
+    resource = resource_id("fixture", "long-video-centroid")
+    transcript = read_transcript(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0,
+                        "end": 600,
+                        "text": " ".join(["semantic"] * 9_000),
+                    }
+                ]
+            }
+        ).encode(),
+        resource_id=resource,
+        producer_fingerprint=ProducerFingerprint.from_payload({"producer": "long-transcript", "version": 1}),
+    ).artifact
+    frames = read_frame_captions(
+        json.dumps(
+            {
+                "schema": "mdrack.frame-captions.v1",
+                "resource_id": resource,
+                "producer_fingerprint": ProducerFingerprint.from_payload(
+                    {"producer": "long-frame", "version": 1}
+                ).value,
+                "normalization_fingerprint": None,
+                "metadata": {},
+                "frames": [
+                    {
+                        "frame_id": "frame-long",
+                        "timestamp_ms": 300_000,
+                        "caption": "semantic diagram",
+                        "metadata": {},
+                    }
+                ],
+            }
+        ).encode()
+    ).artifact
+    fingerprint = EmbeddingFingerprint.from_payload({"provider": "fake", "dimensions": 8, "version": 1}).value
+
+    with SQLiteCatalog.create(tmp_path / "long-video-centroid.sqlite3") as catalog:
+        result = await VideoCompositionService(
+            catalog,
+            embedding_provider=FakeEmbeddingProvider(dimensions=8),
+            embedding_fingerprint=fingerprint,
+        ).ingest(
+            transcript,
+            frames,
+            media_type="video/mp4",
+            source_namespace="fixture",
+            source_locator=Locator("external_record", {"source_ref": "long-video-centroid"}),
+        )
+        whole = catalog.connection.execute(
+            "SELECT metadata_json FROM core_search_units WHERE resource_id=? AND unit_kind='whole_resource'",
+            (resource,),
+        ).fetchone()
+
+    assert result.transcript_unit_count == 1
+    assert result.frame_unit_count == 1
+    assert result.vector_count == 3
+    assert whole is not None
+    assert json.loads(whole[0])["aggregation"] == "token_weighted_centroid_v1"
 
 
 @pytest.mark.asyncio
@@ -410,9 +460,7 @@ async def test_application_boundary_rejects_invalid_frames_before_provider_or_re
     transcript, frames, _, resource = video_inputs
     invalid = _invalid_frames(frames, defect=defect)
     provider = _CountingProvider()
-    fingerprint = EmbeddingFingerprint.from_payload(
-        {"provider": "counting", "dimensions": 8, "version": 1}
-    ).value
+    fingerprint = EmbeddingFingerprint.from_payload({"provider": "counting", "dimensions": 8, "version": 1}).value
     caplog.set_level(logging.INFO)
 
     with SQLiteCatalog.create(tmp_path / "validation.sqlite3") as sqlite_catalog:
@@ -437,9 +485,7 @@ async def test_application_boundary_rejects_invalid_frames_before_provider_or_re
                 invalid,
                 media_type="video/mp4",
                 source_namespace="fixture",
-                source_locator=Locator(
-                    "external_record", {"source_ref": "PRIVATE_SOURCE_LOCATOR"}
-                ),
+                source_locator=Locator("external_record", {"source_ref": "PRIVATE_SOURCE_LOCATOR"}),
                 chunking_policy=_policy(),
             )
         after = tuple(sqlite_catalog.connection.iterdump())

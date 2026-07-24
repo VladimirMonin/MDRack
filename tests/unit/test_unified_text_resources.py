@@ -22,6 +22,12 @@ from tests.core.fakes.memory_store import MemoryCatalog
 _SPACE = EmbeddingSpaceRecord("text-space", 2, "cosine", "text-fingerprint", {})
 
 
+class _QueryProvider:
+    async def embed_query(self, text: str, profile: str = "default") -> list[float]:
+        del text, profile
+        return [1.0, 0.0]
+
+
 @dataclass(frozen=True)
 class _Resolver:
     projections: dict[str, tuple[TextualWholeResourceProjection, ...]]
@@ -45,6 +51,7 @@ def _batch(
     similarity_basis: str | None = None,
     locator_kind: str = "fixture_unit",
     locator_payload: dict[str, object] | None = None,
+    space: EmbeddingSpaceRecord = _SPACE,
 ) -> PreparedResourceBatch:
     representation_id = f"{unit_id}-representation"
     metadata = (
@@ -89,8 +96,8 @@ def _batch(
                 metadata=metadata,
             ),
         ),
-        (_SPACE,),
-        (VectorRecord(unit_id, _SPACE.space_id, vector),),
+        (space,),
+        (VectorRecord(unit_id, space.space_id, vector),),
     )
 
 
@@ -195,6 +202,54 @@ async def test_unified_text_search_filters_by_alias_and_degrades_hybrid_without_
     assert hybrid.degraded_reason == "embedding_provider_unavailable"
 
 
+async def test_unified_semantic_search_fuses_all_compatible_embedding_spaces() -> None:
+    catalog = MemoryCatalog()
+    fingerprint = "a" * 64
+    first_space = EmbeddingSpaceRecord(
+        "first-text-space",
+        2,
+        "cosine",
+        fingerprint,
+        {},
+    )
+    second_space = EmbeddingSpaceRecord(
+        "second-text-space",
+        2,
+        "cosine",
+        f"sha256:{fingerprint}",
+        {},
+    )
+    catalog.replace_resource(
+        _batch(
+            resource_id="document-1",
+            resource_kind="document",
+            unit_id="document-unit",
+            text="document",
+            space=first_space,
+        )
+    )
+    catalog.replace_resource(
+        _batch(
+            resource_id="video-1",
+            resource_kind="video",
+            unit_id="video-unit",
+            text="video",
+            representation_kind="timed_passage",
+            unit_kind="time_segment",
+            space=second_space,
+        )
+    )
+
+    result = await UnifiedTextSearchService(
+        catalog,
+        embedding_provider=_QueryProvider(),  # type: ignore[arg-type]
+        embedding_fingerprint=fingerprint,
+    ).search("meaning", scope="all", mode="semantic")
+
+    assert result.degraded is False
+    assert {item.resource_id for item in result.results} == {"document-1", "video-1"}
+
+
 def test_resource_similarity_resolves_only_one_textual_whole_unit_and_rejects_frames() -> None:
     catalog = MemoryCatalog()
     catalog.replace_resource(
@@ -246,12 +301,8 @@ def test_resource_similarity_resolves_only_one_textual_whole_unit_and_rejects_fr
     catalog.replace_resource(_visual_batch(resource_id="image-visual-only", unit_id="a-visual-unit"))
     resolver = _Resolver(
         {
-            "document-a": (
-                TextualWholeResourceProjection("document-a", "query-unit", _SPACE),
-            ),
-            "video-a": (
-                TextualWholeResourceProjection("video-a", "video-a-whole-unit", _SPACE),
-            ),
+            "document-a": (TextualWholeResourceProjection("document-a", "query-unit", _SPACE),),
+            "video-a": (TextualWholeResourceProjection("video-a", "video-a-whole-unit", _SPACE),),
         }
     )
     service = ResourceQueryService(catalog, whole_resource_resolver=resolver)

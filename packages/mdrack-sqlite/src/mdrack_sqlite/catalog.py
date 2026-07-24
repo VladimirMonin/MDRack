@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import sqlite3
@@ -12,9 +11,7 @@ from types import TracebackType
 from typing import Literal
 
 from mdrack_core.domain import (
-    CatalogExecutionError,
     EmbeddingSpaceRecord,
-    ErrorCategory,
     LexicalBranch,
     PreparedResourceBatch,
     RankedCandidate,
@@ -296,32 +293,24 @@ class SQLiteCatalog(SQLiteResourceStore):
         dimensions: int,
     ) -> EmbeddingSpaceRecord | None:
         """Resolve one unambiguous ready space without leaking SQLite to callers."""
+        spaces = self.resolve_embedding_spaces(
+            fingerprint=fingerprint,
+            dimensions=dimensions,
+        )
+        return spaces[0] if len(spaces) == 1 else None
+
+    def resolve_embedding_spaces(
+        self,
+        *,
+        fingerprint: str,
+        dimensions: int,
+    ) -> tuple[EmbeddingSpaceRecord, ...]:
+        """Resolve every compatible ready space in deterministic identity order."""
         self._require_open()
-        if not isinstance(fingerprint, str) or not fingerprint:
-            raise ValueError("fingerprint must be non-empty")
-        if type(dimensions) is not int or dimensions < 1:
-            raise ValueError("dimensions must be a positive integer")
-        try:
-            rows = self.connection.execute(
-                "SELECT space_id,dimensions,metric,fingerprint,metadata_json "
-                "FROM core_embedding_spaces WHERE fingerprint=? AND dimensions=? "
-                "ORDER BY space_id",
-                (fingerprint, dimensions),
-            ).fetchall()
-            if len(rows) != 1:
-                return None
-            row = rows[0]
-            return EmbeddingSpaceRecord(
-                str(row["space_id"]),
-                int(row["dimensions"]),
-                str(row["metric"]),
-                str(row["fingerprint"]),
-                json.loads(str(row["metadata_json"])),
-            )
-        except sqlite3.OperationalError:
-            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
-        except Exception:
-            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+        return super().resolve_embedding_spaces(
+            fingerprint=fingerprint,
+            dimensions=dimensions,
+        )
 
     def find_by_content_hash(
         self,
@@ -372,16 +361,9 @@ class SQLiteCatalog(SQLiteResourceStore):
 
             objects = {
                 row[0]
-                for row in self.connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
-                )
+                for row in self.connection.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
             }
-            indexes = {
-                row[0]
-                for row in self.connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='index'"
-                )
-            }
+            indexes = {row[0] for row in self.connection.execute("SELECT name FROM sqlite_master WHERE type='index'")}
             if not _REQUIRED_TABLES <= objects or not _REQUIRED_INDEXES <= indexes:
                 raise ValueError
 
@@ -398,12 +380,9 @@ class SQLiteCatalog(SQLiteResourceStore):
                 raise ValueError
 
             expected_fts = self.connection.execute(
-                "SELECT COUNT(*) FROM core_search_units "
-                "WHERE text_content IS NOT NULL AND trim(text_content)<>''"
+                "SELECT COUNT(*) FROM core_search_units WHERE text_content IS NOT NULL AND trim(text_content)<>''"
             ).fetchone()[0]
-            actual_fts = self.connection.execute(
-                "SELECT COUNT(*) FROM core_search_units_fts"
-            ).fetchone()[0]
+            actual_fts = self.connection.execute("SELECT COUNT(*) FROM core_search_units_fts").fetchone()[0]
             distinct_fts = self.connection.execute(
                 "SELECT COUNT(DISTINCT unit_id) FROM core_search_units_fts"
             ).fetchone()[0]
@@ -470,12 +449,7 @@ class SQLiteCatalog(SQLiteResourceStore):
             return
         if self._schema_id != SQLITE_BRIDGE_SCHEMA_ID:
             raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
-        versions = [
-            row[0]
-            for row in self.connection.execute(
-                "SELECT version FROM schema_migrations ORDER BY version"
-            )
-        ]
+        versions = [row[0] for row in self.connection.execute("SELECT version FROM schema_migrations ORDER BY version")]
         if versions != [f"{version:04d}" for version in range(8)]:
             raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
 
@@ -504,10 +478,7 @@ class SQLiteCatalog(SQLiteResourceStore):
     @staticmethod
     def _detect_schema_id(connection: sqlite3.Connection) -> str:
         objects = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
-            )
+            row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
         }
         if {"mdrack_sqlite_migrations", "mdrack_sqlite_schema"} <= objects:
             try:
@@ -516,12 +487,7 @@ class SQLiteCatalog(SQLiteResourceStore):
                 raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
             return SQLITE_CATALOG_SCHEMA_ID
         if "schema_migrations" in objects:
-            versions = [
-                row[0]
-                for row in connection.execute(
-                    "SELECT version FROM schema_migrations ORDER BY version"
-                )
-            ]
+            versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version")]
             if versions == [f"{version:04d}" for version in range(8)]:
                 return SQLITE_BRIDGE_SCHEMA_ID
         raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)

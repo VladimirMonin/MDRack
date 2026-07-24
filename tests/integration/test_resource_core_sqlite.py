@@ -76,16 +76,11 @@ def _apply_prefix(connection: sqlite3.Connection, names: tuple[str, ...]) -> Non
 
 def _schema_identity(connection: sqlite3.Connection, *, legacy_only: bool) -> list[tuple[object, ...]]:
     rows = connection.execute(
-        "SELECT type, name, tbl_name, sql FROM sqlite_master "
-        "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
     ).fetchall()
     values = [tuple(row) for row in rows]
     if legacy_only:
-        values = [
-            row
-            for row in values
-            if not str(row[1]).startswith("core_") and not str(row[2]).startswith("core_")
-        ]
+        values = [row for row in values if not str(row[1]).startswith("core_") and not str(row[2]).startswith("core_")]
     return values
 
 
@@ -208,9 +203,7 @@ def _batch(
         {"unit": True},
     )
     space = EmbeddingSpaceRecord(space_id, len(vector), metric, fingerprint, {"model": "fake"})
-    assignments = tuple(
-        ResourceFacet(resource_id, facet, "user", None, -0.0) for facet in facets
-    )
+    assignments = tuple(ResourceFacet(resource_id, facet, "user", None, -0.0) for facet in facets)
     return PreparedResourceBatch(
         resource,
         [representation],
@@ -248,9 +241,10 @@ def test_0007_is_create_only_and_preserves_populated_legacy_identity(tmp_path: P
         assert EXPECTED_MIGRATION_VERSION == "0007"
         assert _schema_identity(connection, legacy_only=True) == schema_before
         assert {table: _table_digest(connection, table) for table in LEGACY_DATA_OBJECTS} == data_before
-        assert [tuple(row) for row in connection.execute(
-            "SELECT * FROM schema_migrations WHERE version < '0007' ORDER BY version"
-        )] == ledger_before
+        assert [
+            tuple(row)
+            for row in connection.execute("SELECT * FROM schema_migrations WHERE version < '0007' ORDER BY version")
+        ] == ledger_before
         assert connection.execute("SELECT COUNT(*) FROM schema_migrations WHERE version='0007'").fetchone()[0] == 1
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
         assert CORE_TABLES <= tables
@@ -299,9 +293,7 @@ def test_catalog_round_trip_signed_zero_facets_hash_scope_and_delete(store: SQLi
     assert actual_vector is not None
     assert struct.pack(">2d", *actual_vector.vector) == struct.pack(">2d", 0.0, -0.0)
     assert math.copysign(1.0, actual_vector.vector[1]) == -1.0
-    matches = store.find_by_content_hash(
-        "sha256:shared", scope=SearchScope(source_namespaces=["vault"])
-    )
+    matches = store.find_by_content_hash("sha256:shared", scope=SearchScope(source_namespaces=["vault"]))
     assert matches == [first.resource]
 
     store.delete_resource("resource-1")
@@ -309,6 +301,33 @@ def test_catalog_round_trip_signed_zero_facets_hash_scope_and_delete(store: SQLi
     assert store.read_resource("resource-1") is None
     assert store.read_unit("unit-resource-1") is None
     assert store.read_vector("unit-resource-1", "space") is None
+
+
+def test_resolve_embedding_spaces_accepts_canonical_sha256_equivalence(
+    store: SQLiteResourceStore,
+) -> None:
+    fingerprint = "a" * 64
+    store.replace_resource(
+        _batch(
+            "resource-raw",
+            fingerprint=fingerprint,
+            space_id="space-raw",
+        )
+    )
+    store.replace_resource(
+        _batch(
+            "resource-prefixed",
+            fingerprint=f"sha256:{fingerprint}",
+            space_id="space-prefixed",
+        )
+    )
+
+    spaces = store.resolve_embedding_spaces(
+        fingerprint=fingerprint,
+        dimensions=2,
+    )
+
+    assert [space.space_id for space in spaces] == ["space-prefixed", "space-raw"]
 
 
 def test_replace_is_atomic_rejects_caller_transaction_and_preserves_old_graph(
@@ -327,11 +346,7 @@ def test_replace_is_atomic_rejects_caller_transaction_and_preserves_old_graph(
 
     replacement = _batch(text="changed")
     store.set_failure_hook(
-        lambda point: (
-            (_ for _ in ()).throw(RuntimeError("PRIVATE_SQL_SENTINEL"))
-            if point == "after_units"
-            else None
-        )
+        lambda point: (_ for _ in ()).throw(RuntimeError("PRIVATE_SQL_SENTINEL")) if point == "after_units" else None
     )
     with pytest.raises(CatalogExecutionError) as injected:
         store.replace_resource(replacement)
@@ -431,16 +446,14 @@ def test_typed_null_facets_signed_zero_orphans_and_corruption_fail_closed(
 
     connection.execute("PRAGMA ignore_check_constraints=ON")
     connection.execute(
-        "UPDATE core_resource_facets SET producer_is_null=1,producer_value='corrupt' "
-        "WHERE producer_is_null=0"
+        "UPDATE core_resource_facets SET producer_is_null=1,producer_value='corrupt' WHERE producer_is_null=0"
     )
     connection.commit()
     with pytest.raises(CatalogExecutionError):
         store.read_resource("resource-1")
     connection.execute("PRAGMA ignore_check_constraints=OFF")
     connection.execute(
-        "UPDATE core_resource_facets SET producer_is_null=0,producer_value='__null__' "
-        "WHERE producer_value='corrupt'"
+        "UPDATE core_resource_facets SET producer_is_null=0,producer_value='__null__' WHERE producer_value='corrupt'"
     )
     connection.commit()
     store.delete_resource("resource-1")
@@ -530,13 +543,12 @@ def test_manual_fts_scope_before_limit_update_and_delete(store: SQLiteResourceSt
     assert [item.unit_id for item in results] == ["unit-included"]
 
     store.replace_resource(_batch("included", namespace="vault", text="beta"))
-    assert store.search_lexical(
-        LexicalBranch("lexical", "alpha", candidate_limit=10), scope=SearchScope()
-    )[0].unit_id == "unit-excluded"
+    assert (
+        store.search_lexical(LexicalBranch("lexical", "alpha", candidate_limit=10), scope=SearchScope())[0].unit_id
+        == "unit-excluded"
+    )
     store.delete_resource("excluded")
-    assert store.search_lexical(
-        LexicalBranch("lexical", "alpha", candidate_limit=10), scope=SearchScope()
-    ) == []
+    assert store.search_lexical(LexicalBranch("lexical", "alpha", candidate_limit=10), scope=SearchScope()) == []
 
 
 def test_vector_metrics_scope_facets_and_cosine_zero_boundary(
@@ -554,21 +566,15 @@ def test_vector_metrics_scope_facets_and_cosine_zero_boundary(
     cosine_store = SQLiteResourceStore(connection)
     cosine_store.delete_resource("excluded")
     cosine_store.delete_resource("included")
-    cosine_store.replace_resource(
-        _batch("valid", metric="cosine", vector=(1.0, 0.0), space_id="cosine-space")
-    )
-    cosine_store.replace_resource(
-        _batch("corrupt", metric="cosine", vector=(1.0, 0.0), space_id="cosine-space")
-    )
+    cosine_store.replace_resource(_batch("valid", metric="cosine", vector=(1.0, 0.0), space_id="cosine-space"))
+    cosine_store.replace_resource(_batch("corrupt", metric="cosine", vector=(1.0, 0.0), space_id="cosine-space"))
     connection.execute(
         "UPDATE core_unit_embeddings SET embedding=? WHERE unit_id='unit-corrupt'",
         (b"[0.0,-0.0]",),
     )
     connection.commit()
 
-    mixed = cosine_store.search_vector(
-        VectorBranch("cosine", "cosine-space", (1.0, 0.0)), scope=SearchScope()
-    )
+    mixed = cosine_store.search_vector(VectorBranch("cosine", "cosine-space", (1.0, 0.0)), scope=SearchScope())
     assert [(item.unit_id, item.rank) for item in mixed] == [("unit-valid", 1)]
 
     connection.execute(
@@ -577,15 +583,11 @@ def test_vector_metrics_scope_facets_and_cosine_zero_boundary(
     )
     connection.commit()
     with pytest.raises(BranchExecutionError) as error:
-        cosine_store.search_vector(
-            VectorBranch("cosine", "cosine-space", (1.0, 0.0)), scope=SearchScope()
-        )
+        cosine_store.search_vector(VectorBranch("cosine", "cosine-space", (1.0, 0.0)), scope=SearchScope())
     assert error.value.category is ErrorCategory.INCOMPATIBLE_VECTOR_SPACE
 
     with pytest.raises(BranchExecutionError) as zero_query:
-        cosine_store.search_vector(
-            VectorBranch("cosine", "cosine-space", (0.0, -0.0)), scope=SearchScope()
-        )
+        cosine_store.search_vector(VectorBranch("cosine", "cosine-space", (0.0, -0.0)), scope=SearchScope())
     assert zero_query.value.category is ErrorCategory.INCOMPATIBLE_VECTOR_SPACE
 
 
