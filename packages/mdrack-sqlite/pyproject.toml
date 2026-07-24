@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mdrack-sqlite"
-version = "1.0.0rc1"
+version = "1.0.0rc2"
 description = "SQLite catalog and search adapter for mdrack-core"
 readme = "README.md"
 requires-python = ">=3.11"

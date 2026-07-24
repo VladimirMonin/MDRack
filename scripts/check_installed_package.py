@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-EXPECTED_VERSION = "1.2.0"
+EXPECTED_VERSION = "1.3.0"
 REGISTRY_IMPORTS = {
     "mdrack.application.query": ("SearchService",),
     "mdrack.application.retrieval": ("RetrievalService", "HybridRetrievalService"),

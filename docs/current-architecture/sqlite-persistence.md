@@ -267,10 +267,11 @@ lossless whole-document archive.
 - Resource adapter owner and lifecycle API:
   `packages/mdrack-sqlite/src/mdrack_sqlite/resource_store.py`,
   `packages/mdrack-sqlite/src/mdrack_sqlite/catalog.py`
-- Clean package runner and immutable SQL:
-  `packages/mdrack-sqlite/src/mdrack_sqlite/migrations.py`,
-  `packages/mdrack-sqlite/src/mdrack_sqlite/migrations/0000_identity.sql`
-  through `0003_search.sql`
+- Clean package runners and immutable SQL:
+  `packages/mdrack-sqlite/src/mdrack_sqlite/migrations.py` with
+  `migrations/0000_identity.sql` through `0003_search.sql`, and
+  `packages/mdrack-sqlite/src/mdrack_sqlite/migrations_v2.py` with
+  `v2_migrations/0000_identity.sql` through `0004_vector_encoding.sql`
 - App compatibility re-export: `src/mdrack/adapters/sqlite/resource_store.py`
 - Generation manager/runtime: `src/mdrack/application/generation_manager.py`,
   `src/mdrack/adapters/sqlite/generation_runtime.py`

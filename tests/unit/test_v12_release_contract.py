@@ -1,4 +1,4 @@
-"""Stage C release-contract regression tests for MDRack 1.2."""
+"""Runtime-version and v1.2 unified-search compatibility regressions."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from pathlib import Path
 import mdrack
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-EXPECTED_VERSION = "1.2.0"
+EXPECTED_VERSION = "1.3.0"
 
 
-def test_v12_runtime_and_build_metadata_are_synchronized() -> None:
+def test_current_runtime_and_build_metadata_are_synchronized() -> None:
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert pyproject["project"]["version"] == EXPECTED_VERSION

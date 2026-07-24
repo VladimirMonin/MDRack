@@ -1,6 +1,6 @@
 # MDRack
 
-MDRack 1.2 is a local Python 3.11+ command-line and embedded retrieval rack for
+MDRack 1.3.0 is a local Python 3.11+ command-line and embedded retrieval rack for
 Markdown, typed metadata, timed transcripts, frame-caption text, and explicitly
 supplied images.
 
@@ -50,6 +50,7 @@ LM Studio model-management commands. Host applications can use
 - [CLI and embedded interfaces](docs/current-architecture/public-interfaces.md)
 - [Current limitations](docs/current-architecture/limitations.md)
 - [Active MDRack 1.3 compact-storage and optional sqlite-vec plan](docs/plans/2026-07-24-v1.3-compact-storage-sqlite-vec.md)
+- [MDRack 1.3.0 base release candidate](docs/release-1.3.md)
 - [MDRack 1.1 local release](docs/release-1.1.md)
 - [CLI contracts](docs/cli-contracts.md)
 - [v0.3 compatibility registry](docs/compatibility/v0.3-compatibility-registry.md)
@@ -78,8 +79,9 @@ never modified.
 
 ## Known limitations
 
-- SQLite is the only persistent database. Semantic search linearly scans
-  JSON-encoded vectors in Python; there is no ANN/vector extension.
+- SQLite is the only persistent database. Fresh compact generations use canonical
+  float32 vectors and the builtin exact Python scan; there is no ANN/vector
+  extension dependency in the base distribution.
 - Structural `overlap_chars` is currently not consumed, so structural chunks do
   not overlap.
 - Production reranking is disabled. `rerank_rank` and `rerank_score` remain

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0rc2
+
+- Publish the independent `mdrack_sqlite_catalog_v2` clean history (`0000`–`0004`)
+  for fresh compact catalogs, including exact vector codec and backend registries.
+- Preserve `create()` and the v1 bridge lifecycle for compatibility; `create_v2()`
+  creates v2 directly and never upgrades, copies, or backfills v1/app-bridge bytes.
+- Keep builtin exact vector search in the base adapter. `mdrack-sqlite-vec` is not a
+  dependency of this release candidate.
+
 ## 1.0.0rc1
 
 - Publish the frozen catalog lifecycle API for existing bridge databases.

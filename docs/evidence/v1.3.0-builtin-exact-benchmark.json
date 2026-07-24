@@ -1,0 +1,129 @@
+{
+  "backend_id": "builtin-exact-v1",
+  "cells": [
+    {
+      "binary_payload_bytes": 15360000,
+      "candidate_limit": 10,
+      "codec": "f32",
+      "codec_id": "ieee754-f32-le-v1",
+      "cold": {
+        "metrics": {
+          "candidate_rows": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "cpu_ms": {"p50": 1203.900861, "p95": 1203.900861, "p99": 1203.900861},
+          "decode_cpu_ms": {"p50": 823.3340340000001, "p95": 823.3340340000001, "p99": 823.3340340000001},
+          "decoded_vectors": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "result_count": {"p50": 10.0, "p95": 10.0, "p99": 10.0},
+          "rss_kib": {"p50": 204008.0, "p95": 204008.0, "p99": 204008.0},
+          "score_cpu_ms": {"p50": 279.95414900000014, "p95": 279.95414900000014, "p99": 279.95414900000014},
+          "skipped_vectors": {"p50": 0.0, "p95": 0.0, "p99": 0.0},
+          "sort_ms": {"p50": 5.8101819999998305, "p95": 5.8101819999998305, "p99": 5.8101819999998305},
+          "wall_ms": {"p50": 1203.9747320086462, "p95": 1203.9747320086462, "p99": 1203.9747320086462}
+        },
+        "samples": 1
+      },
+      "component_bytes": 4,
+      "db_bytes": 24350720,
+      "dimensions": 384,
+      "payload_encoding": "binary",
+      "units": 10000,
+      "vector_payload_bytes": 15360000,
+      "warm": {
+        "metrics": {
+          "candidate_rows": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "cpu_ms": {"p50": 1195.915812, "p95": 1195.915812, "p99": 1195.915812},
+          "decode_cpu_ms": {"p50": 808.1549880000003, "p95": 808.1549880000003, "p99": 808.1549880000003},
+          "decoded_vectors": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "result_count": {"p50": 10.0, "p95": 10.0, "p99": 10.0},
+          "rss_kib": {"p50": 204052.0, "p95": 204052.0, "p99": 204052.0},
+          "score_cpu_ms": {"p50": 268.75434800000033, "p95": 268.75434800000033, "p99": 268.75434800000033},
+          "skipped_vectors": {"p50": 0.0, "p95": 0.0, "p99": 0.0},
+          "sort_ms": {"p50": 11.354733000000117, "p95": 11.354733000000117, "p99": 11.354733000000117},
+          "wall_ms": {"p50": 1238.0949530052021, "p95": 1238.0949530052021, "p99": 1238.0949530052021}
+        },
+        "samples": 1
+      }
+    },
+    {
+      "binary_payload_bytes": 0,
+      "candidate_limit": 10,
+      "codec": "legacy-json",
+      "codec_id": "json-f64-v1",
+      "cold": {
+        "metrics": {
+          "candidate_rows": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "cpu_ms": {"p50": 6995.618214, "p95": 6995.618214, "p99": 6995.618214},
+          "decode_cpu_ms": {"p50": 6495.992105, "p95": 6495.992105, "p99": 6495.992105},
+          "decoded_vectors": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "result_count": {"p50": 10.0, "p95": 10.0, "p99": 10.0},
+          "rss_kib": {"p50": 266864.0, "p95": 266864.0, "p99": 266864.0},
+          "score_cpu_ms": {"p50": 286.1872020000007, "p95": 286.1872020000007, "p99": 286.1872020000007},
+          "skipped_vectors": {"p50": 0.0, "p95": 0.0, "p99": 0.0},
+          "sort_ms": {"p50": 6.426550000000475, "p95": 6.426550000000475, "p99": 6.426550000000475},
+          "wall_ms": {"p50": 8611.896319998777, "p95": 8611.896319998777, "p99": 8611.896319998777}
+        },
+        "samples": 1
+      },
+      "component_bytes": 0,
+      "db_bytes": 85835776,
+      "dimensions": 384,
+      "payload_encoding": "canonical_legacy_json_readonly",
+      "units": 10000,
+      "vector_payload_bytes": 80137339,
+      "warm": {
+        "metrics": {
+          "candidate_rows": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "cpu_ms": {"p50": 4876.811311, "p95": 4876.811311, "p99": 4876.811311},
+          "decode_cpu_ms": {"p50": 4344.704613999999, "p95": 4344.704613999999, "p99": 4344.704613999999},
+          "decoded_vectors": {"p50": 10000.0, "p95": 10000.0, "p99": 10000.0},
+          "result_count": {"p50": 10.0, "p95": 10.0, "p99": 10.0},
+          "rss_kib": {"p50": 266976.0, "p95": 266976.0, "p99": 266976.0},
+          "score_cpu_ms": {"p50": 267.14626000000055, "p95": 267.14626000000055, "p99": 267.14626000000055},
+          "skipped_vectors": {"p50": 0.0, "p95": 0.0, "p99": 0.0},
+          "sort_ms": {"p50": 6.892125999998555, "p95": 6.892125999998555, "p99": 6.892125999998555},
+          "wall_ms": {"p50": 7898.830760997953, "p95": 7898.830760997953, "p99": 7898.830760997953}
+        },
+        "samples": 1
+      }
+    }
+  ],
+  "config": {
+    "candidate_limit": 10,
+    "cells": "10000x384",
+    "codecs": ["f32", "legacy-json"],
+    "repetitions": 1,
+    "vector_fixture": "deterministic-normalized-finite-real-shaped-v1",
+    "warm_queries": 1,
+    "warmups": 0
+  },
+  "contract": "mdrack.builtin-exact-benchmark-v1",
+  "elapsed_seconds": 42.949,
+  "evidence_boundary": "local components",
+  "harness_sha256": "51274d7d7075ded0777aa097a24fbcdcd7a72746c7f976007dc93de3c2dc61e8",
+  "host": {"cpu": "x86_64", "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39", "python": "3.11.15"},
+  "input_sha256": "6dfa25d41aec0791528625f47b43ff9732f1682677a334ad4b09b83a1598e35f",
+  "packages": {"mdrack": "workspace", "mdrack-core": "workspace", "mdrack-sqlite": "workspace"},
+  "parity_oracle": {
+    "contract": "mdrack.stage8-multimodal-parity-v1",
+    "deterministic_repeats": true,
+    "input_sha256": "d74158d5b9a9f25649c64317a1dfbdc0a1e91ec1e6f254db6bebc1e5126ad5c8",
+    "legacy_json_equals_compact_f32": true,
+    "scopes": {
+      "all": [
+        {"evidence": {"kind": "video_frame", "payload": {"timestamp_ms": 800}}, "rank": 1, "resource_id": "stage8-video", "unit_id": "stage8-video-frame-unit"},
+        {"evidence": {"kind": "time_segment", "payload": {"end_ms": 1600, "start_ms": 0, "track": "video"}}, "rank": 2, "resource_id": "stage8-video", "unit_id": "stage8-video-segment-unit"},
+        {"evidence": {"kind": "time_segment", "payload": {"end_ms": 1200, "start_ms": 0, "track": "audio"}}, "rank": 3, "resource_id": "stage8-audio", "unit_id": "stage8-audio-unit"},
+        {"evidence": {"kind": "line_range", "payload": {"end_line": 3, "start_line": 1}}, "rank": 4, "resource_id": "stage8-note", "unit_id": "stage8-note-unit"},
+        {"evidence": {"kind": "whole_image", "payload": {"source_ref": "stage8-image"}}, "rank": 5, "resource_id": "stage8-image", "unit_id": "stage8-image-unit"}
+      ],
+      "audio": [{"evidence": {"kind": "time_segment", "payload": {"end_ms": 1200, "start_ms": 0, "track": "audio"}}, "rank": 1, "resource_id": "stage8-audio", "unit_id": "stage8-audio-unit"}],
+      "frames": [{"evidence": {"kind": "video_frame", "payload": {"timestamp_ms": 800}}, "rank": 1, "resource_id": "stage8-video", "unit_id": "stage8-video-frame-unit"}],
+      "images": [{"evidence": {"kind": "whole_image", "payload": {"source_ref": "stage8-image"}}, "rank": 1, "resource_id": "stage8-image", "unit_id": "stage8-image-unit"}],
+      "notes": [{"evidence": {"kind": "line_range", "payload": {"end_line": 3, "start_line": 1}}, "rank": 1, "resource_id": "stage8-note", "unit_id": "stage8-note-unit"}],
+      "video": [{"evidence": {"kind": "time_segment", "payload": {"end_ms": 1600, "start_ms": 0, "track": "video"}}, "rank": 1, "resource_id": "stage8-video", "unit_id": "stage8-video-segment-unit"}]
+    },
+    "source_hashes_unchanged": true
+  },
+  "privacy": {"network_attempts": 0, "source": "synthetic", "temporary_catalogs_removed": true},
+  "revision": "25ce885268083f8926da5b4079424c74f9a1fbc4",
+  "runner_sha256": "6759dcc6aa5a3fe3377349092f92f6700f1f79017294c1d0085009eb8802cb1e"
+}

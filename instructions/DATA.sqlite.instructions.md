@@ -28,8 +28,10 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 
 - `packages/mdrack-sqlite/src/mdrack_sqlite/` owns the generic `core_*` resource
   catalog/search adapter, FTS query fallback, lifecycle API, safe errors, and bridge
-  verification. Its independent clean identity is `mdrack_sqlite_catalog_v1` with
-  immutable package migrations `0000`–`0003`; it must not import `mdrack`.
+  verification. Its independent clean identities are `mdrack_sqlite_catalog_v1`
+  (`0000`–`0003`) and `mdrack_sqlite_catalog_v2` (`0000`–`0004`); it must not
+  import `mdrack`. `create_v2()` creates fresh compact catalogs directly and never
+  upgrades, copies, or backfills v1/app-bridge bytes.
 - App migration history and generation switching remain under `src/mdrack`; the
   standalone package must not copy or rewrite migrations `0000`–`0007`.
 
@@ -47,18 +49,19 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 Future migrations extend this ledger; this instruction must be updated when the
 current schema advances.
 
-## Implemented v0.3 generation and schema contract
+## Implemented compact generation and schema contract
 
-- Build a v0.3 resource index in a separate candidate database/store generation,
-  never in the active v0.2 file. A v0.2 build must never be asked to open `0007`.
+- Build a fresh v2 compact resource index in a separate candidate database/store
+  generation, never in an active legacy file. Existing v1/app-bridge `0007` bytes
+  are preservation-only and must never be opened as a fresh-v2 rebuild source.
 - Schema version and store readiness are separate. Persist generation identity and
   fail-closed states `legacy_only`, `rebuild_required`, `building`, `ready`, and
   `failed`; only `ready` may serve production search/write.
-- Verify and close/checkpoint/fsync the candidate, then atomically switch an
-  app-owned active-generation pointer under one-writer quiescence. Readers see old
-  or new only. Rollback switches to the untouched retained v0.2 generation.
-- Retain the complete old generation read-only for at least one compatibility
-  release. Cleanup is a separate explicitly authorized destructive action.
+- Verify and close/checkpoint/fsync the candidate, then atomically perform the
+  one-way v2 cutover under one-writer quiescence. Readers see old or new only;
+  runtime pointer rollback to a retained legacy generation is unsupported.
+- Retain the complete old generation read-only for diagnosis/preservation.
+  Cleanup is a separate explicitly authorized destructive action.
 - Migration `0007` was authored after independent schema review mapped every frozen
   core field/invariant to exact DDL, FK action, CHECK, UNIQUE/index, transaction, and
   contract test. Any later schema change requires a new immutable migration and review.
@@ -115,5 +118,5 @@ current schema advances.
 3. Add migration/repository/round-trip and failure-atomicity tests.
 4. Update current schema/architecture documentation and this migration ledger.
 5. Run the full quality gates and `git diff --check`.
-6. For v0.3, require contract-freeze PASS before data design, schema-review PASS
-   before SQL, and executable generation rollback review before active cutover.
+6. For fresh v2, require contract-freeze PASS before data design, schema-review
+   PASS before SQL, and executable one-way cutover review before activation.

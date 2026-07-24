@@ -41,8 +41,9 @@ def test_existing_package_contracts_remain_release_candidate_foundations() -> No
     media = _project(REPO_ROOT / "packages" / "mdrack-media" / "pyproject.toml")
     sqlite = _project(REPO_ROOT / "packages" / "mdrack-sqlite" / "pyproject.toml")
 
-    assert app["version"] == "1.2.0"
-    assert core["version"] == media["version"] == sqlite["version"] == "1.0.0rc1"
+    assert app["version"] == "1.3.0"
+    assert core["version"] == media["version"] == "1.0.0rc1"
+    assert sqlite["version"] == "1.0.0rc2"
     assert core["dependencies"] == []
     assert media["dependencies"] == ["mdrack-core==1.0.0rc1"]
     assert sqlite["dependencies"] == ["mdrack-core==1.0.0rc1"]

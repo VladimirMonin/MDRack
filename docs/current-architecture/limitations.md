@@ -4,8 +4,17 @@ This page is a current-state boundary, not a roadmap promise.
 
 ## Retrieval and embeddings
 
-- Semantic retrieval linearly scans JSON-encoded vectors in Python. There is no
-  ANN index, vector database, or `sqlite-vec` extension.
+- Semantic retrieval linearly scans canonical binary vectors in Python. Fresh v2
+  application generations use the `ieee754-f32-le-v1` codec with the builtin exact
+  backend; standalone catalogs retain a float64 compatibility default and legacy
+  JSON is diagnostic read-only. There is no ANN index, vector database, or
+  `sqlite-vec` dependency in the 1.3.0 base distribution.
+- The separate `mdrack-sqlite-vec` source package is an experimental compatibility
+  probe, not a supported accelerator. Its pinned `sqlite-vec==0.1.9` local probe
+  fails the deterministic tie-boundary gate; the corresponding
+  [non-promotion packet](../evidence/v1.3.0-sqlite-vec-nonpromotion.json) records
+  the fail-closed decision. MDRack provides no sqlite-vec application extra,
+  production backend, or partial-write fallback.
 - Production embeddings require a reachable LM Studio HTTP endpoint. The Python
   package does not load embedding model weights itself.
 - Audio and video retrieval consumes supplied timed transcripts and frame-caption

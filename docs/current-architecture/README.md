@@ -1,6 +1,6 @@
 # MDRack current architecture
 
-This package describes the checked-out MDRack v0.3 implementation. It is the
+This package describes the checked-out MDRack 1.3.0 implementation. It is the
 maintainer entry point for current module boundaries, indexing, persistence,
 retrieval, asset handling, public interfaces, and known limitations.
 
@@ -18,7 +18,7 @@ When sources disagree, use this order:
 
 - [System overview](system-overview.md) — layers, dependency direction, component diagram, and source anchors.
 - [Indexing and structural chunking](indexing-and-chunking.md) — scan, parsing, identities, exact spans, chunks, embeddings, and atomic replacement.
-- [SQLite persistence](sqlite-persistence.md) — immutable `0000`–`0006`, candidate `0007`, generations, transactions, FTS, vectors, and identity.
+- [SQLite persistence](sqlite-persistence.md) — legacy `0000`–`0006`, candidate `0007`, clean v2 `0000`–`0004`, generations, transactions, FTS, vectors, and identity.
 - [Retrieval](retrieval.md) — text, semantic, hybrid RRF, degradation, and the reranking boundary.
 - [Images](assets.md) — Markdown text projection versus explicit direct-image ingestion.
 - [Public interfaces](public-interfaces.md) — CLI capability matrix, embedded engine, class/port diagram, and DTO boundaries.
@@ -28,6 +28,7 @@ When sources disagree, use this order:
 
 - [CLI contracts](../cli-contracts.md)
 - [v1.2 unified text search](../contracts/v1.2-unified-search.md)
+- [MDRack 1.3.0 base release candidate](../release-1.3.md)
 - [ADR-0001: reranking deferred](../decisions/0001-reranking-deferred.md)
 - [ADR-0002: provider/storage-neutral core](../decisions/0002-provider-storage-neutral-core.md)
 - [ADR-0003: core 1.0 RC contract](../decisions/0003-core-1.0-rc-contract.md)

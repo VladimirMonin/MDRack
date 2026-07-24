@@ -8,8 +8,8 @@ files are read-only inputs and are never recovery targets.
 - Stop every writer for the selected store before backup, activation, or rollback.
 - Preserve the complete store directory, including database, WAL/SHM, generation
   metadata, and active pointer. Copying one `.db` file is not a complete backup.
-- Never open a `0007` candidate with an older v0.2 build. The legacy composition
-  is intentionally bounded at migration `0006`.
+- A fresh compact candidate is a clean `mdrack_sqlite_catalog_v2` database. Do not
+  use an existing v1/app-bridge `0007` database as a rebuild source or target.
 - Never activate `building`, `failed`, `rebuild_required`, or `legacy_only` as a
   resource generation. Only a verified `ready` candidate is eligible.
 - Cleanup is destructive, separately authorized, and not part of rollback.
@@ -18,8 +18,8 @@ files are read-only inputs and are never recovery targets.
 
 1. Quiesce commands/processes that can write the store and close long-lived readers.
 2. Copy the complete store directory and verify the copy can be listed/read.
-3. Record the current active generation ID and retain the legacy generation
-   read-only through at least the v0.3 compatibility release.
+3. Record the current active generation ID and retain the previous generation
+   read-only for diagnosis and preservation; do not plan a runtime rollback to it.
 4. Run `scripts/verify.sh` on Linux. The PowerShell script is provided for Windows,
    but Linux execution is not evidence that Windows passed.
 5. Build the release artifacts and run `scripts/check_installed_package.py` from an
@@ -27,11 +27,13 @@ files are read-only inputs and are never recovery targets.
 
 ## Candidate build and activation
 
-The v0.3 resource index is rebuilt into a separate candidate generation; active
-legacy bytes are not migrated or backfilled.
+The MDRack 1.3.0 compact resource index is rebuilt into a separate clean v2
+candidate generation. Active legacy bytes are neither migrated, copied, nor
+backfilled. The default candidate records canonical `ieee754-f32-le-v1` vectors
+and uses the builtin exact backend.
 
 1. Create the candidate exclusively and persist `building` metadata.
-2. Apply the compiled exact migration manifest through create-only `0007`.
+2. Apply the independent compiled v2 migration manifest through `0004`.
 3. Rebuild the complete resource graph from the authorized source using the same
    producer/profile configuration intended for serving.
 4. Verify migration identity, foreign keys, canonical resource/unit/vector/facet
@@ -40,35 +42,35 @@ legacy bytes are not migrated or backfilled.
 5. Checkpoint, close, fsync the candidate database and directory, then persist
    verified `ready` metadata durably.
 6. Under one-writer quiescence, atomically replace and fsync the active-generation
-   pointer. Existing readers may finish on the old generation; new readers resolve
-   the new one.
+   pointer using the explicit one-way activation. Existing readers may finish on
+   the old generation; new readers resolve the new one.
 7. Run `mdrack status` and `mdrack doctor`; retain only their privacy-safe output.
 
 An interruption before pointer replacement leaves the old generation active. An
 interruption after durable replacement recovers from the new pointer. Missing,
 corrupt, non-ready, or manifest-mismatched pointers fail closed.
 
-## Rollback
+The CLI sequence is explicit: run `storage rebuild-fresh`, verify the returned
+generation ID with `storage verify GENERATION_ID`, and only then run `storage
+activate GENERATION_ID`. The rebuild command accepts only the `float32` codec and
+the builtin backend; it reparses authorized source Markdown instead of reading an
+old database.
 
-Rollback changes only the app-owned pointer:
+## No runtime rollback for fresh v2 cutover
 
-1. Stop writers and close/retire active readers.
-2. Confirm the retained legacy generation is unchanged, migration `0006`, and
-   registered `legacy_only` for compatibility retention.
-3. Atomically switch and fsync the pointer back to that generation.
-4. Resolve the pointer again, then run `status` and `doctor`.
-5. Preserve the failed/new generation for diagnosis. Do not delete it as part of
-   rollback.
-
-Rollback does not modify source files, rewrite schema, reverse migrations, or copy
-rows between generations.
+Fresh-v2 activation is one-way. The runtime refuses to promote a non-v2 candidate
+and does not switch the active pointer back to a retained legacy generation.
+If activation fails before durable pointer replacement, the former pointer remains
+active. If a post-activation operational decision requires a different catalog,
+stop writers, preserve the failed generation, and perform a separately authorized
+fresh rebuild/cutover; do not modify source files, reverse migrations, copy rows,
+or treat the retained database as a rollback target.
 
 Normal application composition, `mdrack status`, and `mdrack doctor` resolve an
-existing managed store through the same verified active pointer. A legacy rollback
-target is opened read-only, while a resource generation must be verified `ready`.
-Diagnostics read the resolved generation database rather than the unselected
-`knowledge.db`; invalid or missing managed pointers fail closed without inspecting a
-fallback database.
+existing managed store through the same verified active pointer. A resource
+generation must be verified `ready`; diagnostics read the resolved generation
+database rather than an unselected `knowledge.db`. Invalid or missing managed
+pointers fail closed without inspecting a fallback database.
 
 This is consumption of an already registered and verified pointer, not automatic
 adoption. A clean store with no pointer continues to use `knowledge.db`. MDRack does
@@ -103,5 +105,5 @@ Release evidence labels are exact:
 - `real source`, `live external`, and `Windows`: only when separately authorized
   and actually executed.
 
-The v0.3 offline release packet makes no claim for a real vault/source corpus, live
-LM Studio/OCR/caption/visual runtime, external network, or Windows execution.
+The MDRack 1.3.0 base release packet makes no claim for a real vault/source corpus,
+live LM Studio/OCR/caption/visual runtime, external network, or Windows execution.

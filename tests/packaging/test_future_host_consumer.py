@@ -25,7 +25,7 @@ def test_future_host_fixture_has_exact_pins_and_no_app_import() -> None:
     pyproject = (FIXTURE / "pyproject.toml").read_text(encoding="utf-8")
     assert '"mdrack-core==1.0.0rc1"' in pyproject
     assert '"mdrack-media==1.0.0rc1"' in pyproject
-    assert '"mdrack-sqlite==1.0.0rc1"' in pyproject
+    assert '"mdrack-sqlite==1.0.0rc2"' in pyproject
     source = (FIXTURE / "host_consumer.py").read_text(encoding="utf-8")
     assert "import mdrack" not in source
     assert "from mdrack import" not in source
