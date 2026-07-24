@@ -37,6 +37,12 @@ from mdrack_sqlite.migrations_v2 import (
     validate_v2_clean_schema,
 )
 from mdrack_sqlite.resource_store import SQLiteResourceStore
+from mdrack_sqlite.vector_backends import (
+    SQLiteVectorBackend,
+    SQLiteVectorGenerationContext,
+    SQLiteVectorSchemaExtension,
+    schema_extension_for_backend,
+)
 
 _REQUIRED_TABLES = frozenset(
     {
@@ -128,8 +134,13 @@ class SQLiteCatalog(SQLiteResourceStore):
         readonly: bool = False,
         owns_connection: bool = False,
         schema_id: str = SQLITE_BRIDGE_SCHEMA_ID,
+        vector_backend: SQLiteVectorBackend | None = None,
     ) -> None:
-        super().__init__(connection)
+        super().__init__(
+            connection,
+            vector_backend=vector_backend,
+            generation_context=SQLiteVectorGenerationContext(schema_id, create=False),
+        )
         self._readonly = readonly
         self._owns_connection = owns_connection
         self._schema_id = schema_id
@@ -141,6 +152,7 @@ class SQLiteCatalog(SQLiteResourceStore):
         database_path: str | Path,
         *,
         timeout: float = 5.0,
+        vector_backend: SQLiteVectorBackend | None = None,
     ) -> SQLiteCatalog:
         """Create one new clean ``mdrack_sqlite_catalog_v1`` database."""
         return cls._create_clean(
@@ -148,6 +160,7 @@ class SQLiteCatalog(SQLiteResourceStore):
             timeout=timeout,
             schema_id=SQLITE_CATALOG_SCHEMA_ID,
             migrate=apply_migrations,
+            vector_backend=vector_backend,
         )
 
     @classmethod
@@ -157,6 +170,7 @@ class SQLiteCatalog(SQLiteResourceStore):
         *,
         timeout: float = 5.0,
         failure_hook: Callable[[str], None] | None = None,
+        vector_backend: SQLiteVectorBackend | None = None,
     ) -> SQLiteCatalog:
         """Create one fresh immutable ``mdrack_sqlite_catalog_v2`` database.
 
@@ -170,6 +184,7 @@ class SQLiteCatalog(SQLiteResourceStore):
             schema_id=SQLITE_CATALOG_V2_SCHEMA_ID,
             migrate=apply_v2_migrations,
             failure_hook=failure_hook,
+            vector_backend=vector_backend,
         )
 
     @classmethod
@@ -181,6 +196,7 @@ class SQLiteCatalog(SQLiteResourceStore):
         schema_id: str,
         migrate: Callable[[sqlite3.Connection], None],
         failure_hook: Callable[[str], None] | None = None,
+        vector_backend: SQLiteVectorBackend | None = None,
     ) -> SQLiteCatalog:
         connection: sqlite3.Connection | None = None
         path: Path | None = None
@@ -211,7 +227,9 @@ class SQLiteCatalog(SQLiteResourceStore):
                 readonly=False,
                 owns_connection=True,
                 schema_id=schema_id,
+                vector_backend=vector_backend,
             )
+            catalog._initialize_vector_backend(create=True)
             catalog.verify()
             return catalog
         except FileExistsError:
@@ -243,13 +261,19 @@ class SQLiteCatalog(SQLiteResourceStore):
         database_path: str | Path,
         *,
         timeout: float = 5.0,
+        vector_backend: SQLiteVectorBackend | None = None,
     ) -> SQLiteCatalog:
         """Open an existing recognized catalog for reads and writes.
 
         This API never creates or migrates a database. It accepts only the frozen
         app bridge plus complete clean package identities (v1 or v2).
         """
-        return cls._open(database_path, timeout=timeout, readonly=False)
+        return cls._open(
+            database_path,
+            timeout=timeout,
+            readonly=False,
+            vector_backend=vector_backend,
+        )
 
     @classmethod
     def open_readonly(
@@ -257,9 +281,15 @@ class SQLiteCatalog(SQLiteResourceStore):
         database_path: str | Path,
         *,
         timeout: float = 5.0,
+        vector_backend: SQLiteVectorBackend | None = None,
     ) -> SQLiteCatalog:
         """Open an existing bridge catalog in SQLite read-only/query-only mode."""
-        return cls._open(database_path, timeout=timeout, readonly=True)
+        return cls._open(
+            database_path,
+            timeout=timeout,
+            readonly=True,
+            vector_backend=vector_backend,
+        )
 
     @classmethod
     def _open(
@@ -268,6 +298,7 @@ class SQLiteCatalog(SQLiteResourceStore):
         *,
         timeout: float,
         readonly: bool,
+        vector_backend: SQLiteVectorBackend | None,
     ) -> SQLiteCatalog:
         error_code = SQLiteErrorCode.READ_ONLY_OPEN_FAILED if readonly else SQLiteErrorCode.OPEN_FAILED
         try:
@@ -287,12 +318,15 @@ class SQLiteCatalog(SQLiteResourceStore):
                     timeout_value=timeout_value,
                     readonly=readonly,
                 )
+                extension = schema_extension_for_backend(vector_backend)
                 catalog = cls(
                     connection,
                     readonly=readonly,
                     owns_connection=True,
-                    schema_id=cls._detect_schema_id(connection),
+                    schema_id=cls._detect_schema_id(connection, extension=extension),
+                    vector_backend=vector_backend,
                 )
+                catalog._initialize_vector_backend(create=False)
                 catalog.verify()
                 if not readonly:
                     connection.execute("PRAGMA synchronous=FULL")
@@ -399,6 +433,9 @@ class SQLiteCatalog(SQLiteResourceStore):
         if self.connection.in_transaction:
             raise SQLiteCatalogError(SQLiteErrorCode.ACTIVE_TRANSACTION)
         try:
+            extension = self.vector_backend.schema_extension()
+            if self._schema_id != SQLITE_CATALOG_V2_SCHEMA_ID and extension is not None:
+                raise ValueError
             self._verify_schema_identity()
             if self._schema_id == SQLITE_CATALOG_SCHEMA_ID:
                 try:
@@ -407,7 +444,7 @@ class SQLiteCatalog(SQLiteResourceStore):
                     raise ValueError from None
             elif self._schema_id == SQLITE_CATALOG_V2_SCHEMA_ID:
                 try:
-                    validate_v2_clean_schema(self.connection)
+                    validate_v2_clean_schema(self.connection, extension=extension)
                 except SQLiteMigrationError:
                     raise ValueError from None
             integrity = [row[0] for row in self.connection.execute("PRAGMA integrity_check")]
@@ -453,6 +490,11 @@ class SQLiteCatalog(SQLiteResourceStore):
             ).fetchone()[0]
             if expected_fts != actual_fts or actual_fts != distinct_fts:
                 raise ValueError
+
+            self.vector_backend.verify(
+                self.connection,
+                generation=SQLiteVectorGenerationContext(self._schema_id, create=False),
+            )
 
             return SQLiteVerification(
                 schema_id=self._schema_id,
@@ -514,7 +556,10 @@ class SQLiteCatalog(SQLiteResourceStore):
             return
         if self._schema_id == SQLITE_CATALOG_V2_SCHEMA_ID:
             try:
-                validate_v2_clean_identity(self.connection)
+                validate_v2_clean_identity(
+                    self.connection,
+                    extension=self.vector_backend.schema_extension(),
+                )
             except SQLiteMigrationError:
                 raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
             return
@@ -523,6 +568,21 @@ class SQLiteCatalog(SQLiteResourceStore):
         versions = [row[0] for row in self.connection.execute("SELECT version FROM schema_migrations ORDER BY version")]
         if versions != [f"{version:04d}" for version in range(8)]:
             raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
+
+    def _initialize_vector_backend(self, *, create: bool) -> None:
+        context = SQLiteVectorGenerationContext(self._schema_id, create=create)
+        try:
+            if create:
+                self.connection.execute("BEGIN IMMEDIATE")
+            self.vector_backend.initialize(self.connection, generation=context)
+            if create:
+                self.connection.commit()
+            elif self.connection.in_transaction:
+                raise ValueError
+        except Exception:
+            if self.connection.in_transaction:
+                self.connection.rollback()
+            raise
 
     @staticmethod
     def _timeout_value(timeout: float) -> float:
@@ -547,7 +607,11 @@ class SQLiteCatalog(SQLiteResourceStore):
             connection.execute("PRAGMA query_only=ON")
 
     @staticmethod
-    def _detect_schema_id(connection: sqlite3.Connection) -> str:
+    def _detect_schema_id(
+        connection: sqlite3.Connection,
+        *,
+        extension: SQLiteVectorSchemaExtension | None = None,
+    ) -> str:
         objects = {
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
         }
@@ -560,7 +624,7 @@ class SQLiteCatalog(SQLiteResourceStore):
                     validate_clean_identity(connection)
                     return SQLITE_CATALOG_SCHEMA_ID
                 if identity is not None and identity[0] == SQLITE_CATALOG_V2_SCHEMA_ID:
-                    validate_v2_clean_identity(connection)
+                    validate_v2_clean_identity(connection, extension=extension)
                     return SQLITE_CATALOG_V2_SCHEMA_ID
             except SQLiteMigrationError:
                 raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None

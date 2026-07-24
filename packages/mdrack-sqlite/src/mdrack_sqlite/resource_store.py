@@ -36,6 +36,11 @@ from mdrack_core.domain.common import (
 )
 from mdrack_sqlite.builtin_exact import BuiltinExactSearchCounters, BuiltinExactVectorBackend
 from mdrack_sqlite.fts import plain_query_fallback
+from mdrack_sqlite.vector_backends import (
+    SQLiteVectorBackend,
+    SQLiteVectorGenerationContext,
+    require_sqlite_vector_backend,
+)
 from mdrack_sqlite.vector_codecs import (
     VectorCodec,
     VectorCodecRegistry,
@@ -127,28 +132,36 @@ class SQLiteResourceStore:
         connection: sqlite3.Connection,
         *,
         codec_registry: VectorCodecRegistry | None = None,
+        vector_backend: SQLiteVectorBackend | None = None,
+        generation_context: SQLiteVectorGenerationContext | None = None,
     ) -> None:
         if not isinstance(connection, sqlite3.Connection):
             raise TypeError("connection must be sqlite3.Connection")
         if codec_registry is not None and not isinstance(codec_registry, VectorCodecRegistry):
             raise TypeError("codec_registry must be VectorCodecRegistry")
+        if generation_context is not None and not isinstance(generation_context, SQLiteVectorGenerationContext):
+            raise TypeError("generation_context must be SQLiteVectorGenerationContext")
         self.connection = connection
         self.connection.row_factory = sqlite3.Row
         self._writer_lock = threading.Lock()
         self._failure_hook: FailureHook | None = None
         self._codec_registry = codec_registry or VectorCodecRegistry.default()
-        self._vector_backend = BuiltinExactVectorBackend(self._codec_registry)
+        selected_backend = vector_backend or BuiltinExactVectorBackend(self._codec_registry)
+        self._vector_backend = require_sqlite_vector_backend(selected_backend)
+        self._generation_context = generation_context or SQLiteVectorGenerationContext("unbound", create=False)
         self.transaction_open_count = 0
 
     @property
-    def vector_backend(self) -> BuiltinExactVectorBackend:
-        """Return the mandatory builtin exact backend selected for this catalog."""
+    def vector_backend(self) -> SQLiteVectorBackend:
+        """Return the explicitly selected SQLite-local vector strategy."""
         return self._vector_backend
 
     @property
     def last_vector_search_counters(self) -> BuiltinExactSearchCounters | None:
         """Return privacy-safe counters for the latest successful vector search."""
-        return self._vector_backend.last_search_counters
+        if isinstance(self._vector_backend, BuiltinExactVectorBackend):
+            return self._vector_backend.last_search_counters
+        return None
 
     def _codec_for_metadata(self, metadata: Mapping[str, object]) -> VectorCodec:
         return self._codec_registry.get(_codec_id_for_space_metadata(metadata))
@@ -185,10 +198,12 @@ class SQLiteResourceStore:
             with self._writer_lock:
                 self._begin()
                 self._point("after_begin")
+                self._vector_backend.delete_vectors(self.connection, resource_id=resource_id)
                 self._delete_fts(resource_id)
                 self.connection.execute("DELETE FROM core_resources WHERE resource_id = ?", (resource_id,))
                 self._point("after_delete")
                 self._prune_facets()
+                self._vector_backend.verify(self.connection, generation=self._generation_context)
                 self._point("before_commit")
                 self.connection.commit()
         except CatalogExecutionError:
@@ -439,6 +454,7 @@ class SQLiteResourceStore:
             self._point("after_begin")
             self._check_source_identity(prepared)
             self._check_spaces(prepared)
+            self._vector_backend.delete_vectors(self.connection, resource_id=resource.resource_id)
             self._delete_fts(resource.resource_id)
             self.connection.execute("DELETE FROM core_resources WHERE resource_id = ?", (resource.resource_id,))
             self._point("after_delete")
@@ -481,7 +497,14 @@ class SQLiteResourceStore:
                 )
             self._point("after_fts")
             self._prune_facets()
+            self._vector_backend.replace_vectors(
+                self.connection,
+                resource_id=resource.resource_id,
+                spaces=batch.spaces,
+                vectors=batch.vectors,
+            )
             self._verify(batch)
+            self._vector_backend.verify(self.connection, generation=self._generation_context)
             self._point("before_commit")
             self.connection.commit()
         except Exception:

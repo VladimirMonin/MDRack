@@ -8,7 +8,12 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from mdrack_core.domain import BranchExecutionError, ErrorCategory, VectorBranch
+from mdrack_core.domain import BranchExecutionError, EmbeddingSpaceRecord, ErrorCategory, VectorBranch, VectorRecord
+from mdrack_sqlite.vector_backends import (
+    SQLiteVectorCapabilities,
+    SQLiteVectorGenerationContext,
+    SQLiteVectorSchemaExtension,
+)
 from mdrack_sqlite.vector_codecs import VectorCodecRegistry, codec_id_from_metadata, decode_vector_payload
 
 
@@ -48,6 +53,65 @@ class BuiltinExactVectorBackend:
     def last_search_counters(self) -> BuiltinExactSearchCounters | None:
         """Return counters from the latest successful search without source data."""
         return self._last_search_counters
+
+    def capabilities(self) -> SQLiteVectorCapabilities:
+        """Describe the mandatory extensionless exact baseline."""
+        return SQLiteVectorCapabilities(
+            backend_id=self.backend_id,
+            exact=True,
+            metrics=frozenset({"cosine", "dot", "l2"}),
+            supports_facets_any=True,
+            supports_facets_all=True,
+            supports_facets_none=True,
+            supported_scope_fields=frozenset(
+                {
+                    "resource_kinds",
+                    "media_types",
+                    "source_namespaces",
+                    "representation_kinds",
+                    "modalities",
+                    "unit_kinds",
+                }
+            ),
+            supports_extensionless_open=True,
+            supports_atomic_replace=True,
+            supports_atomic_delete=True,
+        )
+
+    def schema_extension(self) -> SQLiteVectorSchemaExtension | None:
+        """Builtin search owns no plugin schema objects."""
+        return None
+
+    def initialize(self, connection: sqlite3.Connection, *, generation: SQLiteVectorGenerationContext) -> None:
+        """Keep initialization explicit while the builtin strategy remains schema-free."""
+        if not isinstance(connection, sqlite3.Connection):
+            raise TypeError("connection must be sqlite3.Connection")
+        del generation
+
+    def replace_vectors(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        resource_id: str,
+        spaces: Sequence[EmbeddingSpaceRecord],
+        vectors: Sequence[VectorRecord],
+    ) -> None:
+        """Canonical vector rows are already written by the catalog transaction owner."""
+        if not isinstance(connection, sqlite3.Connection):
+            raise TypeError("connection must be sqlite3.Connection")
+        del resource_id, spaces, vectors
+
+    def delete_vectors(self, connection: sqlite3.Connection, *, resource_id: str) -> None:
+        """Builtin search has no derived rows to delete."""
+        if not isinstance(connection, sqlite3.Connection):
+            raise TypeError("connection must be sqlite3.Connection")
+        del resource_id
+
+    def verify(self, connection: sqlite3.Connection, *, generation: SQLiteVectorGenerationContext) -> None:
+        """Builtin verification is covered by canonical catalog checks."""
+        if not isinstance(connection, sqlite3.Connection):
+            raise TypeError("connection must be sqlite3.Connection")
+        del generation
 
     def search(
         self,

@@ -16,6 +16,7 @@ from mdrack_sqlite.contract_v2 import (
     SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
 )
 from mdrack_sqlite.migrations import SQLiteMigrationError, framed_manifest_digest
+from mdrack_sqlite.vector_backends import SQLiteVectorSchemaExtension, SQLiteVectorSchemaObject
 
 _MIGRATION_PATTERN = re.compile(r"^(\d{4})_(.+)\.sql$")
 _SCHEMA_OBJECT_TYPES = ("table", "view", "index", "trigger")
@@ -82,7 +83,7 @@ def _object_names(connection: sqlite3.Connection) -> set[str]:
     }
 
 
-def _schema_fingerprint(connection: sqlite3.Connection) -> str:
+def _schema_objects(connection: sqlite3.Connection) -> tuple[SQLiteVectorSchemaObject, ...]:
     rows = [
         (str(row[0]), str(row[1]), str(row[2]), row[3])
         for row in connection.execute(
@@ -97,24 +98,49 @@ def _schema_fingerprint(connection: sqlite3.Connection) -> str:
     }
     if actual_fts_shadows != _FTS5_SHADOW_OBJECTS:
         raise SQLiteMigrationError
-    digest = hashlib.sha256()
+    objects: list[SQLiteVectorSchemaObject] = []
     for object_type, name, table_name, sql in rows:
         if name.startswith("sqlite_") or (object_type, name, table_name) in _FTS5_SHADOW_OBJECTS:
             continue
         if object_type not in _SCHEMA_OBJECT_TYPES or not isinstance(sql, str):
             raise SQLiteMigrationError
-        normalized_sql = " ".join(sql.split())
-        for field in (object_type, name, table_name, normalized_sql):
+        try:
+            objects.append(SQLiteVectorSchemaObject(object_type, name, table_name, sql))
+        except (TypeError, ValueError):
+            raise SQLiteMigrationError from None
+    return tuple(sorted(objects))
+
+
+def _schema_fingerprint(
+    connection: sqlite3.Connection,
+    *,
+    extension: SQLiteVectorSchemaExtension | None = None,
+) -> str:
+    objects = _schema_objects(connection)
+    extension_names = frozenset() if extension is None else frozenset(item.name for item in extension.manifest)
+    if extension is not None:
+        actual_extension = tuple(item for item in objects if item.name in extension_names)
+        if actual_extension != extension.manifest:
+            raise SQLiteMigrationError
+    digest = hashlib.sha256()
+    for object_item in objects:
+        if object_item.name in extension_names:
+            continue
+        for field in (object_item.object_type, object_item.name, object_item.table_name, object_item.sql):
             encoded = field.encode("utf-8")
             digest.update(struct.pack(">Q", len(encoded)))
             digest.update(encoded)
     return digest.hexdigest()
 
 
-def validate_v2_clean_schema(connection: sqlite3.Connection) -> None:
-    """Reject changed, missing, or added v2 objects."""
+def validate_v2_clean_schema(
+    connection: sqlite3.Connection,
+    *,
+    extension: SQLiteVectorSchemaExtension | None = None,
+) -> None:
+    """Reject base drift and accept only an exact registered extension manifest."""
     try:
-        if _schema_fingerprint(connection) != _CLEAN_V2_SCHEMA_FINGERPRINT:
+        if _schema_fingerprint(connection, extension=extension) != _CLEAN_V2_SCHEMA_FINGERPRINT:
             raise SQLiteMigrationError
     except SQLiteMigrationError:
         raise
@@ -200,7 +226,11 @@ def apply_v2_migrations(
         raise SQLiteMigrationError from None
 
 
-def validate_v2_clean_identity(connection: sqlite3.Connection) -> None:
+def validate_v2_clean_identity(
+    connection: sqlite3.Connection,
+    *,
+    extension: SQLiteVectorSchemaExtension | None = None,
+) -> None:
     """Validate complete v2 ledger, identity, and canonical object fingerprint."""
     plan = _compiled_plan(get_v2_migrations_dir())
     if _validated_applied_prefix(connection, plan) != len(plan):
@@ -215,4 +245,4 @@ def validate_v2_clean_identity(connection: sqlite3.Connection) -> None:
         SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
     ):
         raise SQLiteMigrationError
-    validate_v2_clean_schema(connection)
+    validate_v2_clean_schema(connection, extension=extension)
