@@ -1,0 +1,126 @@
+# Getting started with MDRack 1.3
+
+MDRack is a local Python 3.11+ CLI and embedded library. It indexes supplied
+Markdown into SQLite and can use LM Studio over HTTP for embeddings. The project
+has not been tagged or published to PyPI, so the supported setup described here
+uses a repository checkout.
+
+## Install from the checkout
+
+Install `uv`, clone the repository, and run:
+
+```bash
+uv sync --all-extras
+uv run mdrack --version
+uv run mdrack --help
+```
+
+`uv` resolves the workspace distributions `mdrack-core`, `mdrack-media`, and
+`mdrack-sqlite` together with the application. Do not use system `pip` for this
+checkout.
+
+## Offline quick start
+
+The following smoke uses deterministic fake embeddings and does not contact LM
+Studio. Use it to verify installation and the text-search workflow, not to claim
+semantic quality.
+
+```bash
+mkdir -p ./notes
+printf '# Architecture\n\nMDRack keeps local notes searchable.\n' > ./notes/example.md
+uv run mdrack --root ./notes init
+uv run mdrack --root ./notes scan --provider fake
+uv run mdrack --root ./notes search architecture --mode text
+uv run mdrack --root ./notes status
+```
+
+MDRack writes derived state under `./notes/.mdrack/`; it does not modify the
+Markdown source. CLI success and error responses use one JSON envelope. See the
+[CLI contracts](cli-contracts.md) for complete flags and response shapes.
+
+## Configure LM Studio
+
+Without `--config-file`, MDRack reads `<root>/.mdrack/config.toml` when it exists.
+Configuration precedence is defaults, TOML, `MDRACK_<SECTION>_<FIELD>` environment
+variables, then command-line overrides. Relative store/config paths resolve from
+`--root`.
+
+A minimal local embedding configuration is:
+
+```toml
+[embedding]
+provider = "lmstudio"
+model = "qwen3-embedding-0.6b"
+endpoint = "http://localhost:1234/v1"
+timeout_secs = 120
+dimensions = 1024
+
+[search]
+default_mode = "hybrid"
+text_weight = 0.4
+semantic_weight = 0.6
+top_k = 20
+```
+
+The model name, output dimensions, and stored profile fingerprint must match the
+LM Studio model actually serving the endpoint. A model or dimension change
+requires rebuilding derived vectors; MDRack fails closed rather than mixing
+incompatible spaces. Inspect the available lifecycle commands with:
+
+```bash
+uv run mdrack model --help
+uv run mdrack rebuild embeddings --help
+```
+
+LM Studio HTTP is the only production embedding boundary. MDRack does not load
+model weights through Python, and fake embeddings are an explicit offline/test
+choice. Model lifecycle and any live provider call require a reachable local LM
+Studio instance; text mode does not call an embedding provider.
+
+## Everyday workflow
+
+```bash
+uv run mdrack --root ./notes scan
+uv run mdrack --root ./notes search "architecture" --mode text
+uv run mdrack --root ./notes search "design boundaries" --mode semantic
+uv run mdrack --root ./notes search "storage" --mode hybrid
+uv run mdrack --root ./notes status
+uv run mdrack --root ./notes doctor
+```
+
+`scan` defaults to the configured LM Studio provider. Use `--provider fake` only
+for deterministic offline verification. `scan --changed` is accepted for
+compatibility but ordinary scan already performs change detection.
+
+For the full command inventory and CLI/engine differences, see
+[public interfaces](current-architecture/public-interfaces.md).
+
+## Embedded text search
+
+After a store has been initialized and scanned, host Python code can use the
+Click-free engine for text retrieval:
+
+```python
+from pathlib import Path
+
+from mdrack.config.loader import load_config
+from mdrack.public_api import MDRackEngine
+
+root = Path("notes")
+config = load_config(root=root)
+with MDRackEngine(root=root, config=config) as engine:
+    result = engine.search_text("architecture", limit=10)
+    print(result.to_dict())
+```
+
+Semantic/hybrid engine calls are asynchronous and require an injected compatible
+embedding provider. The engine does not expose every diagnostic or model command;
+use the [interface matrix](current-architecture/public-interfaces.md#embedded-engine)
+for the exact boundary.
+
+## Next reading
+
+- [Operations and troubleshooting](operations.md)
+- [Current architecture](current-architecture/README.md)
+- [Recovery and generation cutover](recovery.md)
+- [Development guide](development.md)

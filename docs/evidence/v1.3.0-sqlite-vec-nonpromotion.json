@@ -10,7 +10,7 @@
   },
   "source_plan": {
     "path": "docs/plans/2026-07-24-v1.3-compact-storage-sqlite-vec.md",
-    "sha256": "eb452656a3ca08c3792343aa6be916602aa6f08c5329f8d2292d332fb00e1d16"
+    "sha256": "81f977e3669f8111a66167a0a82e3f3ef38a07b4153c84ba9ae7bc2f7fa37cb0"
   },
   "probe_distribution": {
     "name": "mdrack-sqlite-vec",

@@ -1,12 +1,17 @@
-# MDRack 1.3.0 base release candidate
+# MDRack 1.3.0 release notes
 
-Status: ready for independent review; not published.
+Status: release-preparation source committed and pushed to `origin/master` as
+`b208f9832a2fc677ef0df3f5f3a2d92117964ad5`; no Git tag, PyPI upload,
+deployment, or package-index publication.
 
-This candidate releases the compact SQLite base independently of the optional
+The compact SQLite base was prepared independently of the optional
 experimental `mdrack-sqlite-vec` package. The authoritative machine-readable
-record is the [base release packet](evidence/v1.3.0-base-release-packet.json);
-its analyzer and benchmark reports are linked from that packet. No package upload,
-Git tag, push, deployment, or release publication is claimed here.
+candidate record is the [base release packet](evidence/v1.3.0-base-release-packet.json);
+its analyzer and benchmark reports are linked from that packet. The packet is a
+point-in-time pre-publication snapshot, so its `published: false` classification
+and no-push non-claim describe packet generation, not the later ordinary source
+push. No package upload, Git tag, deployment, or package-index publication is
+claimed here.
 
 ## Version set
 

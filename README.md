@@ -14,13 +14,17 @@ package.
 ## Quick start
 
 ```bash
-uv sync
+uv sync --all-extras
 uv run mdrack --help
 mkdir -p ./notes
 uv run mdrack --root ./notes init
-uv run mdrack --root ./notes scan
+uv run mdrack --root ./notes scan --provider fake
 uv run mdrack --root ./notes search "architecture" --mode text
 ```
+
+This is an offline installation smoke: fake embeddings are deterministic test
+data, not semantic-quality evidence. Configure LM Studio before ordinary
+semantic or hybrid use; see [Getting started](docs/getting-started.md).
 
 The CLI also provides read, files, sections, status, doctor, rebuild, eval, and
 LM Studio model-management commands. Host applications can use
@@ -41,6 +45,9 @@ LM Studio model-management commands. Host applications can use
 
 ## Documentation
 
+- [Getting started: installation, configuration, CLI, and engine](docs/getting-started.md)
+- [Operations, diagnostics, privacy, and troubleshooting](docs/operations.md)
+- [Development guide for humans and coding agents](docs/development.md)
 - [Current architecture index](docs/current-architecture/README.md)
 - [System overview](docs/current-architecture/system-overview.md)
 - [Indexing and structural chunking](docs/current-architecture/indexing-and-chunking.md)
@@ -49,8 +56,8 @@ LM Studio model-management commands. Host applications can use
 - [Asset handling](docs/current-architecture/assets.md)
 - [CLI and embedded interfaces](docs/current-architecture/public-interfaces.md)
 - [Current limitations](docs/current-architecture/limitations.md)
-- [Active MDRack 1.3 compact-storage and optional sqlite-vec plan](docs/plans/2026-07-24-v1.3-compact-storage-sqlite-vec.md)
-- [MDRack 1.3.0 base release candidate](docs/release-1.3.md)
+- [Completed MDRack 1.3 compact-storage plan (historical)](docs/plans/2026-07-24-v1.3-compact-storage-sqlite-vec.md)
+- [MDRack 1.3.0 release notes and source-publication status](docs/release-1.3.md)
 - [MDRack 1.1 local release](docs/release-1.1.md)
 - [CLI contracts](docs/cli-contracts.md)
 - [v0.3 compatibility registry](docs/compatibility/v0.3-compatibility-registry.md)
