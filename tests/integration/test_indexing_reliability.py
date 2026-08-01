@@ -1,56 +1,72 @@
-"""Phase 1-2 contracts for stable provenance and reliable indexing."""
+"""Canonical catalog indexing reliability contracts."""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
-import sqlite3
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage, create_sqlite_index_storage
+from mdrack.application.compatibility import create_application_storage
 from mdrack.application.indexing import IndexingService
 from mdrack.config.models import ChunkingConfig, MDRackConfig, PathsConfig
 from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.storage.sqlite.connection import get_connection
 
 
-def _config(tmp_path: Path) -> MDRackConfig:
+def _config(tmp_path: Path, *, chunking: ChunkingConfig | None = None) -> MDRackConfig:
     return MDRackConfig(
         paths=PathsConfig(
             root=".",
             store=str(tmp_path / ".mdrack"),
             config_file=".mdrack/config.toml",
-        )
+        ),
+        chunking=chunking or ChunkingConfig(),
     )
 
 
-def _service(
-    root: Path,
-    config: MDRackConfig,
-    provider: FakeEmbeddingProvider,
-) -> IndexingService:
-    storage = create_sqlite_index_storage(root, config)
-    return IndexingService(root, config, storage, provider=provider)
+def _service(root: Path, config: MDRackConfig) -> IndexingService:
+    return IndexingService(
+        root,
+        config,
+        create_application_storage(root, config, create=True),
+        provider=FakeEmbeddingProvider(dimensions=16),
+    )
 
 
-def _snapshot(conn: sqlite3.Connection) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]:
-    sections = [
-        tuple(row)
-        for row in conn.execute(
-            "SELECT logical_id, title, start_line, end_line FROM sections ORDER BY start_line"
-        ).fetchall()
-    ]
-    chunks = [
-        tuple(row)
-        for row in conn.execute(
-            "SELECT logical_id, content, start_line, end_line, block_logical_id "
-            "FROM chunks ORDER BY chunk_index"
-        ).fetchall()
-    ]
-    return sections, chunks
+def _catalog_rows(root: Path, config: MDRackConfig) -> list[tuple[object, ...]]:
+    storage = create_application_storage(root, config)
+    try:
+        return [
+            tuple(row)
+            for row in storage.connection.execute(
+                "SELECT unit_id, resource_id, text_content, evidence_locator_json "
+                "FROM core_search_units WHERE unit_kind='text_chunk' ORDER BY unit_id"
+            ).fetchall()
+        ]
+    finally:
+        storage.close()
+
+
+def _stored_counts(root: Path, config: MDRackConfig) -> tuple[int, int]:
+    storage = create_application_storage(root, config)
+    try:
+        resources = int(
+            storage.connection.execute(
+                "SELECT COUNT(*) FROM core_resources WHERE resource_kind='document'"
+            ).fetchone()[0]
+        )
+        chunks = int(
+            storage.connection.execute(
+                "SELECT COUNT(*) FROM core_search_units WHERE unit_kind='text_chunk'"
+            ).fetchone()[0]
+        )
+        return resources, chunks
+    finally:
+        storage.close()
 
 
 def test_logical_ids_and_locators_are_stable_across_forced_rescan(tmp_path: Path) -> None:
@@ -58,79 +74,62 @@ def test_logical_ids_and_locators_are_stable_across_forced_rescan(tmp_path: Path
     root.mkdir()
     (root / "note.md").write_text("# Title\n\n## Topic\nStable body.\n", encoding="utf-8")
     config = _config(tmp_path)
-    provider = FakeEmbeddingProvider(dimensions=16)
 
-    service = _service(root, config, provider)
-    first = service.scan(force_reindex=True)
-    service.close()
-    assert first.status == "success"
-
-    db_path = Path(config.paths.store) / "knowledge.db"
-    conn = get_connection(db_path)
+    service = _service(root, config)
     try:
-        before = _snapshot(conn)
-        locator = SQLiteIndexStorage(conn).get_chunk_source_locator(before[1][0][0])
+        assert service.scan(force_reindex=True).status == "success"
     finally:
-        conn.close()
+        service.close()
+    before = _catalog_rows(root, config)
 
-    service = _service(root, config, provider)
-    second = service.scan(force_reindex=True)
-    service.close()
-    assert second.status == "success"
-
-    conn = get_connection(db_path)
+    service = _service(root, config)
     try:
-        after = _snapshot(conn)
+        assert service.scan(force_reindex=True).status == "success"
     finally:
-        conn.close()
+        service.close()
+    after = _catalog_rows(root, config)
 
     assert after == before
-    assert locator.root_id == "default"
-    assert locator.relative_path == "note.md"
-    assert locator.chunk_id == before[1][0][0]
-    assert locator.block_id
-    assert not Path(locator.relative_path).is_absolute()
+    assert before
+    locator = json.loads(str(before[0][3]))
+    assert locator["relative_path"] == "note.md"
+    assert locator["start_line"] >= 1
+    assert not Path(locator["relative_path"]).is_absolute()
 
 
-def test_file_transaction_rolls_back_after_mid_write_failure(tmp_path: Path, monkeypatch) -> None:
+def test_file_failure_before_catalog_replacement_preserves_last_good_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     root = tmp_path / "vault"
     root.mkdir()
     note = root / "note.md"
     note.write_text("# Title\n\nOriginal body.\n", encoding="utf-8")
     config = _config(tmp_path)
-    provider = FakeEmbeddingProvider(dimensions=16)
-    service = _service(root, config, provider)
-    assert service.scan().status == "success"
-    service.close()
 
-    db_path = Path(config.paths.store) / "knowledge.db"
-    conn = get_connection(db_path)
+    service = _service(root, config)
     try:
-        before = conn.execute(
-            "SELECT f.source_hash, c.content FROM files f JOIN chunks c ON c.file_id = f.id"
-        ).fetchall()
-        storage = SQLiteIndexStorage(conn)
-        original_write_chunk = storage._write_chunk
-        calls = 0
-
-        def fail_after_first_chunk(*args, **kwargs):
-            nonlocal calls
-            calls += 1
-            original_write_chunk(*args, **kwargs)
-            raise RuntimeError("injected write failure")
-
-        monkeypatch.setattr(storage, "_write_chunk", fail_after_first_chunk)
-        note.write_text("# Title\n\nChanged body.\n", encoding="utf-8")
-        result = IndexingService(root, config, storage, provider=provider).scan()
-        after = conn.execute(
-            "SELECT f.source_hash, c.content FROM files f JOIN chunks c ON c.file_id = f.id"
-        ).fetchall()
+        assert service.scan().status == "success"
     finally:
-        conn.close()
+        service.close()
+    before = _catalog_rows(root, config)
+
+    note.write_text("# Title\n\nChanged body.\n", encoding="utf-8")
+    service = _service(root, config)
+    try:
+        core_indexing = getattr(service.storage, "core_indexing")
+        monkeypatch.setattr(
+            core_indexing,
+            "index",
+            lambda _batch: (_ for _ in ()).throw(RuntimeError("injected catalog failure")),
+        )
+        result = service.scan()
+    finally:
+        service.close()
 
     assert result.status == "failed"
     assert result.files_failed == 1
-    assert [tuple(row) for row in after] == [tuple(row) for row in before]
+    assert _catalog_rows(root, config) == before
 
 
 def test_scan_reports_partial_success_with_honest_counts(tmp_path: Path) -> None:
@@ -140,9 +139,11 @@ def test_scan_reports_partial_success_with_honest_counts(tmp_path: Path) -> None
     (root / "bad.md").write_bytes(b"\xff\xfe\x00")
     config = _config(tmp_path)
 
-    service = _service(root, config, FakeEmbeddingProvider(dimensions=16))
-    result = service.scan()
-    service.close()
+    service = _service(root, config)
+    try:
+        result = service.scan()
+    finally:
+        service.close()
 
     assert result.status == "partial_success"
     assert result.files_seen == 2
@@ -150,16 +151,10 @@ def test_scan_reports_partial_success_with_honest_counts(tmp_path: Path) -> None
     assert result.files_indexed == 1
     assert result.files_failed == 1
     assert result.errors_count == 1
-    db_path = Path(config.paths.store) / "knowledge.db"
-    conn = get_connection(db_path)
-    try:
-        active_paths = [row["relative_path"] for row in conn.execute("SELECT relative_path FROM files")]
-    finally:
-        conn.close()
-    assert active_paths == ["good.md"]
+    assert _stored_counts(root, config)[0] == 1
 
 
-def test_indexing_logs_and_diagnostics_do_not_expose_private_values(tmp_path: Path, caplog) -> None:
+def test_indexing_logs_do_not_expose_private_values(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     root = tmp_path / "private-vault-name"
     root.mkdir()
     private_name = "customer-secret-note.md"
@@ -167,24 +162,16 @@ def test_indexing_logs_and_diagnostics_do_not_expose_private_values(tmp_path: Pa
     config = _config(tmp_path)
     caplog.set_level(logging.DEBUG)
 
-    service = _service(root, config, FakeEmbeddingProvider(dimensions=16))
-    result = service.scan()
-    service.close()
-
-    db_path = Path(config.paths.store) / "knowledge.db"
-    conn = get_connection(db_path)
+    service = _service(root, config)
     try:
-        details = " ".join(
-            str(row["details"])
-            for row in conn.execute("SELECT details FROM diagnostics").fetchall()
-        )
+        result = service.scan()
     finally:
-        conn.close()
+        service.close()
 
-    captured = caplog.text + details
     assert result.status == "failed"
+    captured = caplog.text
     assert str(root) not in captured
-    assert str(db_path) not in captured
+    assert str(tmp_path / ".mdrack" / "catalog.sqlite3") not in captured
     assert private_name not in captured
     assert "customer-secret" not in captured
 
@@ -196,55 +183,33 @@ def test_repeated_identical_chunks_are_distinct_and_stable(tmp_path: Path) -> No
         "# Duplicate\n\nrepeat repeat\n\nrepeat repeat\n",
         encoding="utf-8",
     )
-    config = MDRackConfig(
-        paths=PathsConfig(root=".", store=str(tmp_path / ".mdrack")),
-        chunking=ChunkingConfig(min_chunk_chars=1, target_chunk_chars=8, hard_limit_chars=8, overlap_chars=0),
+    config = _config(
+        tmp_path,
+        chunking=ChunkingConfig(
+            min_chunk_chars=1,
+            target_chunk_chars=8,
+            hard_limit_chars=8,
+            overlap_chars=0,
+        ),
     )
-    service = _service(root, config, FakeEmbeddingProvider(dimensions=16))
-    assert service.scan(force_reindex=True).status == "success"
-    service.close()
 
-    db_path = Path(config.paths.store) / "knowledge.db"
-    conn = get_connection(db_path)
+    service = _service(root, config)
     try:
-        before = [
-            tuple(row)
-            for row in conn.execute(
-                "SELECT logical_id, start_line, end_line FROM chunks ORDER BY chunk_index"
-            ).fetchall()
-        ]
+        assert service.scan(force_reindex=True).status == "success"
     finally:
-        conn.close()
+        service.close()
+    before = _catalog_rows(root, config)
 
-    service = _service(root, config, FakeEmbeddingProvider(dimensions=16))
-    assert service.scan(force_reindex=True).status == "success"
-    service.close()
-    conn = get_connection(db_path)
+    service = _service(root, config)
     try:
-        after = [
-            tuple(row)
-            for row in conn.execute(
-                "SELECT logical_id, start_line, end_line FROM chunks ORDER BY chunk_index"
-            ).fetchall()
-        ]
+        assert service.scan(force_reindex=True).status == "success"
     finally:
-        conn.close()
+        service.close()
+    after = _catalog_rows(root, config)
 
     assert len(before) >= 2
     assert len({row[0] for row in before}) == len(before)
-    assert {row[1] for row in before} >= {3, 5}
     assert after == before
-
-
-def _stored_counts(db_path: Path) -> tuple[int, int]:
-    conn = get_connection(db_path)
-    try:
-        return (
-            conn.execute("SELECT COUNT(*) FROM files").fetchone()[0],
-            conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
-        )
-    finally:
-        conn.close()
 
 
 @pytest.mark.parametrize(
@@ -261,27 +226,29 @@ def test_corpus_traversal_failure_preserves_last_good_index(
     root.mkdir()
     (root / "note.md").write_text("# Kept\n\nLast good content.\n", encoding="utf-8")
     config = _config(tmp_path)
-    provider = FakeEmbeddingProvider(dimensions=16)
-    service = _service(root, config, provider)
-    assert service.scan().status == "success"
-    service.close()
 
-    db_path = Path(config.paths.store) / "knowledge.db"
-    before = _stored_counts(db_path)
+    service = _service(root, config)
+    try:
+        assert service.scan().status == "success"
+    finally:
+        service.close()
+    before = _stored_counts(root, config)
 
-    def failing_walk(*args, **kwargs):
+    def failing_walk(*args: Any, **kwargs: Any):
         kwargs["onerror"](failure)
         return iter(())
 
     monkeypatch.setattr(os, "walk", failing_walk)
-    service = _service(root, config, provider)
-    result = service.scan()
-    service.close()
+    service = _service(root, config)
+    try:
+        result = service.scan()
+    finally:
+        service.close()
 
     assert result.status == "failed"
     assert result.files_deleted == 0
     assert result.errors_count == 1
-    assert _stored_counts(db_path) == before
+    assert _stored_counts(root, config) == before
 
 
 def test_missing_corpus_root_preserves_last_good_index(tmp_path: Path) -> None:
@@ -289,24 +256,25 @@ def test_missing_corpus_root_preserves_last_good_index(tmp_path: Path) -> None:
     root.mkdir()
     (root / "note.md").write_text("# Kept\n\nLast good content.\n", encoding="utf-8")
     config = _config(tmp_path)
-    provider = FakeEmbeddingProvider(dimensions=16)
-    service = _service(root, config, provider)
-    assert service.scan().status == "success"
-    service.close()
-
-    db_path = Path(config.paths.store) / "knowledge.db"
-    before = _stored_counts(db_path)
+    service = _service(root, config)
+    try:
+        assert service.scan().status == "success"
+    finally:
+        service.close()
+    before = _stored_counts(root, config)
     shutil.rmtree(root)
 
-    service = _service(root, config, provider)
-    result = service.scan()
-    service.close()
+    service = _service(root, config)
+    try:
+        result = service.scan()
+    finally:
+        service.close()
 
     assert result.status == "failed"
     assert result.files_seen == 0
     assert result.files_deleted == 0
     assert result.errors_count == 1
-    assert _stored_counts(db_path) == before
+    assert _stored_counts(root, config) == before
 
 
 def test_valid_empty_corpus_applies_deletions_explicitly(tmp_path: Path) -> None:
@@ -315,18 +283,21 @@ def test_valid_empty_corpus_applies_deletions_explicitly(tmp_path: Path) -> None
     note = root / "note.md"
     note.write_text("# Removed\n\nContent.\n", encoding="utf-8")
     config = _config(tmp_path)
-    provider = FakeEmbeddingProvider(dimensions=16)
-    service = _service(root, config, provider)
-    assert service.scan().status == "success"
-    service.close()
+    service = _service(root, config)
+    try:
+        assert service.scan().status == "success"
+    finally:
+        service.close()
     note.unlink()
 
-    service = _service(root, config, provider)
-    result = service.scan()
-    service.close()
+    service = _service(root, config)
+    try:
+        result = service.scan()
+    finally:
+        service.close()
 
     assert result.status == "success"
     assert result.files_seen == 0
     assert result.files_deleted == 1
     assert result.errors_count == 0
-    assert _stored_counts(Path(config.paths.store) / "knowledge.db") == (0, 0)
+    assert _stored_counts(root, config) == (0, 0)

@@ -9,11 +9,13 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from mdrack.application.retrieval import validate_embedding_vector
+from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.application.vector_values import (
     apply_vector_value_policy,
     canonicalize_for_space,
     validate_vector_value_policy,
 )
+from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core import (
     TARGET_RESOURCE,
@@ -154,6 +156,7 @@ class TranscriptIngestionService:
         *,
         embedding_provider: EmbeddingProvider | None = None,
         embedding_fingerprint: str | None = None,
+        embedding_profile: EmbeddingProfile | None = None,
         profile: str = "default",
         vector_value_policy: str | None = None,
         token_counter: object | None = None,
@@ -161,21 +164,33 @@ class TranscriptIngestionService:
     ) -> None:
         if not callable(getattr(catalog, "replace_resource", None)):
             raise TypeError("catalog must support complete resource replacement")
-        if (embedding_provider is None) != (embedding_fingerprint is None):
+        if embedding_profile is not None and embedding_fingerprint is not None:
+            raise ValueError("embedding_profile and embedding_fingerprint cannot be combined")
+        if (embedding_provider is None) != (embedding_fingerprint is None) and embedding_profile is None:
             raise ValueError(
                 "embedding_provider and embedding_fingerprint must be supplied together"
             )
+        if embedding_profile is not None and embedding_provider is None:
+            raise ValueError("embedding_provider and embedding_profile must be supplied together")
         self._catalog = catalog
         self._provider = embedding_provider
+        self._text_space = (
+            None if embedding_profile is None else CanonicalTextEmbeddingSpace(embedding_profile)
+        )
         self._embedding_fingerprint = (
-            None
+            self._text_space.media_fingerprint
+            if self._text_space is not None
+            else None
             if embedding_fingerprint is None
             else EmbeddingFingerprint.from_dict(
-                _normalized_embedding_fingerprint(embedding_fingerprint)
+                _normalized_media_embedding_fingerprint(embedding_fingerprint)
             )
         )
-        self._profile = profile
-        self._vector_value_policy = validate_vector_value_policy(vector_value_policy)
+        self._profile = profile if self._text_space is None else self._text_space.profile.name
+        profile_policy = None if self._text_space is None else self._text_space.profile.vector_value_policy
+        if vector_value_policy is not None and profile_policy not in {None, vector_value_policy}:
+            raise ValueError("vector_value_policy must match embedding_profile")
+        self._vector_value_policy = validate_vector_value_policy(profile_policy or vector_value_policy)
         if token_counter is None:
             if token_count_kind not in {None, "estimated"}:
                 raise ValueError("the default whitespace counter is estimated")
@@ -417,6 +432,8 @@ class TranscriptIngestionService:
         )
         if aggregation is not None:
             batch = _persist_whole_aggregation(batch, aggregation)
+        if self._text_space is not None:
+            batch = self._text_space.rekey_batch(batch)
         return apply_vector_value_policy(batch, self._vector_value_policy)
 
 
@@ -508,7 +525,7 @@ class TimedRetrievalService:
         self._embedding_fingerprint = (
             None
             if embedding_fingerprint is None
-            else _normalized_embedding_fingerprint(embedding_fingerprint)
+            else _require_embedding_fingerprint(embedding_fingerprint)
         )
         self._profile = profile
         self._rrf_k = rrf_k
@@ -660,9 +677,15 @@ class TimedRetrievalService:
             return None, "semantic_search_error"
 
 
-def _normalized_embedding_fingerprint(value: str) -> str:
+def _require_embedding_fingerprint(value: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError("embedding_fingerprint must be non-empty")
+    return value
+
+
+def _normalized_media_embedding_fingerprint(value: str) -> str:
+    """Bridge the historical media builder wire type at the legacy constructor edge."""
+    value = _require_embedding_fingerprint(value)
     return value if value.startswith("sha256:") else f"sha256:{value}"
 
 
@@ -694,8 +717,21 @@ def _resolve_embedding_space(
     fingerprint: str | None,
     dimensions: int,
 ) -> EmbeddingSpaceRecord | None:
+    if fingerprint is None:
+        return None
+    plural_resolver = getattr(catalog, "resolve_embedding_spaces", None)
+    if callable(plural_resolver):
+        resolved_spaces = plural_resolver(fingerprint=fingerprint, dimensions=dimensions)
+        if not isinstance(resolved_spaces, tuple) or len(resolved_spaces) != 1:
+            return None
+        resolved = resolved_spaces[0]
+        if not isinstance(resolved, EmbeddingSpaceRecord):
+            return None
+        if resolved.fingerprint == fingerprint and resolved.dimensions == dimensions:
+            return resolved
+        return None
     resolver = getattr(catalog, "resolve_embedding_space", None)
-    if not callable(resolver) or fingerprint is None:
+    if not callable(resolver):
         return None
     resolved = resolver(fingerprint=fingerprint, dimensions=dimensions)
     if not isinstance(resolved, EmbeddingSpaceRecord):

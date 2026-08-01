@@ -1,164 +1,132 @@
-"""E2E smoke test: index → search with fake embeddings → verify results."""
+"""E2E smoke coverage for the canonical catalog through the public CLI."""
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
-from mdrack.config.defaults import get_defaults
-from mdrack.config.models import MDRackConfig, PathsConfig, ScanConfig
-from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.indexing.indexer import run_indexer
-from mdrack.search.hybrid import HybridSearchResult, hybrid_search
-from mdrack.search.semantic import SemanticSearchResult, semantic_search
-from mdrack.search.text import TextSearchResult, text_search
-from mdrack.storage.sqlite.connection import get_connection
+from mdrack.cli import main
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "markdown"
-
-FIXTURE_FILE_NAMES = [
-    "simple_headings.md",
-    "frontmatter.md",
-    "mixed_content.md",
-    "code_blocks.md",
-]
+FIXTURE_FILE_NAMES = ("simple_headings.md", "frontmatter.md", "mixed_content.md", "code_blocks.md")
 
 
 @pytest.fixture(scope="module")
-def seeded_store_with_fake() -> tuple:
-    """Create a temp store, copy fixture files, index with fake provider."""
-    tmp_root = Path(tempfile.mkdtemp(prefix="mdrack_e2e_smoke_"))
-    store_dir = tmp_root / ".mdrack"
+def seeded_catalog() -> Generator[Path, None, None]:
+    root = Path(tempfile.mkdtemp(prefix="mdrack_e2e_smoke_"))
+    for filename in FIXTURE_FILE_NAMES:
+        shutil.copy2(FIXTURES_DIR / filename, root / filename)
+    result = CliRunner().invoke(main, ["--root", str(root), "scan", "--provider", "fake"])
+    assert result.exit_code == 0, result.output
+    assert (root / ".mdrack" / "catalog.sqlite3").is_file()
+    yield root
+    shutil.rmtree(root, ignore_errors=True)
 
-    for fname in FIXTURE_FILE_NAMES:
-        src = FIXTURES_DIR / fname
-        if src.is_file():
-            shutil.copy2(str(src), str(tmp_root / fname))
 
-    config = MDRackConfig(
-        paths=PathsConfig(store=str(store_dir)),
-        scan=ScanConfig(
-            include=["**/*.md"],
-            exclude=["node_modules/**", ".git/**", ".venv/**"],
-        ),
-        chunking=get_defaults().chunking,
-        embedding=get_defaults().embedding,
-        search=get_defaults().search,
-        profiling=get_defaults().profiling,
-    )
-
-    provider = FakeEmbeddingProvider(dimensions=128, provider_name="fake")
-
-    result = run_indexer(root=tmp_root, config=config, provider=provider, profile="default")
-    assert result.files_seen >= 4
-    assert result.chunks_created > 0
-
-    db_path = store_dir / "knowledge.db"
-    conn = get_connection(db_path)
-
-    yield conn, provider, config, tmp_root
-
-    conn.close()
-    shutil.rmtree(tmp_root, ignore_errors=True)
+def _search(root: Path, query: str, mode: str, *, limit: int = 10) -> dict[str, object]:
+    args = [
+        "--root",
+        str(root),
+        "search",
+        query,
+        "--mode",
+        mode,
+        "--limit",
+        str(limit),
+    ]
+    if mode != "text":
+        args.extend(("--provider", "fake"))
+    result = CliRunner().invoke(main, args)
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    data = payload["data"]
+    assert isinstance(data, dict)
+    return data
 
 
 class TestTextSearchSmoke:
-    """Smoke tests for text search on indexed fixtures."""
+    def test_search_finds_markdown_body_content(self, seeded_catalog: Path) -> None:
+        assert _search(seeded_catalog, "Final", "text")["results"]
 
-    def test_search_finds_heading_content(self, seeded_store_with_fake: tuple) -> None:
-        conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Introduction", limit=10)
-        assert isinstance(result, TextSearchResult)
-        assert len(result.results) > 0
+    def test_search_finds_code_adjacent_prose(self, seeded_catalog: Path) -> None:
+        assert _search(seeded_catalog, "Code", "text")["results"]
 
-    def test_search_finds_code_blocks_heading(self, seeded_store_with_fake: tuple) -> None:
-        conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Code", limit=10)
-        assert isinstance(result, TextSearchResult)
-        assert len(result.results) > 0
+    def test_search_finds_frontmatter_document_body(self, seeded_catalog: Path) -> None:
+        assert _search(seeded_catalog, "Body", "text")["results"]
 
-    def test_search_finds_frontmatter_content(self, seeded_store_with_fake: tuple) -> None:
-        conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Content", limit=10)
-        assert isinstance(result, TextSearchResult)
-        assert len(result.results) > 0
+    def test_search_finds_mixed_document_body(self, seeded_catalog: Path) -> None:
+        assert _search(seeded_catalog, "Final", "text")["results"]
 
-    def test_search_finds_mixed_content(self, seeded_store_with_fake: tuple) -> None:
-        conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Introduction", limit=10)
-        assert isinstance(result, TextSearchResult)
-        assert len(result.results) > 0
+    def test_search_results_have_portable_provenance(self, seeded_catalog: Path) -> None:
+        data = _search(seeded_catalog, "Final", "text")
+        results = data["results"]
+        assert isinstance(results, list) and results
+        for item in results:
+            assert isinstance(item, dict)
+            assert item["logical_id"] == item["chunk_id"]
+            assert isinstance(item["score"], float)
+            locator = item["source_locator"]
+            assert isinstance(locator, dict)
+            assert locator["relative_path"].endswith(".md")
 
-    def test_search_results_have_provenance(self, seeded_store_with_fake: tuple) -> None:
-        conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Introduction", limit=10)
-        assert len(result.results) > 0
-        for item in result.results:
-            assert item.chunk_id
-            assert item.file_relative_path
-            assert isinstance(item.score, float)
-
-    def test_search_respects_limit(self, seeded_store_with_fake: tuple) -> None:
-        conn, _, _, _ = seeded_store_with_fake
-        result = text_search(conn, "Fourth", limit=2)
-        assert len(result.results) <= 2
+    def test_search_respects_limit(self, seeded_catalog: Path) -> None:
+        data = _search(seeded_catalog, "Fourth", "text", limit=2)
+        results = data["results"]
+        assert isinstance(results, list)
+        assert len(results) <= 2
 
 
-@pytest.mark.asyncio()
 class TestSemanticSearchSmoke:
-    """Smoke tests for semantic search on indexed fixtures."""
+    def test_semantic_returns_results(self, seeded_catalog: Path) -> None:
+        assert _search(seeded_catalog, "code examples", "semantic")["results"]
 
-    async def test_semantic_returns_results(self, seeded_store_with_fake: tuple) -> None:
-        conn, provider, _, _ = seeded_store_with_fake
-        result = await semantic_search(conn, "code examples", provider, limit=10)
-        assert isinstance(result, SemanticSearchResult)
-        assert len(result.results) > 0
+    def test_semantic_has_chunk_ids(self, seeded_catalog: Path) -> None:
+        data = _search(seeded_catalog, "heading", "semantic", limit=5)
+        results = data["results"]
+        assert isinstance(results, list) and results
+        for item in results:
+            assert isinstance(item, dict)
+            assert item["logical_id"] == item["chunk_id"]
+            assert item["file"].endswith(".md")
 
-    async def test_semantic_has_chunk_ids(self, seeded_store_with_fake: tuple) -> None:
-        conn, provider, _, _ = seeded_store_with_fake
-        result = await semantic_search(conn, "heading", provider, limit=5)
-        assert len(result.results) > 0
-        for item in result.results:
-            assert item.chunk_id
-            assert item.file_relative_path
-
-    async def test_semantic_no_error(self, seeded_store_with_fake: tuple) -> None:
-        conn, provider, _, _ = seeded_store_with_fake
-        result = await semantic_search(conn, "content", provider, limit=5)
-        assert result.error is None
+    def test_semantic_no_degradation(self, seeded_catalog: Path) -> None:
+        data = _search(seeded_catalog, "content", "semantic", limit=5)
+        assert data["degraded"] is False
+        assert data["degraded_reason"] is None
 
 
-@pytest.mark.asyncio()
 class TestHybridSearchSmoke:
-    """Smoke tests for hybrid search on indexed fixtures."""
+    def test_hybrid_returns_results(self, seeded_catalog: Path) -> None:
+        assert _search(seeded_catalog, "code examples", "hybrid")["results"]
 
-    async def test_hybrid_returns_results(self, seeded_store_with_fake: tuple) -> None:
-        conn, provider, config, _ = seeded_store_with_fake
-        result = await hybrid_search(conn, "code examples", provider, config, limit=10)
-        assert isinstance(result, HybridSearchResult)
-        assert len(result.results) > 0
+    def test_hybrid_has_score_fields(self, seeded_catalog: Path) -> None:
+        data = _search(seeded_catalog, "Subtitle", "hybrid", limit=5)
+        results = data["results"]
+        assert isinstance(results, list) and results
+        for item in results:
+            assert isinstance(item, dict)
+            assert isinstance(item["score"], float)
+            assert item["score"] >= 0
 
-    async def test_hybrid_has_score_fields(self, seeded_store_with_fake: tuple) -> None:
-        conn, provider, config, _ = seeded_store_with_fake
-        result = await hybrid_search(conn, "Subtitle", provider, config, limit=5)
-        assert len(result.results) > 0
-        for item in result.results:
-            assert isinstance(item.combined_score, float)
-            assert item.combined_score >= 0
+    def test_hybrid_has_provenance(self, seeded_catalog: Path) -> None:
+        data = _search(seeded_catalog, "Code", "hybrid", limit=5)
+        results = data["results"]
+        assert isinstance(results, list) and results
+        for item in results:
+            assert isinstance(item, dict)
+            locator = item["source_locator"]
+            assert isinstance(locator, dict)
+            assert locator["relative_path"].endswith(".md")
 
-    async def test_hybrid_has_provenance(self, seeded_store_with_fake: tuple) -> None:
-        conn, provider, config, _ = seeded_store_with_fake
-        result = await hybrid_search(conn, "Code", provider, config, limit=5)
-        assert len(result.results) > 0
-        for item in result.results:
-            assert item.chunk_id
-            assert item.file_relative_path
-
-    async def test_hybrid_respects_limit(self, seeded_store_with_fake: tuple) -> None:
-        conn, provider, config, _ = seeded_store_with_fake
-        result = await hybrid_search(conn, "Fourth", provider, config, limit=2)
-        assert isinstance(result, HybridSearchResult)
-        assert len(result.results) <= 2
+    def test_hybrid_respects_limit(self, seeded_catalog: Path) -> None:
+        data = _search(seeded_catalog, "Fourth", "hybrid", limit=2)
+        results = data["results"]
+        assert isinstance(results, list)
+        assert len(results) <= 2

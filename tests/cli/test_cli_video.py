@@ -1,4 +1,4 @@
-"""CLI contracts for complete video manifest ingestion."""
+"""CLI contracts for video ingestion through the fixed application catalog."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def _video_manifest(path: Path) -> bytes:
                         "timestamp_ms": 750,
                         "caption": "private closing caption",
                         "metadata": {},
-                    }
+                    },
                 ],
             }
         ).encode()
@@ -68,17 +68,23 @@ def _video_manifest(path: Path) -> bytes:
     return payload
 
 
+def _initialize(runner: CliRunner, root: Path) -> Path:
+    result = runner.invoke(main, ["--root", str(root), "init"])
+    assert result.exit_code == 0, result.output
+    return root / ".mdrack" / "catalog.sqlite3"
+
+
+def _invoke(runner: CliRunner, root: Path, *args: str):
+    return runner.invoke(main, ["--root", str(root), *args])
+
+
 def test_cli_video_dry_run_is_provider_free_and_does_not_mutate(tmp_path: Path) -> None:
     source = tmp_path / "PRIVATE_VIDEO.json"
     before = _video_manifest(source)
-    database = tmp_path / "catalog.sqlite3"
-    with SQLiteCatalog.create(database):
-        pass
+    runner = CliRunner()
+    database = _initialize(runner, tmp_path)
 
-    result = CliRunner().invoke(
-        main,
-        ["ingest", "video", str(source), "--dry-run", "--catalog", str(database)],
-    )
+    result = _invoke(runner, tmp_path, "ingest", "video", str(source), "--dry-run")
 
     assert result.exit_code == 0, result.output
     data = json.loads(result.stdout)["data"]
@@ -94,14 +100,10 @@ def test_cli_video_dry_run_is_provider_free_and_does_not_mutate(tmp_path: Path) 
 def test_cli_video_invalid_manifest_failure_is_fixed_and_private(tmp_path: Path) -> None:
     source = tmp_path / "PRIVATE_BAD_VIDEO.json"
     source.write_text('{"private":"PRIVATE_CAPTION_SENTINEL"}')
-    database = tmp_path / "PRIVATE_CATALOG.sqlite3"
-    with SQLiteCatalog.create(database):
-        pass
+    runner = CliRunner()
+    _initialize(runner, tmp_path)
 
-    result = CliRunner().invoke(
-        main,
-        ["ingest", "video", str(source), "--no-embeddings", "--catalog", str(database)],
-    )
+    result = _invoke(runner, tmp_path, "ingest", "video", str(source), "--no-embeddings")
 
     assert result.exit_code == 1
     assert json.loads(result.stdout)["error"] == {
@@ -111,7 +113,6 @@ def test_cli_video_invalid_manifest_failure_is_fixed_and_private(tmp_path: Path)
     captured = result.stdout + result.stderr
     assert "PRIVATE_CAPTION_SENTINEL" not in captured
     assert str(source) not in captured
-    assert str(database) not in captured
 
 
 @pytest.mark.parametrize("defect", ["duplicate_identity", "duplicate_pair"])
@@ -120,8 +121,7 @@ def test_cli_video_rejects_duplicate_frames_without_mutating_existing_graph(
     defect: str,
 ) -> None:
     source = tmp_path / "PRIVATE_DUPLICATE_VIDEO.json"
-    original = _video_manifest(source)
-    payload = json.loads(original)
+    payload = json.loads(_video_manifest(source))
     frames = payload["frame_captions"]
     first, second = frames["observations"]
     if defect == "duplicate_identity":
@@ -139,14 +139,12 @@ def test_cli_video_rejects_duplicate_frames_without_mutating_existing_graph(
         second["observation_identity"],
     )
     source.write_text(json.dumps(payload))
-    database = tmp_path / "catalog.sqlite3"
-    with SQLiteCatalog.create(database) as catalog:
+    runner = CliRunner()
+    database = _initialize(runner, tmp_path)
+    with SQLiteCatalog.open(database) as catalog:
         before = tuple(catalog.connection.iterdump())
 
-    result = CliRunner().invoke(
-        main,
-        ["ingest", "video", str(source), "--provider", "fake", "--catalog", str(database)],
-    )
+    result = _invoke(runner, tmp_path, "ingest", "video", str(source), "--provider", "fake")
 
     assert result.exit_code == 1
     assert json.loads(result.stdout)["error"] == {
@@ -164,21 +162,15 @@ def test_cli_video_rejects_forbidden_frame_metadata_with_private_fixed_error(
 ) -> None:
     source = tmp_path / "PRIVATE_METADATA_VIDEO.json"
     payload = json.loads(_video_manifest(source))
-    payload["frame_captions"]["metadata"] = {
-        "provider_payload": "PRIVATE_PROVIDER_BODY"
-    }
+    payload["frame_captions"]["metadata"] = {"provider_payload": "PRIVATE_PROVIDER_BODY"}
     payload["frame_captions"]["observations"][0]["metadata"] = {
         "nested": {"frame_path": "/PRIVATE/frame.png"}
     }
     source.write_text(json.dumps(payload))
-    database = tmp_path / "catalog.sqlite3"
-    with SQLiteCatalog.create(database):
-        pass
+    runner = CliRunner()
+    database = _initialize(runner, tmp_path)
 
-    result = CliRunner().invoke(
-        main,
-        ["ingest", "video", str(source), "--provider", "fake", "--catalog", str(database)],
-    )
+    result = _invoke(runner, tmp_path, "ingest", "video", str(source), "--provider", "fake")
 
     assert result.exit_code == 1
     assert json.loads(result.stdout)["error"] == {

@@ -9,7 +9,7 @@ from typing import Any
 import click
 
 from mdrack.adapters.markdown_it import MarkdownItParser
-from mdrack.application.compatibility import StoreGenerationManagerError, create_application_storage
+from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.metadata_projection import (
     MetadataScalar,
     metadata_projection_policy_from_config,
@@ -35,7 +35,7 @@ def _open_service(ctx: click.Context) -> tuple[Any, MetadataCatalogService]:
         raise RuntimeError("config_unavailable")
     try:
         storage = create_application_storage(root, config)
-    except StoreGenerationManagerError:
+    except ApplicationStoreError:
         raise RuntimeError("resource_generation_unavailable") from None
     catalog = getattr(storage, "resource_store", None)
     if catalog is None:

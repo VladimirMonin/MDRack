@@ -724,6 +724,7 @@ async def test_engine_transcript_ingestion_and_search_match_application_surface(
             chunking_policy=_policy(),
         )
         found = await engine.search_transcripts("transaction", mode="text")
+        semantic = await engine.search_transcripts("transaction", mode="semantic")
 
     assert ingested.unit_count == ingested.vector_count
     assert isinstance(ingested, TranscriptIngestionResult)
@@ -737,3 +738,5 @@ async def test_engine_transcript_ingestion_and_search_match_application_surface(
         "track": "audio",
         "timestamp_unit": "ms",
     }
+    assert semantic.degraded is False
+    assert semantic.results[0].resource_id == resource

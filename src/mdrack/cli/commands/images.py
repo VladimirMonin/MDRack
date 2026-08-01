@@ -9,11 +9,8 @@ from typing import Any
 
 import click
 
-from mdrack.application.compatibility import (
-    StoreGenerationManagerError,
-    create_application_storage,
-    embedding_space_id,
-)
+from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
+from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.embeddings.runtime import (
     close_async_resource,
     create_embedding_provider,
@@ -45,7 +42,7 @@ def _open_catalog(ctx: click.Context) -> tuple[Any, Any]:
         raise RuntimeError("config_unavailable")
     try:
         storage = create_application_storage(root, config)
-    except StoreGenerationManagerError:
+    except ApplicationStoreError:
         raise RuntimeError("resource_generation_unavailable") from None
     catalog = getattr(storage, "resource_store", None)
     if catalog is None:
@@ -56,12 +53,9 @@ def _open_catalog(ctx: click.Context) -> tuple[Any, Any]:
 
 def _text_space(config: Any, provider: EmbeddingProvider, profile_name: str) -> ImageEmbeddingSpace:
     profile = embedding_profile_from_config(config, provider, profile_name)
+    canonical_space = CanonicalTextEmbeddingSpace(profile)
     return ImageEmbeddingSpace(
-        embedding_space_id(
-            profile.name,
-            profile.fingerprint,
-            profile.vector_value_policy,
-        ),
+        canonical_space.space_id,
         profile.output_dimensions,
         profile.fingerprint,
         profile_name=profile.name,

@@ -122,8 +122,8 @@ def test_scan_uses_root_relative_default_config_from_external_cwd(
     assert result.exit_code == 0, f"scan failed: {result.output}"
     payload = json.loads(result.output)
     assert payload["ok"] is True
-    assert (root / ".custom-store" / "knowledge.db").is_file()
-    assert not (external_cwd / ".mdrack" / "knowledge.db").exists()
+    assert (root / ".custom-store" / "catalog.sqlite3").is_file()
+    assert not (external_cwd / ".mdrack" / "catalog.sqlite3").exists()
 
 
 def test_scan_uses_root_relative_config_file_argument_from_external_cwd(
@@ -149,7 +149,7 @@ def test_scan_uses_root_relative_config_file_argument_from_external_cwd(
     assert result.exit_code == 0, f"scan failed: {result.output}"
     payload = json.loads(result.output)
     assert payload["ok"] is True
-    assert (root / ".explicit-store" / "knowledge.db").is_file()
+    assert (root / ".explicit-store" / "catalog.sqlite3").is_file()
 
 
 def test_scan_defaults_to_configured_provider(
@@ -281,10 +281,10 @@ def test_scan_traversal_failure_returns_error_envelope_and_preserves_index(
     assert payload["ok"] is False
     assert payload["error"]["code"] == "CORPUS_SCAN_FAILED"
     assert str(failure) not in failed.output
-    conn = sqlite3.connect(store / "knowledge.db")
+    conn = sqlite3.connect(store / "catalog.sqlite3")
     try:
-        assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
-        assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] > 0
+        assert conn.execute("SELECT COUNT(*) FROM core_resources").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM core_search_units").fetchone()[0] > 0
     finally:
         conn.close()
 
@@ -313,10 +313,10 @@ def test_scan_missing_root_returns_error_envelope_and_preserves_index(
     payload = json.loads(failed.output)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "CORPUS_SCAN_FAILED"
-    conn = sqlite3.connect(store / "knowledge.db")
+    conn = sqlite3.connect(store / "catalog.sqlite3")
     try:
-        assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
-        assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] > 0
+        assert conn.execute("SELECT COUNT(*) FROM core_resources").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM core_search_units").fetchone()[0] > 0
     finally:
         conn.close()
 
@@ -327,7 +327,7 @@ def test_scan_config_debug_logs_do_not_expose_private_values(
 ) -> None:
     root = tmp_path / "private-customer-vault"
     root.mkdir()
-    (root / "note.md").write_text("# Safe fixture\n", encoding="utf-8")
+    (root / "note.md").write_text("# Safe fixture\n\nPublic body.\n", encoding="utf-8")
     endpoint = "https://private.example.test/v1?tenant=customer-secret"
     store = tmp_path / "private-customer-store"
     config_path = root / ".mdrack" / "private-config.toml"

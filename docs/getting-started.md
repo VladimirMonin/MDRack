@@ -38,6 +38,14 @@ MDRack writes derived state under `./notes/.mdrack/`; it does not modify the
 Markdown source. CLI success and error responses use one JSON envelope. See the
 [CLI contracts](cli-contracts.md) for complete flags and response shapes.
 
+## Verify a checkout before maintainer work
+
+The quick start above verifies one local Markdown flow. Maintainers can run the
+separate [one-store acceptance evidence](one-store-acceptance.md) runner to
+exercise the canonical synthetic fixture, a temporary installed-wheel target,
+and privacy-safe evidence. It does not use a private vault or prove live LM
+Studio behavior.
+
 ## Configure LM Studio
 
 Without `--config-file`, MDRack reads `<root>/.mdrack/config.toml` when it exists.
@@ -122,5 +130,5 @@ for the exact boundary.
 
 - [Operations and troubleshooting](operations.md)
 - [Current architecture](current-architecture/README.md)
-- [Recovery and generation cutover](recovery.md)
+- [Current SQLite persistence](current-architecture/sqlite-persistence.md)
 - [Development guide](development.md)

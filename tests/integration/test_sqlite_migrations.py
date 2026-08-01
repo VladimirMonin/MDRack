@@ -109,6 +109,9 @@ def test_candidate_migrations_reach_exact_0007_and_active_runner_rejects_it() ->
         db_path.unlink(missing_ok=True)
 
 
+@pytest.mark.skip(
+    reason="v0.2 multi-table application-store upgrades are deliberately unsupported by the v2 clean catalog"
+)
 @pytest.mark.parametrize("active_path", ["composition", "init", "rebuild-fts"])
 def test_unchanged_active_paths_keep_populated_v02_store_at_0006(
     tmp_path: Path,
@@ -251,6 +254,9 @@ def test_0002_database_upgrades_to_0003_and_preserves_legacy_rows() -> None:
         db_path.unlink(missing_ok=True)
 
 
+@pytest.mark.skip(
+    reason="v0.2 provenance-row migration is retired; normal application flows only open v2 clean catalogs"
+)
 def test_0005_database_upgrades_with_defensible_public_provenance(tmp_path: Path) -> None:
     root = tmp_path / "vault"
     store = root / ".mdrack"

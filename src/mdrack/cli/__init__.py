@@ -11,7 +11,7 @@ import click
 
 from mdrack import __version__
 from mdrack.cli.commands.cache import cache as cache_group
-from mdrack.cli.commands.eval import retrieval as eval_retrieval
+from mdrack.cli.commands.eval import evaluation as eval_group
 from mdrack.cli.commands.files import files as files_group
 from mdrack.cli.commands.images import image as image_group
 from mdrack.cli.commands.metadata import metadata as metadata_group
@@ -25,15 +25,10 @@ from mdrack.cli.commands.resources import resources as resources_group
 from mdrack.cli.commands.resources import similar as similar_command
 from mdrack.cli.commands.scan import cli_scan
 from mdrack.cli.commands.search import cli_search
-from mdrack.cli.commands.sections import sections as sections_group
-from mdrack.cli.commands.storage import storage as storage_group
 from mdrack.cli.commands.transcript import ingest as ingest_group
 from mdrack.cli.commands.video import ingest_video
 from mdrack.config.loader import load_config, resolve_config_path
-from mdrack.diagnostics.storage import (
-    analyze_application_storage,
-    analyze_standalone_catalog,
-)
+from mdrack.diagnostics.storage import analyze_application_storage
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, MDRackError
@@ -148,7 +143,7 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
     ctx.obj[CTX_JSON] = json_output
     ctx.obj[CTX_CONFIG_FILE] = config_file
 
-    if ctx.invoked_subcommand in {"resource", "storage-analyze"}:
+    if ctx.invoked_subcommand == "storage-analyze":
         return
 
     # Load configuration
@@ -161,7 +156,7 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
         ctx.obj[CTX_CONFIG] = config
         ctx.obj[CTX_CONFIG_PATH] = resolved_config_path
         ctx.obj[CTX_STORE_DIR] = _resolve_store_dir(resolved_root, config.paths.store)
-        ctx.obj[CTX_DB_PATH] = ctx.obj[CTX_STORE_DIR] / "knowledge.db"
+        ctx.obj[CTX_DB_PATH] = ctx.obj[CTX_STORE_DIR] / "catalog.sqlite3"
     except Exception:
         _emit_fixed_command_error(
             ctx,
@@ -184,28 +179,24 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
 def init(ctx: click.Context) -> None:
     """Initialize a local knowledge store."""
     cmd = _command_name(ctx)
-    store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
-    db_path: Path = ctx.obj.get(CTX_DB_PATH, store_dir / "knowledge.db")
 
     try:
-        store_dir.mkdir(parents=True, exist_ok=True)
+        from mdrack.adapters.sqlite.canonical_catalog import open_application_catalog
+        from mdrack_sqlite.contract_v2 import SQLITE_CATALOG_V2_SCHEMA_VERSION
 
-        from mdrack.storage.sqlite.connection import get_connection
-        from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
-
-        conn = get_connection(db_path)
+        catalog = open_application_catalog(
+            ctx.obj[CTX_ROOT],
+            ctx.obj[CTX_CONFIG],
+            create=True,
+        )
         try:
-            apply_migrations(conn, get_migrations_dir())
-            from mdrack.storage.sqlite.migrations import get_applied_migrations
-            applied = get_applied_migrations(conn)
-            schema_version = max(applied) if applied else None
+            schema_version = SQLITE_CATALOG_V2_SCHEMA_VERSION
         finally:
-            conn.close()
+            catalog.close()
 
         _output(ctx, envelope_success({
             "status": "initialized",
-            "store_path": str(store_dir),
-            "db_path": str(db_path),
+            "catalog_path": "catalog.sqlite3",
             "schema_version": schema_version,
         }, command=cmd))
     except Exception as exc:
@@ -229,30 +220,26 @@ ingest_group.add_command(ingest_video)
 main.add_command(image_group)
 main.add_command(metadata_group)
 main.add_command(cache_group)
-main.add_command(resource_group)
+
 main.add_command(resources_group)
 main.add_command(find_similar_command)
 main.add_command(similar_command, name="similar")
 main.add_command(facets_command, name="facets")
-main.add_command(storage_group)
+
 
 
 # ---------------------------------------------------------------------------
 # Group: read (imported from cli.commands.read)
 # ---------------------------------------------------------------------------
 main.add_command(read)
+main.add_command(resource_group)
+main.add_command(eval_group)
 
 
 # ---------------------------------------------------------------------------
 # Group: files (imported from cli.commands.files)
 # ---------------------------------------------------------------------------
 main.add_command(files_group)
-
-
-# ---------------------------------------------------------------------------
-# Group: sections (imported from cli.commands.sections)
-# ---------------------------------------------------------------------------
-main.add_command(sections_group)
 
 
 # ---------------------------------------------------------------------------
@@ -285,26 +272,15 @@ def status(ctx: click.Context) -> None:
 def _build_status_data(ctx: click.Context) -> dict[str, object]:
     """Build the allowlisted status payload or raise to the command boundary."""
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
-    store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
-    from mdrack.diagnostics.integrity import get_generation_status
-
-    generation_status = get_generation_status(store_dir)
-    pointer_failed = generation_status["generation_pointer_status"] == "invalid" or (
-        generation_status["generation_pointer_status"] == "missing"
-        and bool(generation_status["generation_metadata_count"])
-    )
-    if pointer_failed:
-        db_path = None
-    else:
-        from mdrack.application.compatibility import resolve_application_database_path
-
-        root: Path = ctx.obj.get(CTX_ROOT, Path("."))
-        db_path = resolve_application_database_path(root, config)
     configured_endpoint = config.embedding.endpoint if config is not None else None
+    from mdrack.application.compatibility import resolve_application_database_path
 
-    if db_path is None or not db_path.is_file():
+    root: Path = ctx.obj.get(CTX_ROOT, Path("."))
+    db_path = resolve_application_database_path(root, config)
+
+    if not db_path.is_file():
         return {
-            "generation_state": generation_status["generation_state"],
+            "catalog_state": "missing",
             "files_count": 0,
             "chunks_count": 0,
             "embeddings_count": 0,
@@ -319,21 +295,21 @@ def _build_status_data(ctx: click.Context) -> dict[str, object]:
             "schema_version": None,
         }
 
-    from mdrack.diagnostics.integrity import get_store_status
-    from mdrack.storage.sqlite.connection import get_read_only_connection
+    from mdrack.adapters.sqlite.canonical_catalog import open_application_catalog_readonly
+    from mdrack.diagnostics.integrity import get_resource_core_v2_status
 
-    conn = get_read_only_connection(db_path)
+    catalog = open_application_catalog_readonly(root, config)
     try:
-        status_data = get_store_status(conn)
+        status_data = get_resource_core_v2_status(catalog.connection)
     finally:
-        conn.close()
+        catalog.close()
 
     profile_endpoint = status_data.pop("profile_endpoint", None)
     endpoint_match = None
     if configured_endpoint is not None and profile_endpoint is not None:
         endpoint_match = configured_endpoint == profile_endpoint
-    return {
-        "generation_state": generation_status["generation_state"],
+    result = {
+        "catalog_state": "ready",
         "files_count": status_data["files_count"],
         "chunks_count": status_data["chunks_count"],
         "embeddings_count": status_data["embeddings_count"],
@@ -347,6 +323,17 @@ def _build_status_data(ctx: click.Context) -> dict[str, object]:
         "endpoint_match": endpoint_match,
         "schema_version": status_data["schema_version"],
     }
+    result.update(
+        {
+            "resources_count": status_data["resources_count"],
+            "representations_count": status_data["representations_count"],
+            "units_count": status_data["units_count"],
+            "vectors_count": status_data["vectors_count"],
+            "embedding_spaces_count": status_data["embedding_spaces_count"],
+            "fts_rows_count": status_data["fts_rows_count"],
+        }
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -373,36 +360,16 @@ def doctor(ctx: click.Context) -> None:
 def _build_doctor_data(ctx: click.Context) -> dict[str, object]:
     """Build the allowlisted doctor payload or raise to the command boundary."""
     config = ctx.obj.get(CTX_CONFIG) if ctx.obj else None
-    store_dir: Path = ctx.obj.get(CTX_STORE_DIR, Path(".mdrack"))
 
-    from mdrack.diagnostics.doctor import DoctorFinding, DoctorReport, report_to_dict, run_doctor
-    from mdrack.diagnostics.integrity import get_generation_status
-    from mdrack.storage.sqlite.connection import get_read_only_connection
-
-    generation_status = get_generation_status(store_dir)
-    pointer_status = generation_status["generation_pointer_status"]
-    pointer_missing = pointer_status == "missing" and bool(
-        generation_status["generation_metadata_count"]
-    )
-    if pointer_status == "invalid" or pointer_missing:
-        code = "GENERATION_POINTER_INVALID" if pointer_status == "invalid" else "GENERATION_POINTER_MISSING"
-        report = DoctorReport(
-            findings=[
-                DoctorFinding(
-                    severity="error",
-                    code=code,
-                    message="Generation pointer validation failed",
-                    details={
-                        "generation_state": "failed",
-                        "reason_code": "pointer_invalid" if pointer_status == "invalid" else "pointer_missing",
-                    },
-                )
-            ],
-            ok=False,
-        )
-        return report_to_dict(report)
-
+    from mdrack.adapters.sqlite.canonical_catalog import open_application_catalog_readonly
     from mdrack.application.compatibility import resolve_application_database_path
+    from mdrack.diagnostics.doctor import (
+        DoctorFinding,
+        DoctorReport,
+        report_to_dict,
+        run_clean_catalog_doctor,
+    )
+
 
     root: Path = ctx.obj.get(CTX_ROOT, Path("."))
     db_path = resolve_application_database_path(root, config)
@@ -421,18 +388,11 @@ def _build_doctor_data(ctx: click.Context) -> dict[str, object]:
         )
         return report_to_dict(report)
 
-    conn = get_read_only_connection(db_path)
+    catalog = open_application_catalog_readonly(root, config)
     try:
-        report = run_doctor(
-            conn,
-            expected_profile="default",
-            expected_model=config.embedding.model if config is not None else None,
-            expected_dimensions=config.embedding.dimensions if config is not None else None,
-            expected_endpoint=config.embedding.endpoint if config is not None else None,
-            store_dir=store_dir,
-        )
+        report = run_clean_catalog_doctor(catalog.connection)
     finally:
-        conn.close()
+        catalog.close()
 
     return report_to_dict(report)
 
@@ -454,17 +414,19 @@ rebuild.add_command(rebuild_embeddings_cmd, name="embeddings")
 # Command: benchmark
 # ---------------------------------------------------------------------------
 @main.command()
-@click.option("--catalog", "catalog_path", required=True, type=click.Path(exists=False, dir_okay=False))
 @click.pass_context
-def benchmark(ctx: click.Context, catalog_path: str) -> None:
+def benchmark(ctx: click.Context) -> None:
     """Run a provider-free local catalog health benchmark."""
     command = "benchmark"
     started = time.perf_counter()
     catalog = None
     try:
-        from mdrack_sqlite import SQLiteCatalog
+        from mdrack.adapters.sqlite.canonical_catalog import open_application_catalog_readonly
 
-        catalog = SQLiteCatalog.open_readonly(catalog_path)
+        catalog = open_application_catalog_readonly(
+            ctx.obj[CTX_ROOT],
+            ctx.obj[CTX_CONFIG],
+        )
         verification = catalog.verify()
         elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
         _output(ctx, envelope_success({
@@ -502,23 +464,13 @@ def _load_storage_analyzer_config(ctx: click.Context) -> Any:
 
 
 @main.command(name="storage-analyze")
-@click.option(
-    "--catalog",
-    "catalog_path",
-    type=click.Path(exists=False, dir_okay=False),
-    default=None,
-    help="Analyze an explicit clean standalone catalog instead of the configured application store.",
-)
 @click.pass_context
-def storage_analyze(ctx: click.Context, catalog_path: str | None) -> None:
+def storage_analyze(ctx: click.Context) -> None:
     """Report privacy-safe aggregate storage diagnostics without modifying SQLite."""
     command = "storage-analyze"
     try:
-        if catalog_path is not None:
-            report = analyze_standalone_catalog(Path(catalog_path))
-        else:
-            config = _load_storage_analyzer_config(ctx)
-            report = analyze_application_storage(ctx.obj[CTX_ROOT], config)
+        config = _load_storage_analyzer_config(ctx)
+        report = analyze_application_storage(ctx.obj[CTX_ROOT], config)
         _output(ctx, envelope_success(report.to_dict(), command=command))
     except Exception:
         logger.error(
@@ -534,16 +486,3 @@ def storage_analyze(ctx: click.Context, catalog_path: str | None) -> None:
             ),
         )
         ctx.exit(1)
-
-
-# ---------------------------------------------------------------------------
-# Group: eval
-# ---------------------------------------------------------------------------
-@main.group()
-@click.pass_context
-def eval_cmd(ctx: click.Context) -> None:
-    """Retrieval evaluation commands."""
-
-
-eval_cmd.add_command(eval_retrieval, name="retrieval")
-main.add_command(eval_cmd, name="eval")

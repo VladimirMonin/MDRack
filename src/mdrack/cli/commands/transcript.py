@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import click
 
-from mdrack.application.compatibility import StoreGenerationManagerError, create_application_storage
+from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.manifest import MAX_MANIFEST_BYTES
 from mdrack.application.transcript_ingestion import TranscriptIngestionService
 from mdrack.embeddings.runtime import (
@@ -30,7 +30,6 @@ from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 from mdrack_core import Locator
 from mdrack_media import ProducerFingerprint
-from mdrack_sqlite import SQLiteCatalog
 
 logger = logging.getLogger(__name__)
 
@@ -68,16 +67,14 @@ def _read_bounded(path: str) -> bytes:
     return payload
 
 
-def _open_catalog(ctx: click.Context, catalog_path: str | None) -> tuple[Any | None, Any]:
-    if catalog_path is not None:
-        return None, SQLiteCatalog.open(catalog_path)
+def _open_catalog(ctx: click.Context, *, create: bool) -> tuple[Any, Any]:
     config = ctx.obj.get("config") if ctx.obj else None
     root = ctx.obj.get("root") if ctx.obj else None
     if config is None or not isinstance(root, Path):
         raise ValueError("config_unavailable")
     try:
-        storage = create_application_storage(root, config)
-    except StoreGenerationManagerError:
+        storage = create_application_storage(root, config, create=create)
+    except ApplicationStoreError:
         raise ValueError("resource_generation_unavailable") from None
     catalog = getattr(storage, "resource_store", None)
     if catalog is None:
@@ -112,7 +109,7 @@ def ingest() -> None:
 @click.option("--provider", "provider_name", type=click.Choice(["lmstudio", "fake"]), default=None)
 @click.option("--no-embeddings", is_flag=True, default=False)
 @click.option("--dry-run", is_flag=True, default=False)
-@click.option("--catalog", "catalog_path", default=None, metavar="PATH")
+
 @click.pass_context
 def ingest_transcript(
     ctx: click.Context,
@@ -130,7 +127,7 @@ def ingest_transcript(
     provider_name: str | None,
     no_embeddings: bool,
     dry_run: bool,
-    catalog_path: str | None,
+
 ) -> None:
     """Read, group, and atomically replace one audio/video transcript graph."""
     del chunking_profile
@@ -157,8 +154,8 @@ def ingest_transcript(
             strict=True,
         )
         artifact = read_result.artifact  # type: ignore[attr-defined]
-        storage, catalog = _open_catalog(ctx, catalog_path)
-        embedding_fingerprint = None
+        storage, catalog = _open_catalog(ctx, create=not dry_run)
+        embedding_profile = None
         vector_value_policy = None
         if not no_embeddings and not dry_run:
             if config is None:
@@ -172,12 +169,11 @@ def ingest_transcript(
                 embedding_provider,
                 profile,
             )
-            embedding_fingerprint = embedding_profile.fingerprint
             vector_value_policy = embedding_profile.vector_value_policy
         service = TranscriptIngestionService(
             catalog,
             embedding_provider=embedding_provider,
-            embedding_fingerprint=embedding_fingerprint,
+            embedding_profile=embedding_profile,
             profile=profile,
             vector_value_policy=vector_value_policy,
         )
@@ -246,8 +242,7 @@ def ingest_transcript(
     finally:
         if storage is not None:
             storage.close()
-        elif catalog is not None:
-            catalog.close()
+
         if embedding_provider is not None:
             try:
                 asyncio.run(close_async_resource(embedding_provider))

@@ -72,14 +72,14 @@ def test_markdown_scan_never_inspects_referenced_files_and_stores_only_prose(
     first_ids = [
         str(row[0])
         for row in storage.connection.execute(
-            "SELECT logical_id FROM chunks ORDER BY chunk_index"
+            "SELECT unit_id FROM core_search_units WHERE unit_kind='text_chunk' ORDER BY unit_id"
         ).fetchall()
     ]
     second = service.scan(force_reindex=True)
     second_ids = [
         str(row[0])
         for row in storage.connection.execute(
-            "SELECT logical_id FROM chunks ORDER BY chunk_index"
+            "SELECT unit_id FROM core_search_units WHERE unit_kind='text_chunk' ORDER BY unit_id"
         ).fetchall()
     ]
     search_architecture = storage.search_text("Architecture", limit=5)
@@ -95,11 +95,14 @@ def test_markdown_scan_never_inspects_referenced_files_and_stores_only_prose(
     search_alias = storage.search_text("Alias", limit=5)
     stored_text = "\n".join(
         str(row[0])
-        for row in storage.connection.execute("SELECT content FROM chunks ORDER BY chunk_index")
+        for row in storage.connection.execute(
+            "SELECT text_content FROM core_search_units WHERE unit_kind='text_chunk' ORDER BY unit_id"
+        )
     )
-    diagnostics = storage.connection.execute("SELECT COUNT(*) FROM diagnostics").fetchone()[0]
     legacy_rows = {
-        table: storage.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        table: storage.connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()[0]
         for table in ("assets", "asset_references", "asset_descriptions")
     }
     service.close()
@@ -149,7 +152,6 @@ def test_markdown_scan_never_inspects_referenced_files_and_stores_only_prose(
         "data-src=",
     ):
         assert forbidden not in stored_text
-    assert diagnostics == 0
     assert legacy_rows == {"assets": 0, "asset_references": 0, "asset_descriptions": 0}
     assert touched == []
     assert note.read_bytes() == note_before

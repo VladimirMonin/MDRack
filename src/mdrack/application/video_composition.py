@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from mdrack.application.retrieval import validate_embedding_vector
+from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.application.transcript_ingestion import (
     DeterministicWhitespaceCounter,
     _aggregation_fingerprint,
@@ -15,6 +16,7 @@ from mdrack.application.transcript_ingestion import (
     _whole_text_aggregation,
 )
 from mdrack.application.vector_values import apply_vector_value_policy, validate_vector_value_policy
+from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.ingestion.frame_captions import validate_frame_caption_artifact
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core import (
@@ -39,6 +41,7 @@ from mdrack_media import (
     build_video_transcript_batch,
     canonical_json,
     group_timed_atoms,
+    weighted_centroid,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,17 +77,27 @@ class VideoCompositionService:
         *,
         embedding_provider: EmbeddingProvider | None = None,
         embedding_fingerprint: str | None = None,
+        embedding_profile: EmbeddingProfile | None = None,
         profile: str = "default",
         vector_value_policy: str | None = None,
     ) -> None:
         if not callable(getattr(catalog, "replace_resource", None)):
             raise TypeError("catalog must support complete resource replacement")
-        if (embedding_provider is None) != (embedding_fingerprint is None):
+        if embedding_profile is not None and embedding_fingerprint is not None:
+            raise ValueError("embedding_profile and embedding_fingerprint cannot be combined")
+        if (embedding_provider is None) != (embedding_fingerprint is None) and embedding_profile is None:
             raise ValueError("embedding_provider and embedding_fingerprint must be supplied together")
+        if embedding_profile is not None and embedding_provider is None:
+            raise ValueError("embedding_provider and embedding_profile must be supplied together")
         self._catalog = catalog
         self._provider = embedding_provider
+        self._text_space = (
+            None if embedding_profile is None else CanonicalTextEmbeddingSpace(embedding_profile)
+        )
         self._embedding_fingerprint = (
-            None
+            self._text_space.media_fingerprint
+            if self._text_space is not None
+            else None
             if embedding_fingerprint is None
             else EmbeddingFingerprint.from_dict(
                 embedding_fingerprint
@@ -92,8 +105,11 @@ class VideoCompositionService:
                 else f"sha256:{embedding_fingerprint}"
             )
         )
-        self._profile = profile
-        self._vector_value_policy = validate_vector_value_policy(vector_value_policy)
+        self._profile = profile if self._text_space is None else self._text_space.profile.name
+        profile_policy = None if self._text_space is None else self._text_space.profile.vector_value_policy
+        if vector_value_policy is not None and profile_policy not in {None, vector_value_policy}:
+            raise ValueError("vector_value_policy must match embedding_profile")
+        self._vector_value_policy = validate_vector_value_policy(profile_policy or vector_value_policy)
         self._counter = DeterministicWhitespaceCounter()
         self._indexing = CoreIndexingService(catalog)  # type: ignore[arg-type]
 
@@ -132,8 +148,9 @@ class VideoCompositionService:
             unsplittable="flag",
         )
         whole_text_policy = WholeResourceTextPolicy(overflow="caller_split")
+        frame_token_count = sum(self._counter.count(observation.caption) for observation in frames.observations)
         aggregation = _whole_text_aggregation(
-            sum(passage.token_count.count for passage in grouped.passages),
+            sum(passage.token_count.count for passage in grouped.passages) + frame_token_count,
             whole_text_policy,
         )
         include_whole = aggregation == "direct_text_v1" or vectors is not None
@@ -254,6 +271,10 @@ class VideoCompositionService:
             vectors=tuple(vector for batch in batches for vector in batch.vectors),
             facets=(),
         )
+        if include_whole:
+            batch = _aggregate_video_whole_resource(batch, aggregation)
+        if self._text_space is not None:
+            batch = self._text_space.rekey_batch(batch)
         return apply_vector_value_policy(batch, self._vector_value_policy)
 
     async def ingest(
@@ -354,6 +375,74 @@ class VideoCompositionService:
             vector_count=len(batch.vectors),
             space_id=batch.spaces[0].space_id if batch.spaces else None,
         )
+
+
+def _aggregate_video_whole_resource(
+    batch: PreparedResourceBatch,
+    aggregation: str,
+) -> PreparedResourceBatch:
+    """Make the video-level textual unit cover transcript passages and frame captions."""
+    whole_units = tuple(unit for unit in batch.units if unit.unit_kind == "whole_resource")
+    if len(whole_units) != 1:
+        raise ValueError("video batch must contain exactly one whole_resource unit")
+    whole_unit = whole_units[0]
+    textual_units = tuple(unit for unit in batch.units if unit.unit_id != whole_unit.unit_id)
+    whole_text = "\n\n".join(unit.text or "" for unit in textual_units if unit.text)
+    token_count = sum(
+        unit.token_count if unit.token_count is not None else len((unit.text or "").split())
+        for unit in textual_units
+    )
+    metadata = {
+        **dict(whole_unit.metadata),
+        "aggregation": aggregation,
+        "similarity_basis": "textual_content",
+    }
+    whole_unit = replace(
+        whole_unit,
+        text=whole_text,
+        token_count=token_count,
+        metadata=metadata,
+    )
+    representations = tuple(
+        replace(
+            representation,
+            text=whole_text,
+            token_count=token_count,
+            metadata={**dict(representation.metadata), **metadata},
+        )
+        if representation.representation_id == whole_unit.representation_id
+        else representation
+        for representation in batch.representations
+    )
+    vectors = batch.vectors
+    if aggregation == "token_weighted_centroid_v1" and vectors:
+        component_vectors = {
+            vector.unit_id: vector.vector
+            for vector in vectors
+            if vector.unit_id != whole_unit.unit_id
+        }
+        weights = {
+            unit.unit_id: (
+                unit.token_count if unit.token_count is not None else len((unit.text or "").split())
+            )
+            for unit in textual_units
+        }
+        if set(component_vectors) != set(weights):
+            raise ValueError("video whole-resource centroid requires every textual component vector")
+        centroid = weighted_centroid(component_vectors, weights)
+        vectors = tuple(
+            replace(vector, vector=centroid) if vector.unit_id == whole_unit.unit_id else vector
+            for vector in vectors
+        )
+    return replace(
+        batch,
+        representations=representations,
+        units=tuple(
+            whole_unit if unit.unit_id == whole_unit.unit_id else unit
+            for unit in batch.units
+        ),
+        vectors=vectors,
+    )
 
 
 __all__ = ["VideoCompositionResult", "VideoCompositionService"]

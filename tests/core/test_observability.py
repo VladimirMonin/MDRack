@@ -11,6 +11,8 @@ from mdrack_core.domain import DegradationCategory, ErrorCategory
 from mdrack_core.observability import (
     CORE_EVENT_NAMES,
     REDACTED,
+    LifecycleOperation,
+    LifecycleReason,
     LifecycleStatus,
     SafeEvent,
     SafeFingerprint,
@@ -112,8 +114,47 @@ def test_safe_enum_numeric_and_fingerprint_values_remain_observable() -> None:
     assert private not in output
 
 
+def test_lifecycle_events_keep_correlation_and_reason_categories_without_raw_values() -> None:
+    private_execution_id = "PRIVATE_EXECUTION_ID"
+    event = SafeEvent(
+        "core.lifecycle.recovered",
+        {
+            "execution_id": safe_fingerprint(private_execution_id),
+            "operation": LifecycleOperation.RETRIEVAL,
+            "reason": LifecycleReason.DEPENDENCY_UNAVAILABLE,
+            "status": LifecycleStatus.RECOVERED,
+            "result_count": 2,
+        },
+    )
+    output = capture(event)
+
+    assert "core.lifecycle.recovered" in output
+    assert '"operation":"retrieval"' in output
+    assert '"reason":"dependency_unavailable"' in output
+    assert '"status":"recovered"' in output
+    assert private_execution_id not in output
+
+
+def test_raw_execution_id_is_redacted_instead_of_becoming_a_correlation_id() -> None:
+    private_execution_id = "PRIVATE_RAW_EXECUTION_ID"
+
+    output = capture(
+        SafeEvent(
+            "core.lifecycle.started",
+            {
+                "execution_id": private_execution_id,
+                "operation": LifecycleOperation.ACCEPTANCE,
+                "status": LifecycleStatus.STARTED,
+            },
+        )
+    )
+
+    assert private_execution_id not in output
+    assert f'"execution_id":"{REDACTED}"' in output
+
+
 def test_safe_event_schema_and_values_fail_closed() -> None:
-    assert len(CORE_EVENT_NAMES) == 12
+    assert len(CORE_EVENT_NAMES) == 17
     with pytest.raises(ValueError, match="frozen core event"):
         SafeEvent("PRIVATE_QUERY_SENTINEL", {})
     with pytest.raises(ValueError, match="outside the safe event schema"):

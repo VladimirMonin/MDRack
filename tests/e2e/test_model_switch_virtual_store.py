@@ -1,4 +1,4 @@
-"""End-to-end virtual-store workflow coverage for model switching."""
+"""End-to-end canonical-catalog workflow coverage for model switching."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 from click.testing import CliRunner
 
@@ -172,7 +173,7 @@ def _provider_factory(provider_name: str, config: object) -> DeterministicLMStud
     )
 
 
-def _invoke_json(runner: CliRunner, root: Path, *args: str) -> dict[str, object]:
+def _invoke_json(runner: CliRunner, root: Path, *args: str) -> dict[str, Any]:
     result = runner.invoke(main, ["--root", str(root), *args])
     assert result.exit_code == 0, result.output
     return json.loads(result.output)
@@ -181,32 +182,33 @@ def _invoke_json(runner: CliRunner, root: Path, *args: str) -> dict[str, object]
 def _read_profile_metadata(db_path: Path) -> dict[str, object]:
     conn = get_connection(db_path)
     try:
-        row = conn.execute(
-            "SELECT name, model, dimensions, endpoint FROM embedding_profiles WHERE name = ?",
-            ("default",),
-        ).fetchone()
-        assert row is not None
-        return dict(row)
+        rows = conn.execute(
+            "SELECT s.space_id, s.dimensions, s.fingerprint "
+            "FROM core_embedding_spaces s "
+            "JOIN core_unit_embeddings e ON e.space_id = s.space_id "
+            "GROUP BY s.space_id, s.dimensions, s.fingerprint"
+        ).fetchall()
+        assert len(rows) == 1
+        return dict(rows[0])
     finally:
         conn.close()
 
 
-def _read_vectors(db_path: Path) -> dict[str, list[float]]:
+def _read_vectors(db_path: Path) -> dict[str, tuple[str, bytes]]:
     conn = get_connection(db_path)
     try:
         rows = conn.execute(
-            "SELECT chunk_id, embedding FROM chunk_embeddings WHERE profile_name = ? ORDER BY chunk_id",
-            ("default",),
+            "SELECT unit_id, space_id, embedding FROM core_unit_embeddings ORDER BY unit_id"
         ).fetchall()
         return {
-            row["chunk_id"]: json.loads(row["embedding"])
+            row["unit_id"]: (str(row["space_id"]), bytes(row["embedding"]))
             for row in rows
         }
     finally:
         conn.close()
 
 
-def test_model_switch_rebuilds_virtual_store_vectors_end_to_end(
+def test_model_switch_rebuilds_canonical_catalog_vectors_end_to_end(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -244,23 +246,18 @@ def test_model_switch_rebuilds_virtual_store_vectors_end_to_end(
     semantic_before = _invoke_json(runner, root, "search", "Subtitle", "--mode", "semantic", "--limit", "3")
     assert semantic_before["data"]["results"]
 
-    db_path = root / ".virtual-store" / "knowledge.db"
+    db_path = root / ".virtual-store" / "catalog.sqlite3"
     initial_profile = _read_profile_metadata(db_path)
     initial_vectors = _read_vectors(db_path)
-    assert initial_profile == {
-        "name": "default",
-        "model": MODEL_SMALL,
-        "dimensions": SMALL_DIMENSIONS,
-        "endpoint": "http://localhost:1234/v1",
-    }
+    assert initial_profile["dimensions"] == SMALL_DIMENSIONS
     assert initial_vectors
-    assert {len(vector) for vector in initial_vectors.values()} == {SMALL_DIMENSIONS}
+    assert {space_id for space_id, _vector in initial_vectors.values()} == {initial_profile["space_id"]}
 
     switch_to_large = _invoke_json(runner, root, "model", "switch", MODEL_LARGE)
     assert switch_to_large["data"]["new_model"] == MODEL_LARGE
     assert switch_to_large["data"]["new_dimensions"] == LARGE_DIMENSIONS
     assert switch_to_large["data"]["rebuild"]["performed"] is True
-    assert switch_to_large["data"]["rebuild"]["embedded_count"] == len(initial_vectors)
+    assert switch_to_large["data"]["rebuild"]["chunks_created"] > 0
     assert switch_to_large["data"]["unload_previous"] == {
         "attempted": True,
         "model": MODEL_SMALL,
@@ -276,29 +273,25 @@ def test_model_switch_rebuilds_virtual_store_vectors_end_to_end(
     status_large = _invoke_json(runner, root, "status")
     assert status_large["data"]["configured_model"] == MODEL_LARGE
     assert status_large["data"]["configured_dimensions"] == LARGE_DIMENSIONS
-    assert status_large["data"]["profile_model"] == MODEL_LARGE
-    assert status_large["data"]["profile_dimensions"] == LARGE_DIMENSIONS
+    assert status_large["data"]["profile_dimensions"] is None
 
     semantic_large = _invoke_json(runner, root, "search", "Subtitle", "--mode", "semantic", "--limit", "3")
     assert semantic_large["data"]["results"]
 
     large_profile = _read_profile_metadata(db_path)
     large_vectors = _read_vectors(db_path)
-    assert large_profile == {
-        "name": "default",
-        "model": MODEL_LARGE,
-        "dimensions": LARGE_DIMENSIONS,
-        "endpoint": "http://localhost:1234/v1",
-    }
+    assert large_profile["dimensions"] == LARGE_DIMENSIONS
+    assert large_profile["space_id"] != initial_profile["space_id"]
+    assert large_profile["fingerprint"] != initial_profile["fingerprint"]
     assert set(large_vectors) == set(initial_vectors)
-    assert {len(vector) for vector in large_vectors.values()} == {LARGE_DIMENSIONS}
-    assert all(large_vectors[chunk_id] != initial_vectors[chunk_id] for chunk_id in initial_vectors)
+    assert {space_id for space_id, _vector in large_vectors.values()} == {large_profile["space_id"]}
+    assert all(large_vectors[unit_id] != initial_vectors[unit_id] for unit_id in initial_vectors)
 
     switch_back = _invoke_json(runner, root, "model", "switch", MODEL_SMALL)
     assert switch_back["data"]["new_model"] == MODEL_SMALL
     assert switch_back["data"]["new_dimensions"] == SMALL_DIMENSIONS
     assert switch_back["data"]["rebuild"]["performed"] is True
-    assert switch_back["data"]["rebuild"]["embedded_count"] == len(initial_vectors)
+    assert switch_back["data"]["rebuild"]["chunks_created"] > 0
     assert switch_back["data"]["load"] == {
         "key": MODEL_SMALL,
         "state": "loaded",
@@ -319,8 +312,7 @@ def test_model_switch_rebuilds_virtual_store_vectors_end_to_end(
     status_small = _invoke_json(runner, root, "status")
     assert status_small["data"]["configured_model"] == MODEL_SMALL
     assert status_small["data"]["configured_dimensions"] == SMALL_DIMENSIONS
-    assert status_small["data"]["profile_model"] == MODEL_SMALL
-    assert status_small["data"]["profile_dimensions"] == SMALL_DIMENSIONS
+    assert status_small["data"]["profile_dimensions"] is None
 
     semantic_after = _invoke_json(runner, root, "search", "Subtitle", "--mode", "semantic", "--limit", "3")
     assert semantic_after["data"]["results"]

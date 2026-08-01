@@ -18,7 +18,7 @@ When sources disagree, use this order:
 
 - [System overview](system-overview.md) — layers, dependency direction, component diagram, and source anchors.
 - [Indexing and structural chunking](indexing-and-chunking.md) — scan, parsing, identities, exact spans, chunks, embeddings, and atomic replacement.
-- [SQLite persistence](sqlite-persistence.md) — legacy `0000`–`0006`, candidate `0007`, clean v2 `0000`–`0004`, generations, transactions, FTS, vectors, and identity.
+- [SQLite persistence](sqlite-persistence.md) — the single clean-v2 application catalog, historical schemas, transactions, FTS, vectors, and identity.
 - [Retrieval](retrieval.md) — text, semantic, hybrid RRF, degradation, and the reranking boundary.
 - [Images](assets.md) — Markdown text projection versus explicit direct-image ingestion.
 - [Public interfaces](public-interfaces.md) — CLI capability matrix, embedded engine, class/port diagram, and DTO boundaries.
@@ -45,8 +45,8 @@ When sources disagree, use this order:
 - [v0.3 compatibility registry](../compatibility/v0.3-compatibility-registry.md)
 - [v0.3 release evidence](../evidence/v0.3-release-gate.md)
 - [W5-B13 SQLite envelope](../evaluation/w5-sqlite-envelope.md)
-- [Recovery and migration procedures](../recovery.md)
 - [Windows executable build](../windows-exe-build.md)
+- [One-store acceptance evidence](../one-store-acceptance.md) — bounded fixture runner, safe lifecycle evidence, and installed-wheel boundary.
 - [Offline release verification](../offline-release-verification.md) and [W5-CI contract](../contracts/v0.4-w5-ci-contract.md)
 - [v0.4 offline release-candidate packet](../evidence/v0.4-release-packet.md) and [public-surface compatibility ledger](../compatibility/v0.4-public-surface-ledger.json)
 
@@ -63,3 +63,7 @@ The older [architecture](../architecture.md),
 [storage design](../storage-design.md), and
 [retrieval design](../retrieval-design.md) documents are retained as historical
 context and route maintainers back to this package.
+
+[Store recovery](../recovery.md) documents the current fixed
+`catalog.sqlite3` operational boundary. It does not prescribe a generation,
+candidate, activation, rollback, retention, or old-store migration procedure.

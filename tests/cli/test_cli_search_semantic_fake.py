@@ -1,151 +1,58 @@
-"""Tests for CLI semantic search with fake embedding provider."""
+"""CLI semantic and hybrid search contracts over the canonical catalog."""
 
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 from click.testing import CliRunner
 
 from mdrack.cli import main
-from mdrack.config.models import MDRackConfig
 from mdrack.domain.indexing import SourceLocator
 from mdrack.domain.retrieval import RetrievalItem, RetrievalResult
 from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.embeddings.runtime import embedding_profile_from_config
-from mdrack.storage.sqlite.connection import get_connection
-from mdrack.storage.sqlite.migrations import apply_migrations
-
-_MIGRATIONS_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "mdrack"
-    / "storage"
-    / "sqlite"
-    / "migrations"
-)
 
 
-def _embed_text(text: str, dims: int) -> list[float]:
-    provider = FakeEmbeddingProvider(dimensions=dims, provider_name="test")
-    return provider._text_to_vector(text)
+def _write_fixture(root: Path) -> None:
+    (root / "python.md").write_text(
+        "# Python\n\nPython is a high-level programming language.\n",
+        encoding="utf-8",
+    )
+    (root / "javascript.md").write_text(
+        "# JavaScript\n\nJavaScript is a scripting language for the web.\n",
+        encoding="utf-8",
+    )
 
 
-def _seed_semantic_data(conn: sqlite3.Connection) -> None:
-    profile = embedding_profile_from_config(
-        MDRackConfig(),
-        FakeEmbeddingProvider(dimensions=1024),
-        "default",
-    )
-    conn.execute(
-        "INSERT INTO files (id, relative_path, source_hash, indexed_at) "
-        "VALUES (?, ?, ?, ?)",
-        ("file-001", "docs/python.md", "hash-aaa", "2024-01-01T00:00:00Z"),
-    )
-    conn.execute(
-        "INSERT INTO files (id, relative_path, source_hash, indexed_at) "
-        "VALUES (?, ?, ?, ?)",
-        ("file-002", "docs/javascript.md", "hash-bbb", "2024-01-01T00:00:00Z"),
-    )
-    conn.execute(
-        "INSERT INTO sections (id, file_id, title, level, start_line, end_line) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        ("section-001", "file-001", "Python Intro", 1, 1, 50),
-    )
-    conn.execute(
-        "INSERT INTO chunks (id, file_id, section_id, content, content_type, chunk_index) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            "chunk-001",
-            "file-001",
-            "section-001",
-            "Python is a high-level programming language.",
-            "text",
-            0,
-        ),
-    )
-    conn.execute(
-        "INSERT INTO chunks (id, file_id, content, content_type, chunk_index) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (
-            "chunk-002",
-            "file-002",
-            "JavaScript is a scripting language for the web.",
-            "text",
-            0,
-        ),
-    )
-    conn.execute(
-        "INSERT INTO embedding_profiles (name, model, dimensions, endpoint, fingerprint) "
-        "VALUES (?, ?, ?, ?, ?)",
-        ("default", "fake-hash-v1", 1024, "", profile.fingerprint),
-    )
-    # Seed embeddings with vectors derived from the same query text
-    # so the fake provider finds matching results.
-    vector_python = _embed_text("Python programming language", 1024)
-    conn.execute(
-        "INSERT INTO chunk_embeddings "
-        "(chunk_id, profile_name, embedding, embedded_at, profile_fingerprint) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (
-            "chunk-001",
-            "default",
-            json.dumps(vector_python).encode("utf-8"),
-            "2024-01-01T00:00:00Z",
-            profile.fingerprint,
-        ),
-    )
-    vector_js = _embed_text("JavaScript web scripting", 1024)
-    conn.execute(
-        "INSERT INTO chunk_embeddings "
-        "(chunk_id, profile_name, embedding, embedded_at, profile_fingerprint) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (
-            "chunk-002",
-            "default",
-            json.dumps(vector_js).encode("utf-8"),
-            "2024-01-01T00:00:00Z",
-            profile.fingerprint,
-        ),
-    )
-    conn.commit()
+def _index_fixture(root: Path) -> None:
+    _write_fixture(root)
+    result = CliRunner().invoke(main, ["--root", str(root), "scan", "--provider", "fake"])
+    assert result.exit_code == 0, result.output
+    assert (root / ".mdrack" / "catalog.sqlite3").is_file()
 
 
-def _setup_db(tmp_path: Path, with_data: bool = True) -> Path:
-    store_dir = tmp_path / ".mdrack"
-    store_dir.mkdir()
-    db_path = store_dir / "knowledge.db"
-    conn = get_connection(db_path)
-    try:
-        apply_migrations(conn, _MIGRATIONS_DIR)
-        if with_data:
-            _seed_semantic_data(conn)
-    finally:
-        conn.close()
-    return db_path
+def _search(root: Path, query: str, mode: str) -> tuple[int, dict[str, object]]:
+    result = CliRunner().invoke(
+        main,
+        ["--root", str(root), "search", query, "--mode", mode, "--provider", "fake"],
+    )
+    return result.exit_code, json.loads(result.output)
 
 
 def test_hybrid_zero_semantic_weight_does_not_create_provider(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _setup_db(tmp_path)
+    _index_fixture(tmp_path)
     config_path = tmp_path / "config.toml"
-    config_path.write_text(
-        "[search]\ntext_weight = 1.0\nsemantic_weight = 0.0\n",
-        encoding="utf-8",
-    )
+    config_path.write_text("[search]\ntext_weight = 1.0\nsemantic_weight = 0.0\n", encoding="utf-8")
 
-    def forbidden_provider(*args, **kwargs):
+    def forbidden_provider(*args: object, **kwargs: object) -> object:
         del args, kwargs
         raise AssertionError("semantic provider must not be created")
 
-    monkeypatch.setattr(
-        "mdrack.cli.commands.search.create_embedding_provider",
-        forbidden_provider,
-    )
+    monkeypatch.setattr("mdrack.cli.commands.search.create_embedding_provider", forbidden_provider)
     result = CliRunner().invoke(
         main,
         [
@@ -165,108 +72,92 @@ def test_hybrid_zero_semantic_weight_does_not_create_provider(
 
 
 def test_semantic_search_returns_valid_json(tmp_path: Path) -> None:
-    _setup_db(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "--root", str(tmp_path),
-            "search", "Python",
-            "--mode", "semantic",
-            "--provider", "fake",
-        ],
-    )
-    assert result.exit_code == 0, f"search failed: {result.output}"
-    payload = json.loads(result.output)
-    assert payload["ok"] is True
-    assert "data" in payload
-    assert "meta" in payload
-    assert payload["data"]["mode"] == "semantic"
-    assert len(payload["data"]["results"]) > 0
+    _index_fixture(tmp_path)
 
+    exit_code, payload = _search(tmp_path, "Python", "semantic")
 
-def test_semantic_search_output_format(tmp_path: Path) -> None:
-    _setup_db(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "--root", str(tmp_path),
-            "search", "Python",
-            "--mode", "semantic",
-            "--provider", "fake",
-        ],
-    )
-    assert result.exit_code == 0, f"search failed: {result.output}"
-    payload = json.loads(result.output)
+    assert exit_code == 0
     assert payload["ok"] is True
     data = payload["data"]
-    assert "query" in data
-    assert data["query"] == "Python"
-    assert "mode" in data
-    assert "results" in data
-    assert "total_count" in data
-    for item in data["results"]:
-        assert "chunk_id" in item
-        assert "score" in item
-        assert "content_preview" in item
-        assert "file" in item
+    assert isinstance(data, dict)
+    assert data["mode"] == "semantic"
+    assert data["results"]
 
 
-def test_semantic_search_top_result_is_relevant(tmp_path: Path) -> None:
-    _setup_db(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "--root", str(tmp_path),
-            "search", "Python programming language",
-            "--mode", "semantic",
-            "--provider", "fake",
-        ],
+def test_semantic_search_output_format_has_portable_locator(tmp_path: Path) -> None:
+    _index_fixture(tmp_path)
+
+    exit_code, payload = _search(tmp_path, "Python", "semantic")
+
+    assert exit_code == 0
+    data = payload["data"]
+    assert isinstance(data, dict)
+    assert set(data) == {
+        "query",
+        "mode",
+        "results",
+        "total_count",
+        "degraded",
+        "degraded_reason",
+    }
+    results = data["results"]
+    assert isinstance(results, list) and results
+    item = results[0]
+    assert isinstance(item, dict)
+    assert item["logical_id"] == item["chunk_id"]
+    assert isinstance(item["content_preview"], str)
+    locator = item["source_locator"]
+    assert isinstance(locator, dict)
+    assert locator["relative_path"].endswith(".md")
+
+
+def test_semantic_search_top_result_is_relevant(tmp_path: Path, monkeypatch) -> None:
+    class KeywordProvider(FakeEmbeddingProvider):
+        def _text_to_vector(self, text: str) -> list[float]:
+            return [1.0, 0.0] if "python" in text.casefold() else [0.0, 1.0]
+
+    _write_fixture(tmp_path)
+    monkeypatch.setattr(
+        "mdrack.cli.commands.scan._create_provider",
+        lambda *_args, **_kwargs: KeywordProvider(dimensions=2),
     )
-    assert result.exit_code == 0
-    payload = json.loads(result.output)
-    assert payload["ok"] is True
-    results = payload["data"]["results"]
-    assert len(results) > 0
-    top_score = results[0]["score"]
-    # When query text matches the embedding source text, cosine similarity = 1.0
-    assert top_score > 0.99, f"Expected near-1.0 score, got {top_score}"
-
-
-def test_semantic_search_with_no_embeddings(tmp_path: Path) -> None:
-    _setup_db(tmp_path, with_data=False)
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "--root", str(tmp_path),
-            "search", "Python",
-            "--mode", "semantic",
-            "--provider", "fake",
-        ],
+    monkeypatch.setattr(
+        "mdrack.cli.commands.search.create_embedding_provider",
+        lambda *_args, **_kwargs: KeywordProvider(dimensions=2),
     )
-    assert result.exit_code == 0, f"search failed: {result.output}"
-    payload = json.loads(result.output)
-    assert payload["ok"] is True
-    assert len(payload["data"]["results"]) == 0
-    assert payload["data"]["total_count"] == 0
+    scan = CliRunner().invoke(main, ["--root", str(tmp_path), "scan", "--provider", "fake"])
+    assert scan.exit_code == 0, scan.output
+
+    exit_code, payload = _search(tmp_path, "Python programming language", "semantic")
+
+    assert exit_code == 0
+    data = payload["data"]
+    assert isinstance(data, dict)
+    results = data["results"]
+    assert isinstance(results, list) and results
+    assert results[0]["file"] == "python.md"
+    assert isinstance(results[0]["semantic_score"], float)
 
 
-def test_semantic_search_no_db(tmp_path: Path) -> None:
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "--root", str(tmp_path),
-            "search", "Python",
-            "--mode", "semantic",
-            "--provider", "fake",
-        ],
-    )
-    assert result.exit_code == 1
-    payload = json.loads(result.output)
+def test_semantic_search_with_empty_catalog_returns_safe_embedding_error(tmp_path: Path) -> None:
+    scan = CliRunner().invoke(main, ["--root", str(tmp_path), "scan", "--provider", "fake"])
+    assert scan.exit_code == 0, scan.output
+
+    exit_code, payload = _search(tmp_path, "Python", "semantic")
+
+    assert exit_code == 0
+    assert payload["ok"] is False
+    assert payload["error"] == {
+        "message": "Semantic search failed",
+        "code": "EMBEDDING_ERROR",
+        "details": {"reason": "incompatible_embedding_profile"},
+    }
+
+
+def test_semantic_search_no_catalog(tmp_path: Path) -> None:
+    exit_code, payload = _search(tmp_path, "Python", "semantic")
+
+    assert exit_code == 1
     assert payload["ok"] is False
     assert "not found" in payload["error"]["message"].lower()
 
@@ -275,8 +166,8 @@ def test_hybrid_search_reports_degraded_mode(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _setup_db(tmp_path)
-    locator = SourceLocator("root", "docs/python.md", 1, 2, (), "block", "chunk-001")
+    _index_fixture(tmp_path)
+    locator = SourceLocator("root", "python.md", 1, 2, (), "block", "chunk-001")
     monkeypatch.setattr(
         "mdrack.cli.commands.search.RetrievalService.search_hybrid",
         AsyncMock(
@@ -302,19 +193,11 @@ def test_hybrid_search_reports_degraded_mode(
         ),
     )
 
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "--root", str(tmp_path),
-            "search", "Python",
-            "--mode", "hybrid",
-            "--provider", "fake",
-        ],
-    )
+    exit_code, payload = _search(tmp_path, "Python", "hybrid")
 
-    assert result.exit_code == 0, f"search failed: {result.output}"
-    payload = json.loads(result.output)
+    assert exit_code == 0
     assert payload["ok"] is True
-    assert payload["data"]["degraded"] is True
-    assert payload["data"]["degraded_reason"] == "embedding_provider_error"
+    data = payload["data"]
+    assert isinstance(data, dict)
+    assert data["degraded"] is True
+    assert data["degraded_reason"] == "embedding_provider_error"

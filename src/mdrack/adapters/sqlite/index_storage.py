@@ -9,29 +9,26 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mdrack.domain.indexing import PreparedFile, SourceLocator, StoredChunk
 from mdrack.domain.profiles import EmbeddingProfile, IncompatibleEmbeddingProfileError
 from mdrack.domain.retrieval import RetrievalCandidate
 from mdrack.indexing.change_detector import detect_changes
 from mdrack.search.text import TextSearchResult, text_search
-from mdrack.storage.sqlite.connection import get_connection
-from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
 from mdrack.storage.sqlite.vector import VectorIndex
+
+if TYPE_CHECKING:
+    from mdrack.application.compatibility import CoreCompatibilityStorage
 
 logger = logging.getLogger(__name__)
 
 
-def create_sqlite_index_storage(root: Path, config: Any) -> SQLiteIndexStorage:
-    """Compose the default SQLite adapter outside the application layer."""
-    resolved_root = root.resolve()
-    store_path = Path(config.paths.store)
-    store_dir = store_path if store_path.is_absolute() else resolved_root / store_path
-    store_dir.mkdir(parents=True, exist_ok=True)
-    connection = get_connection(store_dir / "knowledge.db")
-    apply_migrations(connection, get_migrations_dir())
-    return SQLiteIndexStorage(connection, owns_connection=True)
+def create_sqlite_index_storage(root: Path, config: Any) -> CoreCompatibilityStorage:
+    """Retain the factory name while opening only the fixed v2 catalog."""
+    from mdrack.application.compatibility import create_application_storage
+
+    return create_application_storage(root.resolve(), config, create=True)
 
 
 class SQLiteIndexStorage:

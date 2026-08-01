@@ -367,7 +367,27 @@ class TestLMStudioProviderEmbedQuery:
 
         # Verify the payload sent to the API
         payload = clients[0].calls[0][1]["json"]
-        assert payload["input"] == ["Represent this document for retrieval: hello"]
+        assert payload["input"] == ["Represent the query for retrieval: hello"]
+
+    @pytest.mark.asyncio
+    async def test_embed_query_uses_the_configured_instruction(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = LMStudioProvider(
+            endpoint="http://localhost:1234",
+            model="test-model",
+            dimensions=128,
+            query_instruction="Search vector",
+        )
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": [{"embedding": [0.1] * 128, "index": 0}]}
+        mock_response.raise_for_status = MagicMock()
+        clients = _patch_async_client(monkeypatch, response=mock_response)
+
+        await provider.embed_query("hello")
+
+        payload = clients[0].calls[0][1]["json"]
+        assert payload["input"] == ["Search vector: hello"]
 
     @pytest.mark.asyncio
     async def test_embed_query_returns_single_vector(

@@ -1,28 +1,18 @@
-"""MDRack 1.1 manifest parity through the embedded engine and CLI."""
+"""Prepared-resource parity through the embedded engine and configured CLI."""
 
 from __future__ import annotations
 
 import json
 import socket
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
 
 from mdrack.cli import main
 from mdrack.config.models import MDRackConfig
-from mdrack.ports.storage import KnowledgeStorage
 from mdrack.public_api import MDRackEngine
-from mdrack_sqlite import SQLiteCatalog
-
-
-class _EngineStorage:
-    def __init__(self, catalog: SQLiteCatalog) -> None:
-        self.resource_store = catalog
-
-    def close(self) -> None:
-        self.resource_store.close()
 
 
 def _manifest() -> bytes:
@@ -95,86 +85,62 @@ def test_engine_and_cli_manifest_round_trip_are_byte_identical_and_offline(
         raise AssertionError("network access is forbidden")
 
     monkeypatch.setattr(socket, "create_connection", blocked_network)
-    catalog_path = tmp_path / "catalog.sqlite3"
-    restored_path = tmp_path / "restored.sqlite3"
+    root = tmp_path / "project"
+    restored_root = tmp_path / "restored"
+    root.mkdir()
+    restored_root.mkdir()
     export_path = tmp_path / "export.json"
     redacted_path = tmp_path / "redacted.json"
     lexical_path = tmp_path / "lexical.json"
-    SQLiteCatalog.create(catalog_path).close()
-    SQLiteCatalog.create(restored_path).close()
+    runner = CliRunner()
+    assert runner.invoke(main, ["--root", str(root), "init"]).exit_code == 0
+    assert runner.invoke(main, ["--root", str(restored_root), "init"]).exit_code == 0
 
-    engine = MDRackEngine(
-        root=tmp_path,
-        config=MDRackConfig(),
-        storage=cast(KnowledgeStorage, _EngineStorage(SQLiteCatalog.open(catalog_path))),
-    )
+    engine = MDRackEngine(root=root, config=MDRackConfig())
     try:
         imported = engine.import_resource_manifest(_manifest()).to_dict()
         api_payload = engine.export_resource_manifest("video-1")
     finally:
         engine.close()
 
-    cli_export = CliRunner().invoke(
+    cli_export = runner.invoke(
+        main,
+        ["--root", str(root), "resource", "export", "video-1", "--output", str(export_path)],
+    )
+    cli_import = runner.invoke(
+        main,
+        ["--root", str(restored_root), "resource", "import", str(export_path)],
+    )
+    cli_redacted = runner.invoke(
         main,
         [
+            "--root",
+            str(root),
             "resource",
             "export",
             "video-1",
-            "--catalog",
-            str(catalog_path),
-            "--output",
-            str(export_path),
-        ],
-    )
-    cli_import = CliRunner().invoke(
-        main,
-        [
-            "resource",
-            "import",
-            str(export_path),
-            "--catalog",
-            str(restored_path),
-        ],
-    )
-
-    cli_redacted = CliRunner().invoke(
-        main,
-        [
-            "resource",
-            "export",
-            "video-1",
-            "--catalog",
-            str(catalog_path),
             "--output",
             str(redacted_path),
             "--redact-source-metadata",
         ],
     )
-    cli_lexical = CliRunner().invoke(
+    cli_lexical = runner.invoke(
         main,
         [
+            "--root",
+            str(root),
             "resource",
             "export",
             "video-1",
-            "--catalog",
-            str(catalog_path),
             "--output",
             str(lexical_path),
             "--no-vectors",
         ],
     )
     redacted_bytes = redacted_path.read_bytes()
-    cli_collision = CliRunner().invoke(
+    cli_collision = runner.invoke(
         main,
-        [
-            "resource",
-            "export",
-            "video-1",
-            "--catalog",
-            str(catalog_path),
-            "--output",
-            str(redacted_path),
-        ],
+        ["--root", str(root), "resource", "export", "video-1", "--output", str(redacted_path)],
     )
 
     assert cli_export.exit_code == cli_import.exit_code == 0
@@ -188,9 +154,7 @@ def test_engine_and_cli_manifest_round_trip_are_byte_identical_and_offline(
     assert json.loads(cli_lexical.stdout)["data"]["counts"]["spaces"] == 0
     assert json.loads(lexical_path.read_bytes())["vectors"] == []
     assert json.loads(lexical_path.read_bytes())["spaces"] == []
-    assert json.loads(redacted_bytes)["resource"]["metadata"] == {
-        "ingestion": {"adapter": "fixture"}
-    }
+    assert json.loads(redacted_bytes)["resource"]["metadata"] == {"ingestion": {"adapter": "fixture"}}
     assert b"PRIVATE_METADATA_SENTINEL" not in redacted_bytes
     assert cli_collision.exit_code == 1
     assert json.loads(cli_collision.stdout)["error"] == {
@@ -215,11 +179,7 @@ def test_engine_and_cli_manifest_round_trip_are_byte_identical_and_offline(
     assert "PRIVATE_" not in captured
     assert str(tmp_path) not in captured
 
-    restored_engine = MDRackEngine(
-        root=tmp_path,
-        config=MDRackConfig(),
-        storage=cast(KnowledgeStorage, _EngineStorage(SQLiteCatalog.open(restored_path))),
-    )
+    restored_engine = MDRackEngine(root=restored_root, config=MDRackConfig())
     try:
         assert restored_engine.export_resource_manifest("video-1") == api_payload
     finally:

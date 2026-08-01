@@ -65,6 +65,23 @@ claims none of the following: LM Studio/provider behavior, OCR/Whisper/VLM
 quality, real-source or real-vault behavior, visual/acoustic quality, or external
 runtime behavior.
 
+## One-store acceptance evidence
+
+The canonical fixed-catalog acceptance runner is separate from the W5 historical
+packet. It uses the versioned `one_store_v1` synthetic fixture, preserves fixture
+source hashes, keeps only bounded `latest/` evidence, validates a temporary
+installed-wheel target, and scans its summary/log/manifest for privacy sentinels.
+
+```bash
+evidence_root="$(mktemp -d /tmp/mdrack-one-store-evidence.XXXXXX)"
+uv run python scripts/run_one_store_acceptance.py --evidence-root "$evidence_root"
+```
+
+The result is local/offline Linux evidence only. It does not contact a provider
+or prove real source, Windows, package publication, or live external behavior.
+See [one-store acceptance evidence](one-store-acceptance.md) for the exact
+artifact layout, lifecycle-event schema, and development-only skip flag.
+
 ## Strict gates
 
 Run these gates after frozen offline installation, in order. All are fail-closed:

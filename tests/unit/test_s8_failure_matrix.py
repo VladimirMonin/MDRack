@@ -6,6 +6,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock
 
 import click
 import pytest
@@ -15,12 +16,9 @@ from mdrack.cli import main
 from mdrack.eval.privacy import build_safe_diagnostic_record, scan_privacy
 from mdrack.eval.retrieval import EvalReport
 from mdrack.output.errors import EmbeddingError
-from mdrack.storage.sqlite.connection import get_connection
-from mdrack.storage.sqlite.migrations import apply_migrations
 
 pytestmark = pytest.mark.privacy
 
-MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "src" / "mdrack" / "storage" / "sqlite" / "migrations"
 SENTINELS = [
     "QUERY_SENTINEL",
     "CONTENT_SENTINEL",
@@ -53,13 +51,8 @@ def _assert_safe(payload: object) -> None:
 
 
 def _setup_db(root: Path) -> None:
-    store_dir = root / ".mdrack"
-    store_dir.mkdir(exist_ok=True)
-    conn = get_connection(store_dir / "knowledge.db")
-    try:
-        apply_migrations(conn, MIGRATIONS_DIR)
-    finally:
-        conn.close()
+    result = CliRunner().invoke(main, ["--root", str(root), "init"])
+    assert result.exit_code == 0, result.output
 
 
 def _assert_fixed_cli_error(result: object, expected: dict[str, str]) -> dict[str, object]:
@@ -119,12 +112,8 @@ def test_explicit_config_failures_use_one_fixed_private_safe_envelope(
 @pytest.mark.parametrize(
     ("command", "patch_target", "expected"),
     [
-        ("status", "mdrack.diagnostics.integrity.get_generation_status", _FIXED_STATUS_ERROR),
-        ("status", "mdrack.diagnostics.integrity.get_store_status", _FIXED_STATUS_ERROR),
-        ("status", "mdrack.storage.sqlite.connection.get_read_only_connection", _FIXED_STATUS_ERROR),
-        ("doctor", "mdrack.storage.sqlite.connection.get_read_only_connection", _FIXED_DOCTOR_ERROR),
-        ("doctor", "mdrack.diagnostics.doctor.run_doctor", _FIXED_DOCTOR_ERROR),
-        ("doctor", "mdrack.diagnostics.doctor.report_to_dict", _FIXED_DOCTOR_ERROR),
+        ("status", "mdrack.cli._build_status_data", _FIXED_STATUS_ERROR),
+        ("doctor", "mdrack.cli._build_doctor_data", _FIXED_DOCTOR_ERROR),
     ],
 )
 def test_status_and_doctor_internal_boundaries_use_fixed_private_safe_errors(
@@ -254,10 +243,12 @@ def test_eval_load_storage_internal_and_cleanup_failures_are_fixed_and_safe(
         lambda *args, **kwargs: ClosingProvider(),
     )
     monkeypatch.setattr(
-        "mdrack.cli.commands.eval.run_retrieval_eval",
-        lambda *args, **kwargs: EvalReport(
+        "mdrack.cli.commands.eval._evaluate",
+        AsyncMock(
+            return_value=EvalReport(
             results=[],
             summary={"queries_total": 0, "private_summary": "CONTENT_SENTINEL"},
+            )
         ),
     )
     with caplog.at_level(logging.INFO):
@@ -269,8 +260,8 @@ def test_eval_load_storage_internal_and_cleanup_failures_are_fixed_and_safe(
     assert cleanup_result.output.count("\n") == 1
 
     monkeypatch.setattr(
-        "mdrack.cli.commands.eval.run_retrieval_eval",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("PRIVATE_EXCEPTION_SENTINEL")),
+        "mdrack.cli.commands.eval._evaluate",
+        AsyncMock(side_effect=RuntimeError("PRIVATE_EXCEPTION_SENTINEL")),
     )
     internal_result = CliRunner().invoke(
         main,

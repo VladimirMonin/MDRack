@@ -1,0 +1,93 @@
+{
+  "schema": "mdrack.one-store-fixture.v1",
+  "fixture_version": "1.0.0",
+  "phase": "input_freeze",
+  "provenance": {
+    "classification": "synthetic",
+    "license_spdx": "CC0-1.0",
+    "pii_status": "reviewed_no_pii",
+    "generator_policy": "committed deterministic source and prepared derived artifacts; no runtime extraction",
+    "candidate_results_allowed": false
+  },
+  "payload_sha256": {
+    "images/image-copy.png": "sha256:e77617115ffe6399c0f4714c72aa32eefeb22fbdf45b1167a4ddb64e213b4007",
+    "images/image.png": "sha256:e77617115ffe6399c0f4714c72aa32eefeb22fbdf45b1167a4ddb64e213b4007",
+    "markdown/note.md": "sha256:13146ccfca2c775ec2ef9e555df5e704b8de0f12f31bd92529acc0c9dcc45c0a",
+    "markdown/post-init.md": "sha256:5d2dd88c5b686b6958c698fd5fe1629f1bd6ee3c7643d9dce388172cdd5419fc",
+    "prepared/image-caption-ocr.json": "sha256:b51b4f42e53bc56377dafa6166898364cf869e995bc5a42e624f35e55df78fa6",
+    "privacy-sentinels.json": "sha256:3b6aa1446f10a8837fdb3c070fe3e44680b413231c46fbd8eea307dc856b2f9b",
+    "queries.json": "sha256:0eab06e99bac68ca03b40dbc35540868eb3968c4e9ba0c015280d33d0c7ff414",
+    "transcripts/audio-near.whisper.json": "sha256:0decb5a36aa14c0c5939d3bf431a27cc7f00cf4bf007d039c9d539de5c782e51",
+    "transcripts/audio.whisper.json": "sha256:fa266eb6e8ffd31e3e6b80dea396e9a0dd143110c6d3fd8f0c8d847b7289add1",
+    "video/video-resource-near.json": "sha256:c1a0e027dfabf1b5fd4e82c797f3088399d97caca0a4b788ccc9b5da9862e334",
+    "video/video-resource.json": "sha256:fe0538a94e4bcb93bf2831c7cc427a9e40427b35819af36964b18c0bd9a4d947"
+  },
+  "topology": {
+    "store_relative_path": ".mdrack/catalog.sqlite3",
+    "allowed_sqlite_files_after_first_write": ["catalog.sqlite3"],
+    "forbidden_paths": [
+      ".mdrack/knowledge.db",
+      ".mdrack/active-generation.json",
+      ".mdrack/generations"
+    ],
+    "forbidden_lifecycle_terms": ["candidate", "activate", "rollback", "retention", "predecessor"],
+    "reserved_sqlite_main_suffixes": [".db", ".sqlite", ".sqlite3"]
+  },
+  "public_surface_ledger": {
+    "retained_cli_paths": [
+      "init", "scan", "search", "ingest", "ingest transcript", "ingest video",
+      "image", "image ingest", "image search", "image delete",
+      "metadata", "metadata show", "metadata facets", "metadata projection-check",
+      "cache", "cache status", "cache verify", "cache purge",
+      "resources", "resources duplicates", "resources similar", "resources search", "resources facets",
+      "find-similar", "similar", "facets", "read", "read chunk", "read file", "read outline",
+      "resource", "resource import", "resource export", "resource inspect", "resource delete",
+      "eval", "eval retrieval", "files", "files list", "files info",
+      "model", "model list", "model loaded", "model download", "model download-status",
+      "model load", "model unload", "model switch",
+      "status", "doctor", "rebuild", "rebuild fts", "rebuild embeddings", "benchmark", "storage-analyze"
+    ],
+    "removed_cli_paths": [
+      "sections", "storage", "storage rebuild-fresh", "storage verify", "storage activate"
+    ],
+    "retained_engine_methods": [
+      "analyze_storage", "close", "delete_image", "delete_resource", "export_resource_manifest",
+      "export_resource_manifest_file", "find_resource_duplicates", "find_similar_resource", "find_similar_resources", "find_textually_similar_resources",
+      "get_chunk", "get_chunk_source_locator", "get_file_by_path", "get_file_outline", "get_resource_metadata",
+      "import_resource_manifest", "inspect_resource", "ingest_image", "ingest_transcript", "ingest_video", "list_metadata_facets",
+      "scan", "search_hybrid", "search_images_hybrid", "search_images_semantic", "search_images_text",
+      "search_resource_content", "search_resources_text", "search_semantic", "search_text", "search_transcripts", "search_unified"
+    ],
+    "removed_engine_methods": [],
+    "catalog_backed_cli_paths": [
+      "status", "doctor", "search", "files list", "files info", "read file", "read chunk", "read outline",
+      "resource import", "resource export", "resource inspect", "resource delete", "eval retrieval", "metadata show", "metadata facets", "resources duplicates", "resources search", "resources facets",
+      "find-similar", "image search", "rebuild fts", "benchmark", "storage-analyze"
+    ],
+    "catalog_backed_engine_methods": [
+      "search_text", "search_semantic", "search_hybrid", "search_unified", "get_file_by_path", "get_file_outline", "get_chunk",
+      "get_chunk_source_locator", "get_resource_metadata", "import_resource_manifest", "export_resource_manifest",
+      "export_resource_manifest_file", "inspect_resource", "delete_resource", "list_metadata_facets", "search_resources_text",
+      "find_resource_duplicates", "find_similar_resource", "analyze_storage"
+    ],
+    "normal_application_forbidden_options": ["--catalog"],
+    "normal_application_forbidden_storage_subcommands": ["rebuild-fresh", "verify", "activate"]
+  },
+  "similarity_contract": {
+    "space_kind": "app_owned_textual_embedding_space",
+    "source_kinds": ["document", "image", "audio", "video_with_frame_text"],
+    "required_cells": 16,
+    "exact_target_rank": 1,
+    "raw_media_nonclaim": ["pixel", "waveform", "decoded_frame", "motion", "acoustic", "visual"]
+  },
+  "source_mutation_policy": {
+    "copy_inputs_to_tmp_path": true,
+    "must_preserve_sha256": true,
+    "runtime_extraction_forbidden": ["ocr", "stt", "frame_extraction", "network", "lmstudio"]
+  },
+  "privacy_policy": {
+    "forbidden_surfaces": ["stdout", "stderr", "logs", "diagnostics", "evidence"],
+    "sentinel_file": "privacy-sentinels.json"
+  },
+  "manifest_self_hash": "excluded_to_avoid_self_reference"
+}

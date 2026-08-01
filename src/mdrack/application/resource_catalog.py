@@ -446,6 +446,100 @@ def _remove_owned_temporary(path: Path | None) -> None:
         pass
 
 
+def inspect_resource(catalog: object, resource_id: str) -> ResourceInspection:
+    """Inspect one resource through the structural catalog contract used by the engine."""
+    try:
+        reader = cast(object, catalog)
+        resource = reader.read_resource(resource_id)  # type: ignore[attr-defined]
+        if resource is None:
+            raise ResourceCatalogError(ResourceCatalogErrorCode.RESOURCE_NOT_FOUND)
+        connection = reader.connection  # type: ignore[attr-defined]
+        representations = connection.execute(
+            "SELECT representation_kind,modality,producer_fingerprint "
+            "FROM core_representations WHERE resource_id=? ORDER BY representation_id",
+            (resource_id,),
+        ).fetchall()
+        units = connection.execute(
+            "SELECT unit_kind,modality FROM core_search_units "
+            "WHERE resource_id=? ORDER BY unit_id",
+            (resource_id,),
+        ).fetchall()
+        spaces = connection.execute(
+            "SELECT DISTINCT s.fingerprint FROM core_embedding_spaces s "
+            "JOIN core_unit_embeddings e ON e.space_id=s.space_id "
+            "JOIN core_search_units u ON u.unit_id=e.unit_id "
+            "WHERE u.resource_id=? ORDER BY s.fingerprint",
+            (resource_id,),
+        ).fetchall()
+        vector_count = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM core_unit_embeddings e "
+                "JOIN core_search_units u ON u.unit_id=e.unit_id WHERE u.resource_id=?",
+                (resource_id,),
+            ).fetchone()[0]
+        )
+        facet_rows = connection.execute(
+            "SELECT producer_value FROM core_resource_facets "
+            "WHERE resource_id=? ORDER BY facet_id,origin,producer_value",
+            (resource_id,),
+        ).fetchall()
+        producers = {
+            row["producer_fingerprint"]
+            for row in representations
+            if row["producer_fingerprint"] is not None
+        }
+        producers.update(row["producer_value"] for row in facet_rows if row["producer_value"] is not None)
+        return ResourceInspection(
+            resource_id=resource.resource_id,
+            resource_kind=resource.resource_kind,
+            media_type=resource.media_type,
+            locator={
+                "kind": resource.locator.kind,
+                "fingerprint": _locator_fingerprint(resource.locator.payload),
+            },
+            counts={
+                "representations": len(representations),
+                "units": len(units),
+                "spaces": len(spaces),
+                "vectors": vector_count,
+                "facets": len(facet_rows),
+            },
+            kinds={
+                "representations": sorted({row["representation_kind"] for row in representations}),
+                "modalities": sorted(
+                    {row["modality"] for row in representations}
+                    | {row["modality"] for row in units}
+                ),
+                "units": sorted({row["unit_kind"] for row in units}),
+            },
+            fingerprints={
+                "content": (
+                    _safe_fingerprint(resource.content_hash)
+                    if resource.content_hash is not None
+                    else None
+                ),
+                "producers": sorted(_safe_fingerprint(value) for value in producers),
+                "spaces": sorted(_safe_fingerprint(row["fingerprint"]) for row in spaces),
+            },
+        )
+    except ResourceCatalogError:
+        raise
+    except Exception:
+        raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
+
+
+def delete_resource(catalog: object, resource_id: str) -> ResourceDeleteResult:
+    """Delete one resource through the structural catalog contract used by the engine."""
+    try:
+        reader = cast(object, catalog)
+        deleted = reader.read_resource(resource_id) is not None  # type: ignore[attr-defined]
+        if deleted:
+            reader.delete_resource(resource_id)  # type: ignore[attr-defined]
+        return ResourceDeleteResult(resource_id=resource_id, deleted=deleted)
+    except Exception:
+        raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
+
+
 class PreparedResourceExportService:
     """Reconstruct one persisted graph and encode the existing manifest-v1 contract."""
 

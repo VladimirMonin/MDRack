@@ -72,7 +72,7 @@ def test_status_schema_contains_endpoint_booleans_but_no_endpoint_values(tmp_pat
     assert result.output.count("\n") == 1
     payload = json.loads(result.output)
     assert set(payload["data"]) == {
-        "generation_state",
+        "catalog_state",
         "files_count",
         "chunks_count",
         "embeddings_count",
@@ -87,6 +87,7 @@ def test_status_schema_contains_endpoint_booleans_but_no_endpoint_values(tmp_pat
         "schema_version",
     }
     assert payload["data"]["endpoint_configured"] is True
+    assert payload["data"]["catalog_state"] == "missing"
     assert payload["data"]["endpoint_profile_recorded"] is False
     assert payload["data"]["endpoint_match"] is None
     _assert_private_sentinels_absent(payload)
@@ -120,14 +121,8 @@ def test_doctor_serializer_fails_closed_to_allowlisted_details_and_fixed_message
         {
             "severity": "warning",
             "code": "PROFILE_CONFIG_MISMATCH",
-            "message": "Embedding profile metadata does not match the current configuration",
-            "details": {
-                "profile": "default",
-                "configured_model": "safe-model-a",
-                "profile_model": "safe-model-b",
-                "configured_dimensions": 8,
-                "profile_dimensions": 12,
-            },
+            "message": "Diagnostic check completed",
+            "details": {},
         }
     ]
     _assert_private_sentinels_absent(payload)

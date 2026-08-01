@@ -1,24 +1,19 @@
-"""Singular prepared-resource lifecycle commands for an explicit clean catalog."""
+"""Singular prepared-resource lifecycle commands through the configured catalog."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 import click
 
-from mdrack.application.manifest import ManifestError
-from mdrack.application.resource_catalog import (
-    PreparedResourceCatalog,
-    ResourceCatalogError,
-    ResourceCatalogErrorCode,
-)
-from mdrack.application.resources import FacetFilter, ResourceQueryScope, ResourceQueryService
+from mdrack.application.manifest import MAX_MANIFEST_BYTES, ManifestError
+from mdrack.application.resource_catalog import ResourceCatalogError, ResourceCatalogErrorCode
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
-from mdrack_sqlite import SQLiteCatalog
+from mdrack.public_api import MDRackEngine
 
 logger = logging.getLogger(__name__)
 
@@ -28,44 +23,35 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     emit_json(payload, pretty=not json_flag)
 
 
-def _failure(
-    ctx: click.Context,
-    *,
-    command: str,
-    operation: str,
-    error: Exception,
-) -> None:
+def _engine(ctx: click.Context) -> MDRackEngine:
+    config = ctx.obj.get("config") if ctx.obj else None
+    root = ctx.obj.get("root") if ctx.obj else None
+    if config is None or not isinstance(root, Path):
+        raise RuntimeError("configuration_unavailable")
+    return MDRackEngine(root=root, config=config)
+
+
+def _failure(ctx: click.Context, *, command: str, operation: str, error: Exception) -> None:
     code = f"RESOURCE_{operation.upper()}_ERROR"
-    message = (
-        f"Prepared resource {operation} failed"
-        if operation in {"import", "export"}
-        else f"Resource {operation} failed"
-    )
+    message = f"Resource {operation} failed"
     reason = "operation_failed"
     if isinstance(error, ManifestError):
         code = f"RESOURCE_MANIFEST_{error.code.value.upper()}"
         message = "Prepared resource import failed"
         reason = error.code.value
     elif isinstance(error, ResourceCatalogError):
-        if error.code is ResourceCatalogErrorCode.MANIFEST_UNAVAILABLE:
-            code = "RESOURCE_MANIFEST_UNAVAILABLE"
-            message = "Prepared resource import failed"
-        elif error.code is ResourceCatalogErrorCode.MANIFEST_OUTPUT_UNAVAILABLE:
-            code = "RESOURCE_MANIFEST_OUTPUT_UNAVAILABLE"
-            message = "Prepared resource export failed"
-        elif error.code is ResourceCatalogErrorCode.RESOURCE_NOT_FOUND:
-            code = "RESOURCE_NOT_FOUND"
-            message = "Resource was not found"
-        else:
-            code = "RESOURCE_CATALOG_UNAVAILABLE"
         reason = error.code.value
+        if error.code is ResourceCatalogErrorCode.MANIFEST_UNAVAILABLE:
+            code, message = "RESOURCE_MANIFEST_UNAVAILABLE", "Prepared resource import failed"
+        elif error.code is ResourceCatalogErrorCode.MANIFEST_OUTPUT_UNAVAILABLE:
+            code, message = "RESOURCE_MANIFEST_OUTPUT_UNAVAILABLE", "Prepared resource export failed"
+        elif error.code is ResourceCatalogErrorCode.RESOURCE_NOT_FOUND:
+            code, message = "RESOURCE_NOT_FOUND", "Resource was not found"
+        else:
+            code, message = "RESOURCE_CATALOG_UNAVAILABLE", "Resource catalog is unavailable"
     else:
-        code = "RESOURCE_CATALOG_UNAVAILABLE"
-        reason = "catalog_unavailable"
-    logger.error(
-        f"cli.resource.{operation}.failed",
-        extra={"status": "failed", "reason": reason},
-    )
+        code, message = "RESOURCE_CATALOG_UNAVAILABLE", "Resource catalog is unavailable"
+    logger.error("cli.resource.%s.failed", operation, extra={"reason": reason})
     _output(ctx, envelope_error(message, code, command))
     ctx.exit(1)
 
@@ -75,59 +61,52 @@ def _run(
     *,
     command: str,
     operation: str,
-    catalog_path: str,
-    action: Callable[[PreparedResourceCatalog], dict[str, object]],
+    action: Callable[[MDRackEngine], dict[str, object]],
 ) -> None:
+    engine = None
     try:
-        with PreparedResourceCatalog.open(catalog_path) as catalog:
-            data = action(catalog)
-        logger.info(
-            f"cli.resource.{operation}.completed",
-            extra={"status": "completed", "operation": operation},
-        )
+        engine = _engine(ctx)
+        data = action(engine)
+        logger.info("cli.resource.%s.completed", operation)
         _output(ctx, envelope_success(data, command=command))
     except Exception as error:
-        _failure(
-            ctx,
-            command=command,
-            operation=operation,
-            error=error,
-        )
+        _failure(ctx, command=command, operation=operation, error=error)
+    finally:
+        if engine is not None:
+            engine.close()
 
 
-def _facet_filters(values: tuple[str, ...]) -> tuple[FacetFilter, ...]:
-    parsed = []
-    for value in values:
-        namespace, separator, facet_value = value.partition("=")
-        if not separator or not namespace or not facet_value:
-            raise ValueError("facet_filter_invalid")
-        parsed.append(FacetFilter(namespace, facet_value))
-    return tuple(parsed)
+def _read_manifest(path: str) -> bytes:
+    try:
+        with Path(path).open("rb") as stream:
+            payload = stream.read(MAX_MANIFEST_BYTES + 1)
+    except (OSError, TypeError, ValueError):
+        raise ResourceCatalogError(ResourceCatalogErrorCode.MANIFEST_UNAVAILABLE) from None
+    if len(payload) > MAX_MANIFEST_BYTES:
+        raise ResourceCatalogError(ResourceCatalogErrorCode.MANIFEST_UNAVAILABLE)
+    return payload
 
 
 @click.group(name="resource")
 def resource() -> None:
-    """Import, inspect, or delete one resource in an explicit clean catalog."""
+    """Import, export, inspect, or delete one configured catalog resource."""
 
 
 @resource.command(name="import")
 @click.argument("manifest_path")
-@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
 @click.pass_context
-def import_resource(ctx: click.Context, manifest_path: str, catalog_path: str) -> None:
+def import_resource(ctx: click.Context, manifest_path: str) -> None:
     """Import one bounded prepared-resource manifest."""
     _run(
         ctx,
         command="resource import",
         operation="import",
-        catalog_path=catalog_path,
-        action=lambda catalog: catalog.import_file(manifest_path).to_dict(),
+        action=lambda engine: engine.import_resource_manifest(_read_manifest(manifest_path)).to_dict(),
     )
 
 
 @resource.command(name="export")
 @click.argument("resource_id")
-@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
 @click.option("--output", "output_path", required=True, metavar="PATH")
 @click.option("--include-vectors/--no-vectors", default=True, show_default=True)
 @click.option("--include-text/--no-text", default=True, show_default=True)
@@ -136,7 +115,6 @@ def import_resource(ctx: click.Context, manifest_path: str, catalog_path: str) -
 def export_resource(
     ctx: click.Context,
     resource_id: str,
-    catalog_path: str,
     output_path: str,
     include_vectors: bool,
     include_text: bool,
@@ -147,8 +125,7 @@ def export_resource(
         ctx,
         command="resource export",
         operation="export",
-        catalog_path=catalog_path,
-        action=lambda catalog: catalog.export_file(
+        action=lambda engine: engine.export_resource_manifest_file(
             resource_id,
             output_path,
             include_vectors=include_vectors,
@@ -160,103 +137,25 @@ def export_resource(
 
 @resource.command(name="inspect")
 @click.argument("resource_id")
-@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
 @click.pass_context
-def inspect_resource(ctx: click.Context, resource_id: str, catalog_path: str) -> None:
-    """Inspect redacted counts, kinds, and fingerprints for one resource."""
+def inspect_resource(ctx: click.Context, resource_id: str) -> None:
+    """Inspect redacted aggregate counts, kinds, and fingerprints."""
     _run(
         ctx,
         command="resource inspect",
-        operation="inspection",
-        catalog_path=catalog_path,
-        action=lambda catalog: catalog.inspect(resource_id).to_dict(),
+        operation="inspect",
+        action=lambda engine: engine.inspect_resource(resource_id).to_dict(),
     )
 
 
 @resource.command(name="delete")
 @click.argument("resource_id")
-@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
 @click.pass_context
-def delete_resource(ctx: click.Context, resource_id: str, catalog_path: str) -> None:
+def delete_resource(ctx: click.Context, resource_id: str) -> None:
     """Delete one logical resource graph atomically."""
     _run(
         ctx,
         command="resource delete",
         operation="delete",
-        catalog_path=catalog_path,
-        action=lambda catalog: catalog.delete(resource_id).to_dict(),
+        action=lambda engine: engine.delete_resource(resource_id).to_dict(),
     )
-
-
-@resource.command(name="similar")
-@click.argument("query_unit_id")
-@click.option("--catalog", "catalog_path", required=True, metavar="PATH")
-@click.option("--space-id", required=True)
-@click.option("--embedding-fingerprint", required=True)
-@click.option(
-    "--aggregation",
-    type=click.Choice(["direct-text", "token-weighted-centroid"]),
-    required=True,
-)
-@click.option(
-    "--basis",
-    type=click.Choice(["textual-content"]),
-    default="textual-content",
-    show_default=True,
-)
-@click.option("--kind", "resource_kinds", multiple=True)
-@click.option("--namespace", "source_namespaces", multiple=True)
-@click.option("--facet-any", "facets_any", multiple=True, metavar="NAMESPACE=VALUE")
-@click.option("--facet-all", "facets_all", multiple=True, metavar="NAMESPACE=VALUE")
-@click.option("--facet-none", "facets_none", multiple=True, metavar="NAMESPACE=VALUE")
-@click.option("--limit", type=click.IntRange(min=1), default=20, show_default=True)
-@click.pass_context
-def similar_resource(
-    ctx: click.Context,
-    query_unit_id: str,
-    catalog_path: str,
-    space_id: str,
-    embedding_fingerprint: str,
-    aggregation: str,
-    basis: str,
-    resource_kinds: tuple[str, ...],
-    source_namespaces: tuple[str, ...],
-    facets_any: tuple[str, ...],
-    facets_all: tuple[str, ...],
-    facets_none: tuple[str, ...],
-    limit: int,
-) -> None:
-    """Find whole-resource similarity explicitly based on textual content."""
-    del basis
-    command = "resource similar"
-    try:
-        with SQLiteCatalog.open_readonly(catalog_path) as catalog:
-            result = ResourceQueryService(catalog).find_textual_similarity(
-                query_unit_id,
-                space_id,
-                aggregation=f"{aggregation.replace('-', '_')}_v1",
-                expected_fingerprint=embedding_fingerprint,
-                scope=ResourceQueryScope(
-                    resource_kinds=resource_kinds,
-                    source_namespaces=source_namespaces,
-                    facets_any=_facet_filters(facets_any),
-                    facets_all=_facet_filters(facets_all),
-                    facets_none=_facet_filters(facets_none),
-                ),
-                limit=limit,
-            )
-        logger.info(
-            "cli.resource.similar.completed",
-            extra={"status": "completed", "result_count": len(result.results)},
-        )
-        _output(ctx, envelope_success(result.to_dict(), command=command))
-    except Exception as error:
-        _failure(
-            ctx,
-            command=command,
-            operation="similarity",
-            error=error,
-        )
-
-
-__all__ = ["resource"]

@@ -32,8 +32,10 @@ cross-table integrity. SQLite is MDRack's only persistent database.
   (`0000`–`0003`) and `mdrack_sqlite_catalog_v2` (`0000`–`0004`); it must not
   import `mdrack`. `create_v2()` creates fresh compact catalogs directly and never
   upgrades, copies, or backfills v1/app-bridge bytes.
-- App migration history and generation switching remain under `src/mdrack`; the
-  standalone package must not copy or rewrite migrations `0000`–`0007`.
+- Normal app composition opens only `<store>/catalog.sqlite3`, requires
+  `mdrack_sqlite_catalog_v2`, and rejects any additional SQLite main file or obsolete
+  lifecycle artifact. The standalone package must not copy or rewrite app migrations
+  `0000`–`0007`; its generic v1/bridge open support is not an app fallback.
 
 - `0000`: migration ledger.
 - `0001`: files, sections, chunks, embedding profiles/vectors, runs, diagnostics.
@@ -49,19 +51,17 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 Future migrations extend this ledger; this instruction must be updated when the
 current schema advances.
 
-## Implemented compact generation and schema contract
+## Implemented fixed-store and schema contract
 
-- Build a fresh v2 compact resource index in a separate candidate database/store
-  generation, never in an active legacy file. Existing v1/app-bridge `0007` bytes
-  are preservation-only and must never be opened as a fresh-v2 rebuild source.
-- Schema version and store readiness are separate. Persist generation identity and
-  fail-closed states `legacy_only`, `rebuild_required`, `building`, `ready`, and
-  `failed`; only `ready` may serve production search/write.
-- Verify and close/checkpoint/fsync the candidate, then atomically perform the
-  one-way v2 cutover under one-writer quiescence. Readers see old or new only;
-  runtime pointer rollback to a retained legacy generation is unsupported.
-- Retain the complete old generation read-only for diagnosis/preservation.
-  Cleanup is a separate explicitly authorized destructive action.
+- First writable app startup creates the final `catalog.sqlite3` path exclusively,
+  applies only the immutable v2 package history, and verifies the complete identity,
+  integrity and foreign keys before returning it.
+- A concurrent opener may wait only for that reserved final path to become a complete
+  verified v2 catalog. It fails after a bounded timeout; no candidate or alternate
+  database is consulted.
+- Failed initial creation removes the database and SQLite sidecars while preserving
+  unrelated store/root files. Existing v1/app-bridge/legacy stores are unsupported
+  and are never opened, copied, retained, activated, rolled back, or migrated by the app.
 - Migration `0007` was authored after independent schema review mapped every frozen
   core field/invariant to exact DDL, FK action, CHECK, UNIQUE/index, transaction, and
   contract test. Any later schema change requires a new immutable migration and review.
@@ -74,9 +74,9 @@ current schema advances.
   an active caller transaction. Validation, provider calls, and filesystem work
   finish before it opens; graph/FTS/vector/facet checks commit together; any failure
   preserves the prior complete graph.
-- Test coverage must continue to protect candidate path/ID, lock and busy behavior,
-  WAL/SHM, reader lifecycle, checkpoint/fsync, atomic switch, interruption recovery,
-  retention, and separately authorized cleanup semantics.
+- Test coverage must continue to protect exclusive initial creation, concurrent open,
+  mixed-store rejection, lock and busy behavior, WAL/SHM cleanup, reader lifecycle,
+  interruption recovery, integrity/FK checks, and the one-main-SQLite invariant.
 
 ## Transaction and integrity invariants
 
@@ -86,7 +86,7 @@ current schema advances.
 - Per-file failures may yield `partial_success`, but must not leave a half-replaced file.
 - FTS rows are maintained with chunk writes/deletes; do not assume automatic triggers.
 - Embedding profile name, fingerprint, and dimensions must match before vector use.
-- Vector payloads are generation-specific. The legacy app compatibility schema keeps
+- Vector payloads are schema-specific. The historical app compatibility schema keeps
   canonical JSON-encoded finite float arrays in its `chunk_embeddings` BLOB column
   and scans them in Python. Standalone/generic catalogs, including fresh v2, use
   little-endian IEEE-754 float64 bytes by default: an explicit
@@ -119,4 +119,4 @@ current schema advances.
 4. Update current schema/architecture documentation and this migration ledger.
 5. Run the full quality gates and `git diff --check`.
 6. For fresh v2, require contract-freeze PASS before data design, schema-review
-   PASS before SQL, and executable one-way cutover review before activation.
+   PASS before SQL, and fixed-path lifecycle review before application use.

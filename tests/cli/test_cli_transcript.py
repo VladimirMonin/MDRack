@@ -1,4 +1,4 @@
-"""CLI contracts for transcript ingestion and timed search."""
+"""CLI contracts for transcript ingestion through the fixed application catalog."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from click.testing import CliRunner
 
 from mdrack.cli import main
 from mdrack_media import resource_id
-from mdrack_sqlite import SQLiteCatalog
 
 
 def _source(path: Path) -> bytes:
@@ -26,7 +25,12 @@ def _source(path: Path) -> bytes:
     return payload
 
 
-def _ingest_args(source: Path, catalog: Path, *extra: str) -> list[str]:
+def _initialize(runner: CliRunner, root: Path) -> None:
+    result = runner.invoke(main, ["--root", str(root), "init"])
+    assert result.exit_code == 0, result.output
+
+
+def _ingest_args(source: Path, *extra: str) -> list[str]:
     return [
         "ingest",
         "transcript",
@@ -41,32 +45,31 @@ def _ingest_args(source: Path, catalog: Path, *extra: str) -> list[str]:
         "fixture",
         "--source-ref",
         "audio-cli",
-        "--catalog",
-        str(catalog),
         *extra,
     ]
 
 
 def test_cli_ingest_transcript_lexical_search_and_source_immutability(tmp_path: Path) -> None:
     source = tmp_path / "PRIVATE_TRANSCRIPT_PATH.json"
-    catalog = tmp_path / "catalog.sqlite3"
     before = _source(source)
-    with SQLiteCatalog.create(catalog):
-        pass
     runner = CliRunner()
+    _initialize(runner, tmp_path)
 
-    ingested = runner.invoke(main, _ingest_args(source, catalog, "--no-embeddings"))
+    ingested = runner.invoke(
+        main,
+        ["--root", str(tmp_path), *_ingest_args(source, "--no-embeddings")],
+    )
     searched = runner.invoke(
         main,
         [
+            "--root",
+            str(tmp_path),
             "search",
             "transaction",
             "--mode",
             "text",
-            "--kind",
+            "--scope",
             "audio",
-            "--catalog",
-            str(catalog),
         ],
     )
 
@@ -76,59 +79,60 @@ def test_cli_ingest_transcript_lexical_search_and_source_immutability(tmp_path: 
     search_payload = json.loads(searched.stdout)
     assert ingest_payload["data"]["persisted"] is True
     assert ingest_payload["data"]["vector_count"] == 0
-    assert search_payload["data"]["results"][0]["evidence"][0] == {
-        "unit_id": search_payload["data"]["results"][0]["evidence"][0]["unit_id"],
-        "representation_id": search_payload["data"]["results"][0]["evidence"][0][
-            "representation_id"
-        ],
-        "start_ms": 0,
-        "end_ms": 2_000,
-        "track": "audio",
-        "timestamp_unit": "ms",
+    evidence = search_payload["data"]["results"][0]["evidence"][0]
+    assert evidence["unit_kind"] == "time_segment"
+    assert evidence["locator"] == {
+        "kind": "time_segment",
+        "payload": {
+            "start_ms": 0,
+            "end_ms": 2_000,
+            "track": "audio",
+        },
     }
     assert source.read_bytes() == before
     assert str(source) not in ingested.stdout + ingested.stderr
     assert "transaction boundary" not in ingested.stderr
+    assert (tmp_path / ".mdrack" / "catalog.sqlite3").is_file()
 
 
 def test_cli_ready_vectors_enable_semantic_and_hybrid_search(tmp_path: Path) -> None:
     source = tmp_path / "transcript.json"
-    catalog = tmp_path / "catalog.sqlite3"
     _source(source)
-    with SQLiteCatalog.create(catalog):
-        pass
     runner = CliRunner()
+    _initialize(runner, tmp_path)
 
     ingested = runner.invoke(
         main,
-        _ingest_args(source, catalog, "--provider", "fake"),
+        ["--root", str(tmp_path), *_ingest_args(source, "--provider", "fake")],
     )
     semantic = runner.invoke(
         main,
         [
+            "--root",
+            str(tmp_path),
             "search",
             "transaction boundary",
             "--mode",
             "semantic",
             "--provider",
             "fake",
-            "--catalog",
-            str(catalog),
+            "--scope",
+            "audio",
         ],
     )
     hybrid = runner.invoke(
         main,
         [
+            "--root",
+            str(tmp_path),
             "search",
             "transaction boundary",
             "--mode",
             "hybrid",
             "--provider",
             "fake",
-            "--target",
-            "resource",
-            "--catalog",
-            str(catalog),
+            "--scope",
+            "audio",
         ],
     )
 
@@ -138,19 +142,16 @@ def test_cli_ready_vectors_enable_semantic_and_hybrid_search(tmp_path: Path) -> 
     hybrid_data = json.loads(hybrid.stdout)["data"]
     assert semantic_data["results"] and semantic_data["degraded"] is False
     assert hybrid_data["results"] and hybrid_data["target"] == "resource"
-    assert hybrid_data["results"][0]["unit_id"] is None
+    assert hybrid_data["results"][0]["resource_kind"] == "audio"
 
 
 def test_cli_transcript_failures_are_fixed_and_private(tmp_path: Path) -> None:
     source = tmp_path / "PRIVATE_BAD_TRANSCRIPT.json"
     source.write_text('{"segments":[{"text":"PRIVATE_CONTENT_SENTINEL"}]}')
-    catalog = tmp_path / "PRIVATE_CATALOG.sqlite3"
-    with SQLiteCatalog.create(catalog):
-        pass
 
     result = CliRunner().invoke(
         main,
-        _ingest_args(source, catalog, "--no-embeddings"),
+        ["--root", str(tmp_path), *_ingest_args(source, "--no-embeddings")],
     )
 
     assert result.exit_code == 1
@@ -161,4 +162,3 @@ def test_cli_transcript_failures_are_fixed_and_private(tmp_path: Path) -> None:
     captured = result.stdout + result.stderr
     assert "PRIVATE_CONTENT_SENTINEL" not in captured
     assert str(source) not in captured
-    assert str(catalog) not in captured

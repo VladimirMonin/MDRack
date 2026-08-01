@@ -105,14 +105,10 @@ class MemoryCatalog:
         fingerprint: str,
         dimensions: int,
     ) -> tuple[EmbeddingSpaceRecord, ...]:
-        fingerprints = {fingerprint}
-        raw_digest = fingerprint.removeprefix("sha256:")
-        if len(raw_digest) == 64 and all(character in "0123456789abcdef" for character in raw_digest.lower()):
-            fingerprints.update({raw_digest, f"sha256:{raw_digest}"})
         return tuple(
             space
             for space in sorted(self._spaces.values(), key=lambda item: item.space_id)
-            if space.fingerprint in fingerprints and space.dimensions == dimensions
+            if space.fingerprint == fingerprint and space.dimensions == dimensions
         )
 
     def resolve_embedding_space(

@@ -1,4 +1,4 @@
-"""Tests for eval CLI reporting."""
+"""Regression coverage for canonical retrieval evaluation CLI."""
 
 from __future__ import annotations
 
@@ -8,119 +8,91 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from mdrack.cli import main
-from mdrack.eval.retrieval import EvalQueryResult, EvalReport
-from mdrack.storage.sqlite.connection import get_connection
-from mdrack.storage.sqlite.migrations import apply_migrations
-
-MIGRATIONS_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "mdrack"
-    / "storage"
-    / "sqlite"
-    / "migrations"
-)
 
 
-def _setup_db(tmp_path: Path) -> None:
-    store_dir = tmp_path / ".mdrack"
-    store_dir.mkdir()
-    db_path = store_dir / "knowledge.db"
-    conn = get_connection(db_path)
-    try:
-        apply_migrations(conn, MIGRATIONS_DIR)
-    finally:
-        conn.close()
-
-
-def test_eval_cli_surfaces_query_errors_and_summary(monkeypatch, tmp_path: Path) -> None:
-    _setup_db(tmp_path)
-    queries_path = tmp_path / "queries.yaml"
-    queries_path.write_text(
-        """
-queries:
-  - id: Q1
-    query: \"Python\"
-    mode: \"semantic\"
+def test_eval_retrieval_uses_the_fixed_catalog_and_safe_result_contract(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "note.md").write_text("# Private heading\n\nneedle evaluation content\n", encoding="utf-8")
+    queries = root / "queries.yaml"
+    queries.write_text(
+        """queries:
+  - id: private-case
+    query: needle
+    mode: text
     expected:
-      content_contains: \"Python\"
+      content_contains: needle evaluation content
+      file_path_contains: note.md
+      heading_contains: Private heading
     metrics:
-      recall_at: 2
-""".strip()
-        + "\n",
+      recall_at: 1
+""",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    assert runner.invoke(main, ["--root", str(root), "init"]).exit_code == 0
+    indexed = runner.invoke(main, ["--root", str(root), "scan", "--provider", "fake"])
+    assert indexed.exit_code == 0, indexed.output
+
+    result = runner.invoke(main, ["--root", str(root), "eval", "retrieval", "--queries", str(queries)])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)["data"]
+    assert data["query_set"] == {"kind": "file", "query_count": 1}
+    assert data["results"] == [
+        {
+            "case_ordinal": 1,
+            "mode": "text",
+            "k": 1,
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "precision_at_k": 1.0,
+            "ndcg_at_k": 1.0,
+            "retrieved_count": 1,
+            "expected_count": 1,
+            "conditions_met": True,
+            "status": "ok",
+        }
+    ]
+    assert data["summary"]["queries_successful"] == 1
+    assert "needle evaluation content" not in result.output
+    assert "Private heading" not in result.output
+    assert str(root) not in result.output
+
+
+def test_eval_group_is_registered_without_a_catalog_override() -> None:
+    result = CliRunner().invoke(main, ["eval", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "retrieval" in result.output
+    assert "--catalog" not in result.output
+
+
+
+def test_eval_retrieval_fails_safely_when_the_configured_catalog_is_missing(tmp_path: Path) -> None:
+    queries = tmp_path / "queries.yaml"
+    queries.write_text(
+        """queries:
+  - id: missing-catalog
+    query: private query
+    mode: text
+    expected:
+      content_contains: private content
+    metrics:
+      recall_at: 1
+""",
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(
-        "mdrack.cli.commands.eval.run_retrieval_eval",
-        lambda *args, **kwargs: EvalReport(
-            results=[
-                EvalQueryResult(
-                    query_id="Q1",
-                    query="Python",
-                    mode="semantic",
-                    retrieved_ids=[],
-                    expected_ids=["chunk-1"],
-                    k=2,
-                    recall_at_k=0.0,
-                    mrr=0.0,
-                    precision_at_k=0.0,
-                    conditions_met=False,
-                    error="provider offline",
-                )
-            ],
-            summary={
-                "queries_total": 1,
-                "queries_successful": 0,
-                "queries_failed": 1,
-                "queries_with_zero_gold": 0,
-                "avg_recall_at_k": 0.0,
-                "avg_mrr": 0.0,
-                "avg_precision_at_k": 0.0,
-            },
-        ),
-    )
-
-    runner = CliRunner()
-    result = runner.invoke(
+    result = CliRunner().invoke(
         main,
-        [
-            "--root",
-            str(tmp_path),
-            "eval",
-            "retrieval",
-            "--queries",
-            str(queries_path),
-            "--provider",
-            "fake",
-        ],
+        ["--root", str(tmp_path), "eval", "retrieval", "--queries", str(queries)],
     )
 
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["ok"] is True
-    assert set(payload) == {"ok", "data", "meta"}
-    assert set(payload["data"]) == {"query_set", "k", "results", "summary"}
-    assert payload["data"]["query_set"] == {"kind": "file", "query_count": 1}
-    assert set(payload["data"]["results"][0]) == {
-        "case_ordinal",
-        "mode",
-        "k",
-        "recall_at_k",
-        "mrr",
-        "precision_at_k",
-        "ndcg_at_k",
-        "retrieved_count",
-        "expected_count",
-        "conditions_met",
-        "status",
-        "reason_code",
+    assert result.exit_code == 1
+    assert json.loads(result.output)["error"] == {
+        "message": "Evaluation store is unavailable",
+        "code": "STORAGE_ERROR",
     }
-    assert payload["data"]["results"][0]["case_ordinal"] == 1
-    assert payload["data"]["results"][0]["reason_code"] == "provider_error"
-    assert payload["data"]["results"][0]["conditions_met"] is False
-    assert payload["data"]["results"][0]["ndcg_at_k"] == 0.0
-    assert payload["data"]["summary"]["queries_failed"] == 1
-    assert str(queries_path) not in result.output
-    assert "Python" not in result.output
-    assert "provider offline" not in result.output
+    assert "private" not in result.output
+    assert str(tmp_path) not in result.output

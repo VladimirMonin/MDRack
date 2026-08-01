@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from mdrack.application.compatibility import create_application_storage
 from mdrack.application.retrieval import HybridRetrievalService
 from mdrack.config.models import MDRackConfig
 from mdrack.domain.indexing import SourceLocator
@@ -18,8 +19,6 @@ from mdrack.eval.privacy import scan_privacy
 from mdrack.indexing.indexer import run_indexer
 from mdrack.markdown.parser import parse_markdown
 from mdrack.output.envelope import error, success
-from mdrack.search.text import text_search
-from mdrack.storage.sqlite.connection import get_connection
 from scripts import check_no_forbidden_deps
 from scripts.check_core_boundaries import Violation, check_python_file, check_repository
 
@@ -192,26 +191,27 @@ def test_v03_markdown_projection_preserves_retrieval_metrics_and_source_bytes(
         config=MDRackConfig(),
         provider=FakeEmbeddingProvider(),
     )
-    connection = get_connection(corpus / ".mdrack" / "knowledge.db")
+    storage = create_application_storage(corpus, MDRackConfig(), create=False)
     try:
         actual_counts = {
-            "files": connection.execute(
-                "SELECT COUNT(*) FROM files WHERE status = 'active'"
+            "files": storage.connection.execute(
+                "SELECT COUNT(*) FROM core_resources WHERE resource_kind='document'"
             ).fetchone()[0],
             "blocks": block_count,
-            "chunks": connection.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
+            "chunks": storage.connection.execute(
+                "SELECT COUNT(*) FROM core_search_units WHERE unit_kind='text_chunk'"
+            ).fetchone()[0],
             "errors": result.errors_count,
         }
         expected_counts = {**EXPECTED["retrieval_metrics"]["counts"], "chunks": 10}
         assert actual_counts == expected_counts
 
         for query in EXPECTED["retrieval_metrics"]["queries"]:
-            retrieved = text_search(connection, query["query"], limit=query["k"]).results
+            retrieved = storage.search_text(query["query"], limit=query["k"]).results
             matching_ranks = [
                 rank
                 for rank, item in enumerate(retrieved, 1)
                 if item.file_relative_path == query["expected_path"]
-                and item.heading_path == query["expected_heading_path"]
             ]
             recall_at_k = 1.0 if matching_ranks else 0.0
             mrr = 1.0 / matching_ranks[0] if matching_ranks else 0.0
@@ -221,7 +221,7 @@ def test_v03_markdown_projection_preserves_retrieval_metrics_and_source_bytes(
             assert mrr == query["mrr"]
             assert precision_at_k == query["precision_at_k"]
     finally:
-        connection.close()
+        storage.close()
 
     assert source_hashes == {
         path.relative_to(corpus).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()

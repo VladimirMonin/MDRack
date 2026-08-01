@@ -10,8 +10,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Literal, Sequence, cast
 
-from mdrack.application.compatibility import resolve_application_database_path
-from mdrack.diagnostics.integrity import get_generation_status
+from mdrack.adapters.sqlite.canonical_catalog import canonical_catalog_path, open_application_catalog_readonly
 
 
 class StorageAnalysisError(RuntimeError):
@@ -146,14 +145,18 @@ _CORE_CATALOG_TABLES = frozenset(
 
 
 def analyze_application_storage(root: Path, config: Any) -> StorageAnalysis:
-    """Analyze the configured active application store without modifying it."""
+    """Analyze the fixed application catalog without modifying it."""
     try:
-        database_path = resolve_application_database_path(root, config)
-        store_dir = Path(config.paths.store)
-        if not store_dir.is_absolute():
-            store_dir = root.resolve() / store_dir
-        readiness = _application_readiness(get_generation_status(store_dir))
-        return _analyze_database(database_path, readiness=readiness, require_core_catalog=False)
+        catalog = open_application_catalog_readonly(root, config)
+        try:
+            return _analyze_connection(
+                catalog.connection,
+                canonical_catalog_path(root, config),
+                readiness={"state": "ready"},
+                require_core_catalog=True,
+            )
+        finally:
+            catalog.close()
     except StorageAnalysisError:
         raise
     except Exception:
@@ -174,11 +177,7 @@ def analyze_standalone_catalog(database_path: Path) -> StorageAnalysis:
         raise StorageAnalysisError() from None
 
 
-def _application_readiness(generation_status: dict[str, object]) -> dict[str, object]:
-    state = generation_status.get("generation_state")
-    if state not in {"legacy_only", "building", "failed", "rebuild_required", "ready"}:
-        raise StorageAnalysisError()
-    return {"state": state}
+
 
 
 def _analyze_database(
@@ -187,9 +186,27 @@ def _analyze_database(
     readiness: dict[str, object],
     require_core_catalog: bool,
 ) -> StorageAnalysis:
-    sizes = _database_sizes(database_path)
     connection = _open_read_only(database_path)
     try:
+        return _analyze_connection(
+            connection,
+            database_path,
+            readiness=readiness,
+            require_core_catalog=require_core_catalog,
+        )
+    finally:
+        connection.close()
+
+
+def _analyze_connection(
+    connection: sqlite3.Connection,
+    database_path: Path,
+    *,
+    readiness: dict[str, object],
+    require_core_catalog: bool,
+) -> StorageAnalysis:
+    try:
+        sizes = _database_sizes(database_path)
         tables = _known_tables(connection)
         if require_core_catalog and not _CORE_CATALOG_TABLES <= tables:
             raise StorageAnalysisError()
@@ -218,8 +235,6 @@ def _analyze_database(
         raise
     except (OSError, sqlite3.Error, TypeError, ValueError):
         raise StorageAnalysisError() from None
-    finally:
-        connection.close()
 
 
 def _open_read_only(database_path: Path) -> sqlite3.Connection:

@@ -4,8 +4,8 @@ MDRack now has standalone `mdrack-core` and `mdrack-sqlite` distributions beside
 the `mdrack` app. `mdrack_core` is the stdlib-only provider- and
 persistence-neutral kernel. `mdrack_sqlite` depends only on core and stdlib and is
 the single generic resource catalog/search adapter owner. `mdrack` owns
-Click/engine composition, Markdown and explicit image ingestion, app migration
-generations, and LM Studio HTTP integration.
+Click/engine composition, Markdown and explicit image ingestion, the fixed
+application catalog lifecycle, and LM Studio HTTP integration.
 
 ## Dependency direction
 
@@ -31,12 +31,11 @@ graph TD
     subgraph Adapters ["Adapters"]
         Markdown["markdown-it parser"]
         SQLiteAdapter["mdrack_sqlite resource adapter"]
-        SQLiteLegacy["mdrack legacy adapter + migrations"]
         LMStudio["LM Studio HTTP provider"]
     end
 
     subgraph Persistence ["Persistent store"]
-        SQLite["SQLite: legacy 0000-0006 and resource 0007"]
+        SQLite["SQLite: fixed catalog.sqlite3"]
     end
 
     CLI --> App
@@ -49,7 +48,7 @@ graph TD
     SQLiteAdapter -->|"implements storage ports"| Ports
     LMStudio -->|"implements embedding ports"| Ports
     SQLiteAdapter --> SQLite
-    SQLiteLegacy --> SQLite
+
 
     classDef entry fill:#fff5ad,stroke:#d4c46a,color:#333
     classDef service fill:#4ecdc4,stroke:#0a9396,color:#fff
@@ -58,7 +57,7 @@ graph TD
     class CLI,Engine entry
     class Indexing,Retrieval,Read,CoreServices service
     class Domain,Ports contract
-    class Markdown,SQLiteAdapter,SQLiteLegacy,LMStudio,SQLite adapter
+    class Markdown,SQLiteAdapter,LMStudio adapter
 ```
 
 Unlabelled arrows show runtime dependencies, not inheritance; labelled
@@ -78,14 +77,14 @@ The current bounded exception is `IndexingService`: it imports and constructs
 | `ports/` | Storage, parser, embedding, model-catalog, lifecycle, and reranker contracts. |
 | `application/` | Canonical Markdown indexing, chunking, reads, and text/semantic/hybrid orchestration. |
 | `adapters/` | markdown-it parsing, app SQLite compatibility/composition, and LM Studio-specific adapters. |
-| `storage/sqlite/` | App-owned connections, immutable migration history, repositories, and legacy FTS/vector operations. |
+| `storage/sqlite/` | Compatibility types and read/write helpers; normal application startup does not select an app-migration database. |
 | `packages/mdrack-sqlite/` | Generic `core_*` catalog/search adapter, FTS fallback, context-managed bridge lifecycle, and safe verification. |
 | `cli/` | Click argument handling, service composition, error mapping, and JSON envelopes. |
 | `public_api/` | `MDRackEngine` and public DTO access without a Click dependency. |
 | `mdrack_core/domain/` | Immutable generic resource, locator, vector, facet, request/result, error, and degradation records. |
 | `mdrack_core/ports/` | Logical-ID-only catalog and lexical/vector search protocols. |
 | `mdrack_core/application/` | Complete-graph validation, provider-free indexing, grouping, weighted RRF, and discovery. |
-| `application/store_generations.py` | Durable generation state and active-pointer records. |
+| `adapters/sqlite/canonical_catalog.py` | Fixed-path create/open guard for the only normal application database. |
 | `packages/mdrack-sqlite/src/mdrack_sqlite/resource_store.py` | Atomic `core_*` resource graph and pre-limit scoped search implementation. |
 | `src/mdrack/adapters/sqlite/resource_store.py` | Compatibility re-export of the standalone owner. |
 
@@ -110,8 +109,21 @@ surfaces rather than the preferred home for new behavior.
 - Production reranking is unsupported and non-null injection fails closed.
 - Public retrieval identity is a logical ID plus `SourceLocator`, not a SQLite
   record UUID.
-- Only a verified `ready` resource generation can serve core-backed writes/search;
-  the active legacy database remains on migration `0006`.
+- Normal application startup has one physical SQLite database:
+  `<store>/catalog.sqlite3`. `init`, `scan`, and `MDRackEngine.scan` create or
+  open only that clean v2 catalog; read-only operations fail safely when it is
+  absent. Existing legacy-store data is unsupported and is never copied, opened,
+  or migrated by normal application code.
+- Active-generation metadata, candidate construction/activation, rollback,
+  retention, and explicit normal-application catalog selection are removed.
+  The catalog factory rejects old lifecycle artifacts rather than adopting them.
+- Normal Markdown and typed-resource operations use the same `core_*` catalog.
+  Each typed resource replacement remains the atomic transaction owned by
+  `SQLiteResourceStore`.
+- `files list`, `files info`, `read file`, and `read chunk` project only the
+  fixed catalog through `CoreCompatibilityStorage`; `read chunk --context
+  neighbors` derives adjacency from `core_search_units`. There is no normal
+  section reader or retrieval-evaluation command in S1.
 
 ## Primary source anchors
 
@@ -120,11 +132,16 @@ surfaces rather than the preferred home for new behavior.
   `packages/mdrack-core/src/mdrack_core/`
 - SQLite distribution/source: `packages/mdrack-sqlite/`,
   `packages/mdrack-sqlite/src/mdrack_sqlite/`
-- Store generations: `src/mdrack/application/generation_manager.py`,
-  `src/mdrack/application/store_generations.py`
+- Fixed lifecycle: `src/mdrack/adapters/sqlite/canonical_catalog.py`,
+  `src/mdrack/application/compatibility.py`
 - Resource adapter compatibility import: `src/mdrack/adapters/sqlite/resource_store.py`
 - Services: `src/mdrack/application/indexing.py`,
   `src/mdrack/application/retrieval.py`, `src/mdrack/application/query.py`
 - Ports: `src/mdrack/ports/storage.py`, `src/mdrack/ports/embeddings.py`
-- Default composition: `src/mdrack/adapters/sqlite/index_storage.py`
+- Fixed document readers: `src/mdrack/application/compatibility.py`,
+  `src/mdrack/cli/commands/files.py`, `src/mdrack/cli/commands/read.py`
 - Project invariants: `AGENTS.md`, `instructions/ARCH.system.instructions.md`
+
+The S1 test-surface classification, including removed inherited tests and
+uncovered S2/S3/S4 work, is recorded in
+[`one-store-s1-test-ledger.md`](one-store-s1-test-ledger.md).

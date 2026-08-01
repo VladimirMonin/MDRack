@@ -25,6 +25,7 @@ def create_embedding_provider(provider_name: str, config: Any) -> EmbeddingProvi
         timeout=config.embedding.timeout_secs,
         requested_dimensions=config.embedding.requested_dimensions,
         dimensions_capability=config.embedding.dimensions_capability,
+        query_instruction=config.embedding.query_instruction,
     )
 
 

@@ -4,8 +4,8 @@ This page is a current-state boundary, not a roadmap promise.
 
 ## Retrieval and embeddings
 
-- Semantic retrieval linearly scans canonical binary vectors in Python. Fresh v2
-  application generations use the `ieee754-f32-le-v1` codec with the builtin exact
+- Semantic retrieval linearly scans canonical binary vectors in Python. The clean-v2
+  application catalog uses the `ieee754-f32-le-v1` codec with the builtin exact
   backend; standalone catalogs retain a float64 compatibility default and legacy
   JSON is diagnostic read-only. There is no ANN index, vector database, or
   `sqlite-vec` dependency in the 1.3.0 base distribution.
@@ -65,8 +65,8 @@ This page is a current-state boundary, not a roadmap promise.
 
 - The CLI and engine share retrieval DTOs, but they differ in degradation mapping
   and total available operations.
-- Public `read` commands resolve logical identities. Legacy `files list/info` and
-  `sections list` still expose or require internal SQLite record identities.
+- Public `read` and `files` commands resolve logical identities. Internal SQLite
+  row identities are not a public application contract.
 - `MDRackEngine` exposes direct image and resource discovery, but not status,
   doctor, model lifecycle, rebuild, evaluation, or legacy section listing.
 - `scan --changed` is accepted but ignored; ordinary scan already performs change
@@ -79,18 +79,19 @@ vector database, network asset fetcher, or direct Python model runtime. Adding
 one requires an explicit architecture/specification change rather than an
 extension inferred from an existing protocol or reserved field.
 
-## Store generations and evidence
+## Store lifecycle and evidence
 
-- Resource-core search/write requires a verified ready generation. Candidate
-  creation/cutover is not an automatic side effect of ordinary legacy commands.
-- `storage rebuild-fresh` discovers configured Markdown only. Transcript,
-  frame-caption, and image-text rebuild material must be supplied explicitly to the
-  application service as immutable-source inputs; the CLI has no media-source
-  manifest or fallback to rows from an old generation.
-- Retained legacy generations are not automatically deleted; cleanup requires
-  separate destructive authorization.
+- Normal startup supports exactly one physical database at
+  `<store>/catalog.sqlite3`, verifies the clean-v2 identity, and fails closed on
+  another SQLite main file or an obsolete lifecycle artifact. Existing v1,
+  app-bridge, and legacy stores are unsupported; MDRack does not read, copy, or
+  migrate them automatically.
+- First creation is exclusive and failure-cleaned. There is no candidate,
+  activation, rollback, retention, or migration mode in the application CLI.
 - Linux unit/offline, local SQLite/filesystem, and installed-wheel evidence does
   not prove real-source safety, live external providers, or Windows execution.
+  The [one-store acceptance runner](../one-store-acceptance.md) adds a bounded
+  synthetic fixture and temporary wheel-target check; it has the same limits.
 - A private real-corpus unified-search smoke is a separate explicit data-
   authorization boundary. The 1.2 offline release evidence does not claim that
   boundary, raw-media recognition, or live LM Studio semantic quality.

@@ -1,40 +1,31 @@
-"""S6 app-owned projection between legacy MDRack and the frozen core contracts."""
+"""Application-owned projection over the fixed resource-core catalog."""
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from collections.abc import Mapping, Sequence
-from contextlib import contextmanager
-from dataclasses import replace
 from pathlib import Path
-from types import TracebackType
-from typing import Any, Iterator, Literal, cast
+from typing import Any, cast
 
-from mdrack.adapters.sqlite.generation_runtime import SQLiteGenerationRuntime
-from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage, create_sqlite_index_storage
-from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
-from mdrack.application.generation_manager import (
-    StoreGenerationManager,
-    StoreGenerationManagerError,
+from mdrack.adapters.sqlite.canonical_catalog import (
+    ApplicationStoreError,
+    canonical_catalog_path,
+    open_application_catalog,
 )
+from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
 from mdrack.application.metadata_projection import (
     DEFAULT_METADATA_PROJECTION_POLICY,
     MetadataProjectionPolicy,
     metadata_projection_policy_from_config,
 )
 from mdrack.application.resources import TextualWholeResourceProjection
-from mdrack.application.store_generations import (
-    ActiveGenerationPointer,
-    GenerationContractKind,
-    GenerationState,
-    assert_pointer_serves_generation,
-)
+from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace, embedding_space_id
 from mdrack.application.vector_values import (
     apply_vector_value_policy,
     canonicalize_for_value_policy,
     value_policy_from_space_metadata,
-    value_policy_metadata,
 )
 from mdrack.domain.identifiers import logical_id
 from mdrack.domain.indexing import PreparedFile, SourceLocator
@@ -44,22 +35,20 @@ from mdrack.domain.retrieval import (
     RetrievalMode,
     RetrievalResult,
 )
-from mdrack.storage.sqlite.connection import get_read_only_connection
-from mdrack.storage.sqlite.migrations import (
-    EXPECTED_MIGRATION_MANIFEST_DIGEST,
-    EXPECTED_MIGRATION_VERSION,
-)
+from mdrack.indexing.change_detector import ChangePlan, compute_file_hash
+from mdrack.search.text import TextSearchItem, TextSearchResult
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_core.domain import (
-    METRIC_COSINE,
     MODALITY_TEXT,
     REPRESENTATION_RETRIEVAL_TEXT,
     RESOURCE_DOCUMENT,
     TARGET_UNIT,
     UNIT_TEXT_CHUNK,
     UNIT_WHOLE_RESOURCE,
+    BranchScopeOverride,
     EmbeddingSpaceRecord,
+    LexicalBranch,
     Locator,
     PreparedResourceBatch,
     RankedCandidate,
@@ -68,15 +57,12 @@ from mdrack_core.domain import (
     ResourceRecord,
     SearchRequest,
     SearchResult,
+    SearchScope,
     SearchUnitRecord,
+    VectorBranch,
     VectorRecord,
 )
 from mdrack_media import AggregationFingerprint, WholeResourceTextPolicy, weighted_centroid
-from mdrack_sqlite.contract_v2 import (
-    SQLITE_CATALOG_V2_SCHEMA_VERSION,
-    SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
-)
-from mdrack_sqlite.migrations_v2 import validate_v2_clean_identity
 
 _DOCUMENT_LOCATOR = "document"
 _DOCUMENT_SPAN_LOCATOR = "document_span"
@@ -86,15 +72,6 @@ _METADATA_REPRESENTATION = "metadata_text"
 _DEFAULT_MARKDOWN_WHOLE_TEXT_POLICY = WholeResourceTextPolicy(overflow="caller_split")
 _DIRECT_TEXT_AGGREGATION = "direct_text_v1"
 _CENTROID_TEXT_AGGREGATION = "token_weighted_centroid_v1"
-
-
-def embedding_space_id(
-    profile_name: str,
-    fingerprint: str,
-    vector_value_policy: str | None = None,
-) -> str:
-    """Return the app-owned deterministic identity for one ready text-vector space."""
-    return logical_id("embedding-space", profile_name, fingerprint, vector_value_policy)
 
 
 def prepared_file_to_resource_batch(
@@ -166,7 +143,7 @@ def prepared_file_to_resource_batch(
         content_hash=f"sha256:{prepared.source_hash}",
         title=projection.canonical_title,
         metadata={
-            "source": dict(prepared.source_metadata),
+            "source": cast(dict[str, Any], dict(prepared.source_metadata)),
             "ingestion": {
                 "adapter": "markdown",
                 "adapter_version": "1.1",
@@ -258,22 +235,10 @@ def prepared_file_to_resource_batch(
             raise ValueError("embedding profile is required when vectors are present")
         if len(prepared.vectors) != len(units):
             raise ValueError("embedding count must match the search-unit count")
-        space_id = embedding_space_id(
-            profile.name,
-            profile.fingerprint,
-            profile.vector_value_policy,
-        )
-        spaces = (
-            EmbeddingSpaceRecord(
-                space_id=space_id,
-                dimensions=profile.output_dimensions,
-                metric=METRIC_COSINE,
-                fingerprint=profile.fingerprint,
-                metadata={"profile": profile.name, **value_policy_metadata(profile.vector_value_policy)},
-            ),
-        )
+        space = CanonicalTextEmbeddingSpace(profile)
+        spaces = (space.record,)
         vectors = tuple(
-            VectorRecord(unit.unit_id, space_id, vector)
+            VectorRecord(unit.unit_id, space.space_id, vector)
             for unit, vector in zip(units, prepared.vectors, strict=True)
         )
 
@@ -410,26 +375,11 @@ def prepared_file_to_resource_batch(
                     raise ValueError("whole_vector must match the chunk vector dimensions")
                 vectors = vectors + (VectorRecord(whole_unit_id, space.space_id, tuple(whole_vector)),)
             else:
-                space_id = embedding_space_id(
-                    prepared.embedding_profile.name,
-                    prepared.embedding_profile.fingerprint,
-                    prepared.embedding_profile.vector_value_policy,
-                )
-                spaces = (
-                    EmbeddingSpaceRecord(
-                        space_id=space_id,
-                        dimensions=prepared.embedding_profile.output_dimensions,
-                        metric=METRIC_COSINE,
-                        fingerprint=prepared.embedding_profile.fingerprint,
-                        metadata={
-                            "profile": prepared.embedding_profile.name,
-                            **value_policy_metadata(prepared.embedding_profile.vector_value_policy),
-                        },
-                    ),
-                )
+                space = CanonicalTextEmbeddingSpace(prepared.embedding_profile)
+                spaces = (space.record,)
                 if len(whole_vector) != spaces[0].dimensions:
                     raise ValueError("whole_vector must match the embedding profile dimensions")
-                vectors = (VectorRecord(whole_unit_id, space_id, tuple(whole_vector)),)
+                vectors = (VectorRecord(whole_unit_id, space.space_id, tuple(whole_vector)),)
         representations = representations + (whole_representation,)
 
     batch = PreparedResourceBatch(
@@ -586,54 +536,171 @@ def _optional_int(payload: Mapping[str, object], key: str) -> int | None:
 
 
 class CoreCompatibilityStorage:
-    """Active resource-core composition with feature-gated legacy vector writes."""
+    """Compatibility surface projected solely over the fixed clean catalog."""
 
     def __init__(
         self,
-        connection: _AtomicProjectionConnection,
+        connection: sqlite3.Connection,
         *,
         metadata_policy: MetadataProjectionPolicy | None = None,
-        write_legacy_vectors: bool = False,
     ) -> None:
-        if not isinstance(write_legacy_vectors, bool):
-            raise TypeError("write_legacy_vectors must be a bool")
         self.connection = connection
-        self.legacy = SQLiteIndexStorage(connection)
         self.resource_store = SQLiteResourceStore(connection)
         self.core_indexing = CoreIndexingService(self.resource_store)
         self.core_retrieval = CoreRetrievalService(self.resource_store)
         self.metadata_policy = metadata_policy or DEFAULT_METADATA_PROJECTION_POLICY
-        self._write_legacy_vectors = write_legacy_vectors
         self._closed = False
 
     def start_run(self, **kwargs: Any) -> str:
-        return self.legacy.start_run(**kwargs)
+        del kwargs
+        return str(uuid.uuid4())
 
     def plan_changes(self, scanned: list[Path], root: Path) -> Any:
-        return self.legacy.plan_changes(scanned, root)
+        indexed = self._document_records()
+        seen: set[str] = set()
+        plan = ChangePlan()
+        for path in scanned:
+            relative_path = path.as_posix()
+            seen.add(relative_path)
+            try:
+                source_hash = compute_file_hash(root / path)
+            except (OSError, UnicodeError):
+                source_hash = ""
+            existing = indexed.get(relative_path)
+            if existing is None:
+                plan.new_files.append(path)
+            elif existing["source_hash"] == source_hash:
+                plan.unchanged_files.append(path)
+            else:
+                plan.changed_files.append(path)
+        plan.deleted_files.extend(sorted(set(indexed) - seen))
+        return plan
 
     def get_file_by_path(self, relative_path: str) -> dict[str, Any] | None:
-        return self.legacy.get_file_by_path(relative_path)
+        return self._document_records().get(relative_path)
 
     def get_public_file_by_path(self, relative_path: str) -> dict[str, Any] | None:
-        return self.legacy.get_public_file_by_path(relative_path)
+        return self.get_file_by_path(relative_path)
+
+    def get_public_file_by_logical_id(self, logical_id_value: str) -> dict[str, Any] | None:
+        """Return one document record by its portable resource identity."""
+        if not isinstance(logical_id_value, str) or not logical_id_value:
+            raise ValueError("logical_id_value must be non-empty")
+        return next(
+            (
+                record
+                for record in self._document_records().values()
+                if record["logical_id"] == logical_id_value
+            ),
+            None,
+        )
+
+    def get_file_outline(self, logical_id_value: str) -> dict[str, Any] | None:
+        """Return canonical document headings without legacy section identifiers."""
+        if self.get_public_file_by_logical_id(logical_id_value) is None:
+            return None
+        rows = self.connection.execute(
+            "SELECT evidence_locator_json FROM core_search_units "
+            "WHERE resource_id=? AND unit_kind=? ORDER BY ordinal,unit_id",
+            (logical_id_value, UNIT_TEXT_CHUNK),
+        ).fetchall()
+        headings: list[dict[str, object]] = []
+        seen: set[tuple[str, ...]] = set()
+        for row in rows:
+            locator = json.loads(str(row["evidence_locator_json"]))
+            if not isinstance(locator, Mapping):
+                continue
+            raw_path = locator.get("heading_path")
+            if not isinstance(raw_path, list) or not all(isinstance(item, str) for item in raw_path):
+                continue
+            heading_path = tuple(raw_path)
+            if not heading_path or heading_path in seen:
+                continue
+            seen.add(heading_path)
+            start_line = locator.get("start_line")
+            end_line = locator.get("end_line")
+            headings.append(
+                {
+                    "logical_id": logical_id(
+                        "heading",
+                        logical_id_value,
+                        heading_path,
+                        start_line,
+                        end_line,
+                    ),
+                    "title": heading_path[-1],
+                    "heading_path": list(heading_path),
+                    "start_line": start_line if type(start_line) is int else None,
+                    "end_line": end_line if type(end_line) is int else None,
+                }
+            )
+        return {"file_logical_id": logical_id_value, "headings": headings}
+
+    def list_public_files(self, *, offset: int, limit: int) -> tuple[dict[str, Any], ...]:
+        """List document records from the fixed catalog in stable path order."""
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        records = sorted(self._document_records().values(), key=lambda record: str(record["relative_path"]))
+        return tuple(records[offset : offset + limit])
+
+    def count_public_files(self) -> int:
+        """Return the number of document resources in the fixed catalog."""
+        return len(self._document_records())
+
+    def _document_records(self) -> dict[str, dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT resource_id,source_namespace,content_hash,title,metadata_json,indexed_at "
+            "FROM core_resources WHERE resource_kind=? ORDER BY resource_id",
+            (RESOURCE_DOCUMENT,),
+        ).fetchall()
+        records: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            metadata = json.loads(str(row["metadata_json"]))
+            if not isinstance(metadata, Mapping):
+                raise ValueError("document resource metadata is invalid")
+            relative_path = metadata.get("relative_path")
+            if not isinstance(relative_path, str) or not relative_path:
+                raise ValueError("document resource relative_path is invalid")
+            ingestion = metadata.get("ingestion")
+            ingestion_values = ingestion if isinstance(ingestion, Mapping) else {}
+            resource_id = str(row["resource_id"])
+            content_hash = row["content_hash"]
+            if not isinstance(content_hash, str) or not content_hash:
+                raise ValueError("document resource content_hash is invalid")
+            records[relative_path] = {
+                "id": resource_id,
+                "logical_id": resource_id,
+                "root_id": str(row["source_namespace"]),
+                "relative_path": relative_path,
+                "title": row["title"],
+                "source_hash": content_hash.removeprefix("sha256:"),
+                "indexed_at": str(row["indexed_at"]),
+                "status": "active",
+                "parser_name": ingestion_values.get("parser_name"),
+                "parser_version": ingestion_values.get("parser_version"),
+                "chunk_strategy_name": ingestion_values.get("chunk_strategy_name"),
+                "chunk_strategy_version": ingestion_values.get("chunk_strategy_version"),
+            }
+        return records
 
     def find_rename_source(
         self,
         deleted_paths: list[str],
         source_hash: str,
     ) -> dict[str, Any] | None:
-        return self.legacy.find_rename_source(deleted_paths, source_hash)
+        matches = [
+            record
+            for path, record in self._document_records().items()
+            if path in deleted_paths and record["source_hash"] == source_hash
+        ]
+        return matches[0] if len(matches) == 1 else None
 
     def replace_file(self, prepared: PreparedFile) -> None:
-        with self.connection.atomic_projection():
-            self.core_indexing.index(
-                prepared_file_to_resource_batch(prepared, metadata_policy=self.metadata_policy)
-            )
-            self.legacy.replace_file(
-                prepared,
-                write_legacy_vectors=self._write_legacy_vectors,
-            )
+        self.core_indexing.index(
+            prepared_file_to_resource_batch(prepared, metadata_policy=self.metadata_policy)
+        )
 
     def resolve_textual_whole_resource_units(
         self,
@@ -667,16 +734,12 @@ class CoreCompatibilityStorage:
         )
 
     def delete_file(self, relative_path: str) -> None:
-        current = self.legacy.get_file_by_path(relative_path)
-        with self.connection.atomic_projection():
-            if current is not None:
-                logical_id_value = current.get("logical_id")
-                if isinstance(logical_id_value, str) and logical_id_value:
-                    self.core_indexing.delete(logical_id_value)
-            self.legacy.delete_file(relative_path)
+        current = self.get_file_by_path(relative_path)
+        if current is not None:
+            self.core_indexing.delete(str(current["logical_id"]))
 
     def record_error(self, run_id: str, code: str, *, file_ref: str) -> None:
-        self.legacy.record_error(run_id, code, file_ref=file_ref)
+        del run_id, code, file_ref
 
     def finish_run(
         self,
@@ -686,48 +749,14 @@ class CoreCompatibilityStorage:
         stats: dict[str, int],
         error_codes: Sequence[str],
     ) -> None:
-        self.legacy.finish_run(run_id, status=status, stats=stats, error_codes=error_codes)
+        del run_id, status, stats, error_codes
 
     def search_core(self, request: SearchRequest) -> SearchResult:
-        # The v1.1 surface returns legacy document spans.  Whole-resource
-        # projections belong to the new typed resource path and have a locator
-        # that cannot be represented by the frozen legacy result contract.
-        core_request = request
-        if request.target == TARGET_UNIT and not request.scope.unit_kinds:
-            core_request = replace(
-                request,
-                scope=replace(request.scope, unit_kinds=(UNIT_TEXT_CHUNK,)),
-            )
-        result = self.core_retrieval.search(core_request)
-        if not request.lexical_branches:
-            return result
-        legacy_by_branch = {
-            branch.branch_id: {
-                candidate.logical_id: candidate
-                for candidate in self.legacy.retrieve_text_candidates(
-                    branch.query,
-                    limit=branch.candidate_limit,
-                )
-            }
-            for branch in request.lexical_branches
-        }
-        return replace(
-            result,
-            items=tuple(
-                replace(
-                    item,
-                    evidence=tuple(
-                        _restore_legacy_lexical_candidate(candidate, legacy_by_branch)
-                        for candidate in item.evidence
-                    ),
-                )
-                for item in result.items
-            ),
-        )
+        return self.core_retrieval.search(request)
 
     def rebuild_fts_index(self) -> tuple[int, int]:
         """Rebuild the active core FTS projection and return FTS/unit counts."""
-        with self.connection.atomic_projection():
+        with self.connection:
             self.connection.execute("DELETE FROM core_search_units_fts")
             self.connection.execute(
                 "INSERT INTO core_search_units_fts(unit_id, content) "
@@ -788,7 +817,26 @@ class CoreCompatibilityStorage:
         limit: int,
         offset: int = 0,
     ) -> list[RetrievalCandidate]:
-        return self.legacy.retrieve_text_candidates(query, limit=limit, offset=offset)
+        result = self.search_core(
+            SearchRequest(
+                lexical_branches=(
+                    LexicalBranch(
+                        _TEXT_BRANCH,
+                        query,
+                        candidate_limit=limit + offset,
+                        scope_override=BranchScopeOverride(
+                            representation_kinds=(REPRESENTATION_RETRIEVAL_TEXT,),
+                            unit_kinds=(UNIT_TEXT_CHUNK,),
+                        ),
+                    ),
+                ),
+                vector_branches=(),
+                scope=SearchScope(),
+                target=TARGET_UNIT,
+                limit=limit + offset,
+            )
+        )
+        return self._retrieval_candidates(result, query=query, mode="text", limit=limit, offset=offset)
 
     def retrieve_semantic_candidates(
         self,
@@ -798,21 +846,127 @@ class CoreCompatibilityStorage:
         profile_fingerprint: str | None,
         limit: int,
     ) -> list[RetrievalCandidate]:
-        return self.legacy.retrieve_semantic_candidates(
-            query_vector,
-            profile=profile,
-            profile_fingerprint=profile_fingerprint,
-            limit=limit,
+        space_id = self.resolve_embedding_space(profile, profile_fingerprint)
+        if space_id is None:
+            return []
+        result = self.search_core(
+            SearchRequest(
+                lexical_branches=(),
+                vector_branches=(
+                    VectorBranch(
+                        _SEMANTIC_BRANCH,
+                        space_id,
+                        tuple(query_vector),
+                        candidate_limit=limit,
+                        expected_fingerprint=profile_fingerprint,
+                    ),
+                ),
+                scope=SearchScope(
+                    representation_kinds=(REPRESENTATION_RETRIEVAL_TEXT,),
+                    unit_kinds=(UNIT_TEXT_CHUNK,),
+                ),
+                target=TARGET_UNIT,
+                limit=limit,
+            )
         )
+        return self._retrieval_candidates(result, query="", mode="semantic", limit=limit)
 
     def search_text(self, query: str, *, limit: int, offset: int = 0) -> Any:
-        return self.legacy.search_text(query, limit=limit, offset=offset)
+        candidates = self.retrieve_text_candidates(query, limit=limit, offset=offset)
+        return TextSearchResult(
+            query=query,
+            results=[
+                TextSearchItem(
+                    chunk_id=candidate.logical_id,
+                    score=candidate.score,
+                    snippet=candidate.content_preview,
+                    file_relative_path=candidate.source_locator.relative_path,
+                    section_title=candidate.metadata.get("section_title"),
+                    heading_path=json.dumps(candidate.source_locator.heading_path),
+                    source_locator=candidate.source_locator,
+                )
+                for candidate in candidates
+            ],
+            total_count=len(candidates),
+        )
 
     def get_chunk_source_locator(self, chunk_id: str) -> SourceLocator:
-        return self.legacy.get_chunk_source_locator(chunk_id)
+        unit = self.resource_store.read_unit(chunk_id)
+        if unit is None:
+            raise KeyError(chunk_id)
+        return CoreCompatibilityMapper.source_locator(unit.evidence_locator)
 
     def get_chunk_by_logical_id(self, logical_id_value: str) -> dict[str, Any] | None:
-        return self.legacy.get_chunk_by_logical_id(logical_id_value)
+        unit = self.resource_store.read_unit(logical_id_value)
+        if unit is None:
+            return None
+        locator = CoreCompatibilityMapper.source_locator(unit.evidence_locator)
+        return {
+            "id": unit.unit_id,
+            "logical_id": unit.unit_id,
+            "content": unit.text,
+            "content_type": unit.unit_kind,
+            "chunk_index": unit.ordinal,
+            "heading_path": list(locator.heading_path),
+            "embedding_text_hash": None,
+            "source_locator": locator.to_dict(),
+        }
+
+    def get_chunk_neighbors(self, logical_id_value: str, *, count: int = 1) -> tuple[dict[str, Any], ...]:
+        """Return adjacent text chunks without using legacy linked-list tables."""
+        if not isinstance(logical_id_value, str) or not logical_id_value:
+            raise ValueError("logical_id_value must be non-empty")
+        if count <= 0:
+            raise ValueError("count must be positive")
+        unit = self.resource_store.read_unit(logical_id_value)
+        if unit is None or unit.unit_kind != UNIT_TEXT_CHUNK:
+            return ()
+        previous_rows = self.connection.execute(
+            "SELECT unit_id FROM core_search_units "
+            "WHERE resource_id=? AND representation_id=? AND unit_kind=? AND ordinal<? "
+            "ORDER BY ordinal DESC,unit_id DESC LIMIT ?",
+            (unit.resource_id, unit.representation_id, UNIT_TEXT_CHUNK, unit.ordinal, count),
+        ).fetchall()
+        next_rows = self.connection.execute(
+            "SELECT unit_id FROM core_search_units "
+            "WHERE resource_id=? AND representation_id=? AND unit_kind=? AND ordinal>? "
+            "ORDER BY ordinal ASC,unit_id ASC LIMIT ?",
+            (unit.resource_id, unit.representation_id, UNIT_TEXT_CHUNK, unit.ordinal, count),
+        ).fetchall()
+        neighbor_ids = [str(row["unit_id"]) for row in reversed(previous_rows)]
+        neighbor_ids.extend(str(row["unit_id"]) for row in next_rows)
+        return tuple(
+            chunk
+            for neighbor_id in neighbor_ids
+            if (chunk := self.get_chunk_by_logical_id(neighbor_id)) is not None
+        )
+
+    @staticmethod
+    def _retrieval_candidates(
+        result: SearchResult,
+        *,
+        query: str,
+        mode: RetrievalMode,
+        limit: int,
+        offset: int = 0,
+    ) -> list[RetrievalCandidate]:
+        mapped = CoreCompatibilityMapper().retrieval_result(
+            query=query,
+            mode=mode,
+            result=result,
+            limit=limit,
+            offset=offset,
+        )
+        return [
+            RetrievalCandidate(
+                logical_id=item.logical_id,
+                score=item.score,
+                content_preview=item.content_preview,
+                source_locator=item.source_locator,
+                metadata=item.metadata,
+            )
+            for item in mapped.results
+        ]
 
     def close(self) -> None:
         if not self._closed:
@@ -820,191 +974,29 @@ class CoreCompatibilityStorage:
             self._closed = True
 
 
-def create_application_storage(root: Path, config: Any) -> SQLiteIndexStorage | CoreCompatibilityStorage:
-    """Open the legacy store or its fail-closed active resource generation."""
-    database_path, contract_kind = _resolve_application_database(root, config)
-    if contract_kind is None:
-        return create_sqlite_index_storage(root.resolve(), config)
-    if contract_kind is GenerationContractKind.LEGACY_V0_2:
-        return SQLiteIndexStorage(
-            get_read_only_connection(database_path),
-            owns_connection=True,
-        )
+def create_application_storage(
+    root: Path,
+    config: Any,
+    *,
+    create: bool = False,
+) -> CoreCompatibilityStorage:
+    """Open the only supported catalog; create it only for an explicit writer."""
+    catalog = open_application_catalog(root.resolve(), config, create=create)
     return CoreCompatibilityStorage(
-        _get_atomic_projection_connection(database_path),
+        catalog.connection,
         metadata_policy=metadata_projection_policy_from_config(config.metadata),
     )
 
 
 def resolve_application_database_path(root: Path, config: Any) -> Path:
-    """Resolve the verified database used by normal application composition."""
-    return _resolve_application_database(root, config)[0]
-
-
-def _resolve_application_database(
-    root: Path,
-    config: Any,
-) -> tuple[Path, GenerationContractKind | None]:
-    resolved_root = root.resolve()
-    configured = Path(config.paths.store)
-    store_dir = configured if configured.is_absolute() else resolved_root / configured
-    pointer_path = store_dir / "active-generation.json"
-    if not pointer_path.exists():
-        return store_dir / "knowledge.db", None
-
-    manager = StoreGenerationManager(store_dir, runtime=SQLiteGenerationRuntime())
-    pointer, generation, database_path = manager.resolve_active()
-    if pointer.contract_kind is GenerationContractKind.LEGACY_V0_2:
-        return database_path, pointer.contract_kind
-    if (
-        generation.contract_kind
-        not in {GenerationContractKind.RESOURCE_CORE_V1, GenerationContractKind.RESOURCE_CORE_V2}
-        or generation.state is not GenerationState.READY
-    ):
-        raise StoreGenerationManagerError("active_generation_not_ready")
-    return database_path, pointer.contract_kind
-
-
-def create_active_generation_rebuild_storage(root: Path, config: Any) -> CoreCompatibilityStorage:
-    """Open the active ready core generation for an explicit index repair.
-
-    Pointer and metadata identity remain fail-closed, while the full runtime FTS
-    verification is intentionally deferred to the rebuild operation itself.
-    """
-    resolved_root = root.resolve()
-    configured = Path(config.paths.store)
-    store_dir = configured if configured.is_absolute() else resolved_root / configured
-    manager = StoreGenerationManager(store_dir, runtime=SQLiteGenerationRuntime())
-    try:
-        pointer = ActiveGenerationPointer.from_bytes(manager.pointer_path.read_bytes())
-        generation = manager.load_generation(pointer.generation_id)
-        if pointer.contract_kind is GenerationContractKind.RESOURCE_CORE_V2:
-            manifest_digest = SQLITE_V2_MIGRATION_MANIFEST_DIGEST
-            schema_version = SQLITE_CATALOG_V2_SCHEMA_VERSION
-        elif pointer.contract_kind is GenerationContractKind.RESOURCE_CORE_V1:
-            manifest_digest = EXPECTED_MIGRATION_MANIFEST_DIGEST
-            schema_version = EXPECTED_MIGRATION_VERSION
-        else:
-            raise StoreGenerationManagerError("active_generation_not_core")
-        assert_pointer_serves_generation(
-            pointer,
-            generation,
-            expected_manifest_digest=manifest_digest,
-            expected_schema_version=schema_version,
-        )
-    except Exception as exc:
-        if isinstance(exc, StoreGenerationManagerError):
-            raise
-        raise StoreGenerationManagerError("active_generation_invalid") from exc
-    database_path = manager.database_path(pointer.generation_id)
-    if not database_path.is_file():
-        raise StoreGenerationManagerError("active_generation_invalid")
-    connection = _get_atomic_projection_connection(database_path)
-    try:
-        required = {"core_search_units", "core_search_units_fts"}
-        objects = {
-            str(row[0])
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
-            ).fetchall()
-        }
-        if pointer.contract_kind is GenerationContractKind.RESOURCE_CORE_V2:
-            validate_v2_clean_identity(connection)
-        else:
-            versions = [
-                str(row[0])
-                for row in connection.execute(
-                    "SELECT version FROM schema_migrations ORDER BY version"
-                ).fetchall()
-            ]
-            expected = [f"{index:04d}" for index in range(int(EXPECTED_MIGRATION_VERSION) + 1)]
-            if versions != expected:
-                raise StoreGenerationManagerError("active_generation_invalid")
-        if not required <= objects:
-            raise StoreGenerationManagerError("active_generation_invalid")
-    except Exception as exc:
-        connection.close()
-        if isinstance(exc, StoreGenerationManagerError):
-            raise
-        raise StoreGenerationManagerError("active_generation_invalid") from exc
-    return CoreCompatibilityStorage(
-        connection,
-        metadata_policy=metadata_projection_policy_from_config(config.metadata),
-    )
-
-
-class _AtomicProjectionConnection(sqlite3.Connection):
-    """Defer adapter commits so core and legacy projections publish together."""
-
-    _projection_active = False
-
-    def commit(self) -> None:
-        if not self._projection_active:
-            super().commit()
-
-    def __enter__(self) -> _AtomicProjectionConnection:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> Literal[False]:
-        if self._projection_active:
-            if exc_type is not None:
-                super().rollback()
-            return False
-        return super().__exit__(exc_type, exc, traceback)
-
-    @contextmanager
-    def atomic_projection(self) -> Iterator[None]:
-        if self._projection_active or self.in_transaction:
-            raise RuntimeError("compatibility projection transaction is already active")
-        self._projection_active = True
-        try:
-            yield
-        except Exception:
-            super().rollback()
-            raise
-        else:
-            super().commit()
-        finally:
-            self._projection_active = False
-
-
-def _get_atomic_projection_connection(database_path: Path) -> _AtomicProjectionConnection:
-    connection = sqlite3.connect(str(database_path), factory=_AtomicProjectionConnection)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute("PRAGMA foreign_keys=ON")
-    return connection
-
-
-def _restore_legacy_lexical_candidate(
-    candidate: RankedCandidate,
-    legacy_by_branch: Mapping[str, Mapping[str, RetrievalCandidate]],
-) -> RankedCandidate:
-    legacy = legacy_by_branch.get(candidate.branch_id, {}).get(candidate.unit_id)
-    if legacy is None:
-        return candidate
-    return replace(
-        candidate,
-        raw_score=legacy.score,
-        metadata={
-            **dict(candidate.metadata),
-            "content_preview": legacy.content_preview,
-            "heading_path": legacy.source_locator.heading_path,
-            "section_title": legacy.metadata.get("section_title"),
-        },
-    )
+    """Return the fixed normal-operation path without opening or creating it."""
+    return canonical_catalog_path(root.resolve(), config)
 
 
 __all__ = [
+    "ApplicationStoreError",
     "CoreCompatibilityMapper",
     "CoreCompatibilityStorage",
-    "StoreGenerationManagerError",
-    "create_active_generation_rebuild_storage",
     "create_application_storage",
     "embedding_space_id",
     "prepared_file_to_resource_batch",

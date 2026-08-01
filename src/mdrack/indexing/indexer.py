@@ -33,7 +33,7 @@ def run_indexer(
     force_reindex: bool = False,
 ) -> IndexerResult:
     """Compose the default SQLite adapter and run the application service."""
-    storage = create_application_storage(root, config)
+    storage = create_application_storage(root, config, create=True)
     service = IndexingService(
         root,
         config,

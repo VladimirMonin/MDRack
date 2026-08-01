@@ -297,17 +297,11 @@ class SQLiteResourceStore:
         if type(dimensions) is not int or dimensions < 1:
             raise ValueError("dimensions must be a positive integer")
         try:
-            fingerprints: tuple[str, ...] = (fingerprint,)
-            raw_digest = fingerprint.removeprefix("sha256:")
-            if len(raw_digest) == 64 and all(character in "0123456789abcdef" for character in raw_digest.lower()):
-                alternate = raw_digest if fingerprint.startswith("sha256:") else f"sha256:{raw_digest}"
-                fingerprints = (fingerprint, alternate)
-            placeholders = ",".join("?" for _ in fingerprints)
             rows = self.connection.execute(
                 "SELECT space_id,dimensions,metric,fingerprint,metadata_json "
-                f"FROM core_embedding_spaces WHERE fingerprint IN ({placeholders}) AND dimensions=? "
+                "FROM core_embedding_spaces WHERE fingerprint=? AND dimensions=? "
                 "ORDER BY space_id",
-                (*fingerprints, dimensions),
+                (fingerprint, dimensions),
             ).fetchall()
             return tuple(
                 EmbeddingSpaceRecord(

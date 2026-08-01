@@ -12,8 +12,7 @@ from typing import Any
 
 import click
 
-from mdrack.application.compatibility import CoreCompatibilityStorage, create_application_storage
-from mdrack.cli.commands.rebuild import rebuild_embeddings_in_db
+from mdrack.application.compatibility import resolve_application_database_path
 from mdrack.config.loader import write_config
 from mdrack.embeddings.runtime import close_async_resource, create_lmstudio_control_client
 from mdrack.indexing.indexer import run_indexer
@@ -463,10 +462,9 @@ def _run_switch_rebuild(
     dimensions: int,
     rebuild_mode: str,
 ) -> dict[str, Any]:
+    del config
     root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
-    db_path: Path = ctx.obj.get("db_path", Path(".mdrack") / "knowledge.db") if ctx.obj else Path(
-        ".mdrack"
-    ) / "knowledge.db"
+    catalog_path = resolve_application_database_path(root, switched_config)
 
     if rebuild_mode == "none":
         return {
@@ -475,18 +473,12 @@ def _run_switch_rebuild(
             "reason": "skipped_by_request",
         }
 
-    if not db_path.exists():
+    if not catalog_path.is_file():
         return {
             "performed": False,
             "mode": rebuild_mode,
             "reason": "database_missing",
         }
-
-    storage = create_application_storage(root, switched_config)
-    try:
-        active_resource_core = isinstance(storage, CoreCompatibilityStorage)
-    finally:
-        storage.close()
 
     provider = LMStudioProvider(
         endpoint=switched_config.embedding.endpoint,
@@ -497,33 +489,23 @@ def _run_switch_rebuild(
         dimensions_capability=switched_config.embedding.dimensions_capability,
     )
     try:
-        if rebuild_mode == "full" or active_resource_core:
-            result = run_indexer(
-                root=root,
-                config=switched_config,
-                provider=provider,
-                profile=_DEFAULT_PROFILE,
-                force_reindex=True,
-            )
-            return {
-                "performed": True,
-                "mode": rebuild_mode,
-                "files_seen": result.files_seen,
-                "files_changed": result.files_changed,
-                "files_deleted": result.files_deleted,
-                "chunks_created": result.chunks_created,
-                "errors_count": result.errors_count,
-                "run_id": result.run_id,
-            }
-
-        data = rebuild_embeddings_in_db(
-            db_path,
-            provider,
-            _DEFAULT_PROFILE,
+        result = run_indexer(
+            root=root,
             config=switched_config,
+            provider=provider,
+            profile=_DEFAULT_PROFILE,
+            force_reindex=True,
         )
-        data.update({"performed": True, "mode": rebuild_mode})
-        return data
+        return {
+            "performed": True,
+            "mode": rebuild_mode,
+            "files_seen": result.files_seen,
+            "files_changed": result.files_changed,
+            "files_deleted": result.files_deleted,
+            "chunks_created": result.chunks_created,
+            "errors_count": result.errors_count,
+            "run_id": result.run_id,
+        }
     finally:
         try:
             asyncio.run(close_async_resource(provider))

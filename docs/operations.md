@@ -2,6 +2,11 @@
 
 This runbook covers ordinary local operation. MDRack stores derived SQLite state;
 Markdown and explicitly supplied media/image inputs remain read-only sources.
+Normal startup uses only `<store>/catalog.sqlite3`; it has no generation,
+candidate, activation, rollback, retention, or old-store migration mode. For a
+bounded offline acceptance pass over synthetic fixtures, use
+[one-store acceptance evidence](one-store-acceptance.md); it is not a normal
+operational command or a recovery procedure.
 
 ## Routine commands
 
@@ -17,9 +22,9 @@ uv run mdrack --root ./notes search "query" --mode text
 ```
 
 Use `mdrack <command> --help` before an uncommon or destructive-looking operation.
-`storage rebuild-fresh`, `storage verify`, and `storage activate` form a separate,
-explicit one-way generation cutover. They are not part of routine scan/search and
-must follow the [recovery procedure](recovery.md).
+The normal command surface has no alternate-catalog or generation-management
+commands. `rebuild fts` and `rebuild embeddings` update only derived search data
+in the fixed catalog.
 
 ## Output, logs, and privacy
 
@@ -81,22 +86,22 @@ uv run mdrack --root ./notes rebuild fts
 ```
 
 Do not delete the database to hide a migration or integrity failure. Unknown
-migration versions and invalid generation pointers fail closed.
+migration versions, non-v2 schemas, and mixed SQLite store layouts fail closed.
 
-### A fresh candidate fails or activation is uncertain
+### The fixed catalog fails validation or integrity checks
 
-Do not activate `building`, `failed`, `rebuild_required`, or `legacy_only` state.
-Only a verified `ready` clean v2 candidate is eligible. Preserve the complete
-store directory (database, WAL/SHM, metadata, and active pointer), stop all writers,
-and follow [recovery and migration procedures](recovery.md). Cleanup is destructive
-and separately authorized; retained generations are not removed automatically.
+Stop all writers and preserve the complete store directory (catalog plus any
+WAL/SHM sidecars) for diagnosis. Normal MDRack does not select a replacement
+catalog or migrate old data. Cleanup or recreation is destructive and separately
+authorized; use the privacy-safe `status`, `doctor`, and `storage-analyze` output
+to report the failure without sharing the store itself.
 
 ### A command exposes an unexpected identifier or capability
 
 Consult [CLI contracts](cli-contracts.md) and the
-[public interface matrix](current-architecture/public-interfaces.md). Legacy
-`files` and `sections` commands still expose internal SQLite identities; new
-resource/search contracts use logical IDs and portable locators. See
+[public interface matrix](current-architecture/public-interfaces.md). `files`,
+`read`, resource, and search contracts use logical IDs and portable locators;
+the removed `sections` command has no normal-operation contract. See
 [current limitations](current-architecture/limitations.md) before treating a
 missing GUI, server, reranker, visual search, ANN, or remote provider as a defect.
 

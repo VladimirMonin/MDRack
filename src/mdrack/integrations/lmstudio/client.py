@@ -543,6 +543,7 @@ class LMStudioProvider:
         requested_dimensions: int | None = None,
         dimensions_capability: CapabilityStatus = "not_tested",
         native_dimensions: int | None = None,
+        query_instruction: str = "Represent the query for retrieval",
     ) -> None:
         """Initialize the LM Studio provider.
 
@@ -557,6 +558,7 @@ class LMStudioProvider:
                 request parameter. Configuration alone is not live evidence.
             native_dimensions: Known full model output dimension. Reduced MRL
                 is not claimed unless this is greater than the request.
+            query_instruction: Exact configured instruction used for query vectors.
         """
         self._provider_name = "lmstudio"
         self._model = model
@@ -566,6 +568,9 @@ class LMStudioProvider:
         self._requested_dimensions = requested_dimensions
         self._dimensions_capability = dimensions_capability
         self._native_dimensions = native_dimensions
+        if not isinstance(query_instruction, str) or not query_instruction.strip():
+            raise ValueError("query_instruction must be non-empty")
+        self._query_instruction = query_instruction.strip()
         self._returned_dimensions: int | None = None
         self._vector_length_valid: bool | None = None
         self._timeout = timeout
@@ -771,7 +776,7 @@ class LMStudioProvider:
         Returns:
             Embedding vector for the query.
         """
-        prefixed = f"Represent this document for retrieval: {text}"
+        prefixed = f"{self._query_instruction}: {text}"
         vectors = await self.embed([prefixed], profile)
         return vectors[0]
 

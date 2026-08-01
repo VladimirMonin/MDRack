@@ -9,7 +9,7 @@ from typing import Any, TypeVar, cast
 
 import click
 
-from mdrack.application.compatibility import StoreGenerationManagerError, create_application_storage
+from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.resources import FacetFilter, ResourceQueryScope, ResourceQueryService
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
@@ -34,7 +34,7 @@ def _open_catalog(ctx: click.Context) -> tuple[Any, Any]:
         raise RuntimeError("config_unavailable")
     try:
         storage = create_application_storage(root, config)
-    except StoreGenerationManagerError:
+    except ApplicationStoreError:
         raise RuntimeError("resource_generation_unavailable") from None
     catalog = getattr(storage, "resource_store", None)
     if catalog is None:

@@ -1,0 +1,61 @@
+{
+  "schema": "mdrack.one-store-queries.v1",
+  "search_cases": [
+    {
+      "id": "document-text",
+      "query": "one catalog sqlite3",
+      "scope": "notes",
+      "mode": "text",
+      "expected_resource_kind": "document"
+    },
+    {
+      "id": "image-semantic",
+      "query": "canonical one-store diagram",
+      "scope": "images",
+      "mode": "semantic",
+      "expected_resource_kind": "image"
+    },
+    {
+      "id": "audio-hybrid",
+      "query": "same textual embedding space",
+      "scope": "audio",
+      "mode": "hybrid",
+      "expected_resource_kind": "audio"
+    },
+    {
+      "id": "video-frame-text",
+      "query": "frame caption source bytes immutable",
+      "scope": "frames",
+      "mode": "text",
+      "expected_resource_kind": "video"
+    }
+  ],
+  "duplicate_expectation": {
+    "resource_id": "one-store-image-001",
+    "expected_duplicate_resource_id": "one-store-image-001-copy"
+  },
+  "provider_degradation": {
+    "query": "provider unavailable",
+    "mode": "hybrid",
+    "expected_degraded": true,
+    "expected_reason": "provider_unavailable"
+  },
+  "similarity_matrix": [
+    {"source_kind": "document", "target_kind": "document", "source_resource_id": "doc_126dbc23e3973c8a8129bac6a06d740e", "target_resource_id": "doc_7219164e26e86f0845f158a5725ea4f8"},
+    {"source_kind": "document", "target_kind": "image", "source_resource_id": "doc_126dbc23e3973c8a8129bac6a06d740e", "target_resource_id": "one-store-image-001"},
+    {"source_kind": "document", "target_kind": "audio", "source_resource_id": "doc_126dbc23e3973c8a8129bac6a06d740e", "target_resource_id": "resource_4ef14546b3ba35a855ad119a585098ac94ac349a3649625c7e9ec9dcd518a52c"},
+    {"source_kind": "document", "target_kind": "video_with_frame_text", "source_resource_id": "doc_126dbc23e3973c8a8129bac6a06d740e", "target_resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3"},
+    {"source_kind": "image", "target_kind": "document", "source_resource_id": "one-store-image-001", "target_resource_id": "doc_126dbc23e3973c8a8129bac6a06d740e"},
+    {"source_kind": "image", "target_kind": "image", "source_resource_id": "one-store-image-001", "target_resource_id": "one-store-image-001-copy"},
+    {"source_kind": "image", "target_kind": "audio", "source_resource_id": "one-store-image-001", "target_resource_id": "resource_4ef14546b3ba35a855ad119a585098ac94ac349a3649625c7e9ec9dcd518a52c"},
+    {"source_kind": "image", "target_kind": "video_with_frame_text", "source_resource_id": "one-store-image-001", "target_resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3"},
+    {"source_kind": "audio", "target_kind": "document", "source_resource_id": "resource_4ef14546b3ba35a855ad119a585098ac94ac349a3649625c7e9ec9dcd518a52c", "target_resource_id": "doc_126dbc23e3973c8a8129bac6a06d740e"},
+    {"source_kind": "audio", "target_kind": "image", "source_resource_id": "resource_4ef14546b3ba35a855ad119a585098ac94ac349a3649625c7e9ec9dcd518a52c", "target_resource_id": "one-store-image-001"},
+    {"source_kind": "audio", "target_kind": "audio", "source_resource_id": "resource_4ef14546b3ba35a855ad119a585098ac94ac349a3649625c7e9ec9dcd518a52c", "target_resource_id": "resource_b8bf0de935adf0b21a3d45e43cd30cd640dd19b8a13982536b02a6f1bfaa5701"},
+    {"source_kind": "audio", "target_kind": "video_with_frame_text", "source_resource_id": "resource_4ef14546b3ba35a855ad119a585098ac94ac349a3649625c7e9ec9dcd518a52c", "target_resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3"},
+    {"source_kind": "video_with_frame_text", "target_kind": "document", "source_resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3", "target_resource_id": "doc_126dbc23e3973c8a8129bac6a06d740e"},
+    {"source_kind": "video_with_frame_text", "target_kind": "image", "source_resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3", "target_resource_id": "one-store-image-001"},
+    {"source_kind": "video_with_frame_text", "target_kind": "audio", "source_resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3", "target_resource_id": "resource_4ef14546b3ba35a855ad119a585098ac94ac349a3649625c7e9ec9dcd518a52c"},
+    {"source_kind": "video_with_frame_text", "target_kind": "video_with_frame_text", "source_resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3", "target_resource_id": "resource_ab4d4de18d5bf07a80a17565febb74949b92f79ea507b3cb31ceb0b90aac7f8a"}
+  ]
+}

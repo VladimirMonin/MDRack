@@ -611,11 +611,10 @@ class UnifiedTextSearchService:
         ):
             return None, (), "incompatible_embedding_profile"
         spaces = tuple(cast(Sequence[EmbeddingSpaceRecord], resolved))
-        fingerprint_variants = {self._fingerprint}
-        raw_digest = self._fingerprint.removeprefix("sha256:")
-        if len(raw_digest) == 64 and all(character in "0123456789abcdef" for character in raw_digest.lower()):
-            fingerprint_variants.update({raw_digest, f"sha256:{raw_digest}"})
-        if any(space.fingerprint not in fingerprint_variants or space.dimensions != len(vector) for space in spaces):
+        if any(
+            space.fingerprint != self._fingerprint or space.dimensions != len(vector)
+            for space in spaces
+        ):
             return None, (), "incompatible_embedding_profile"
         unique_spaces = {space.space_id: space for space in spaces}
         return vector, tuple(unique_spaces.values()), None
@@ -816,13 +815,6 @@ class ResourceQueryService:
             return self._textual_unavailable("", "", "adapter_error", query_resource_id=resource_id)
         if resource is None:
             return self._textual_unavailable("", "", "resource_unavailable", query_resource_id=resource_id)
-        if resolved_scope.resource_kinds and resource.resource_kind not in resolved_scope.resource_kinds:
-            return self._textual_unavailable(
-                "",
-                "",
-                "scope_excludes_query_resource",
-                query_resource_id=resource_id,
-            )
         if self._whole_resource_resolver is None:
             return self._textual_unavailable(
                 "",

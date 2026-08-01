@@ -10,7 +10,7 @@ from typing import Any, cast
 import click
 
 from mdrack.application.compatibility import (
-    StoreGenerationManagerError,
+    ApplicationStoreError,
     create_application_storage,
 )
 from mdrack.application.metadata_filters import (
@@ -20,7 +20,6 @@ from mdrack.application.metadata_filters import (
 )
 from mdrack.application.metadata_projection import metadata_projection_policy_from_config
 from mdrack.application.resource_catalog import MetadataCatalogService
-from mdrack.application.resources import UnifiedTextSearchService
 from mdrack.application.retrieval import (
     InvalidTextSearchError,
     ResourcePresetSearchService,
@@ -28,10 +27,7 @@ from mdrack.application.retrieval import (
     ResourceSearchPresetName,
     RetrievalService,
 )
-from mdrack.application.transcript_ingestion import (
-    TimedRetrievalMode,
-    TimedRetrievalService,
-)
+from mdrack.application.transcript_ingestion import TimedRetrievalMode, TimedRetrievalService
 from mdrack.embeddings.runtime import (
     close_async_resource,
     create_embedding_provider,
@@ -45,7 +41,6 @@ from mdrack.ports.embeddings import EmbeddingProvider
 from mdrack.public_api.engine import MDRackEngine
 from mdrack.storage.sqlite.fts import FTSQueryError
 from mdrack_core import SearchScope
-from mdrack_sqlite import SQLiteCatalog
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +54,12 @@ class UnifiedSearchInputError(ValueError):
 
 
 def _open_storage(root: Path, config: Any, db_path: Path) -> Any:
-    configured = Path(config.paths.store)
-    store_dir = configured if configured.is_absolute() else root.resolve() / configured
-    if not db_path.is_file() and not (store_dir / "active-generation.json").is_file():
+    if not db_path.is_file():
         raise StorageError("Database not found. Run 'mdrack scan' first.")
     try:
         return create_application_storage(root, config)
-    except StoreGenerationManagerError:
-        raise StorageError("Active index generation is not ready.") from None
+    except ApplicationStoreError:
+        raise StorageError("Database not found. Run 'mdrack scan' first.") from None
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
@@ -127,7 +120,7 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     default=None,
     help="Embedding provider for semantic/hybrid search (default from config).",
 )
-@click.option("--catalog", "catalog_path", default=None, metavar="PATH")
+
 @click.option("--kind", "resource_kinds", multiple=True)
 @click.option("--media-type", "media_types", multiple=True)
 @click.option("--namespace", "source_namespaces", multiple=True)
@@ -148,7 +141,7 @@ def cli_search(
     metadata_none: tuple[str, ...],
     metadata_weight: float,
     embedding_provider: str | None,
-    catalog_path: str | None,
+
     resource_kinds: tuple[str, ...],
     media_types: tuple[str, ...],
     source_namespaces: tuple[str, ...],
@@ -168,8 +161,7 @@ def cli_search(
     limit_value: int = limit or config.search.top_k
     provider: EmbeddingProvider | None = None
     storage = None
-    timed_catalog = None
-    if catalog_path is None and unified_scope is None:
+    if unified_scope is None:
         try:
             storage = _open_storage(ctx.obj.get("root", Path(".")), config, db_path)
         except StorageError as exc:
@@ -203,41 +195,19 @@ def cli_search(
             if mode != "text":
                 provider_name = embedding_provider or config.embedding.provider
                 provider = create_embedding_provider(provider_name, config)
-            if catalog_path is not None:
-                timed_catalog = SQLiteCatalog.open(catalog_path)
-                fingerprint = (
-                    embedding_profile_from_config(config, provider, "default").fingerprint
-                    if provider is not None
-                    else None
-                )
+            root = ctx.obj.get("root", Path("."))
+            engine = MDRackEngine(root=root, config=config, embedding_provider=provider)
+            try:
                 result = asyncio.run(
-                    UnifiedTextSearchService(
-                        timed_catalog,
-                        embedding_provider=provider,
-                        embedding_fingerprint=fingerprint,
-                        profile="default",
-                        rrf_k=config.search.rrf_k,
-                    ).search(
+                    engine.search_unified(
                         query,
                         scope=cast(Any, unified_scope),
                         mode=cast(Any, mode),
                         limit=limit_value,
                     )
                 )
-            else:
-                root = ctx.obj.get("root", Path("."))
-                engine = MDRackEngine(root=root, config=config, embedding_provider=provider)
-                try:
-                    result = asyncio.run(
-                        engine.search_unified(
-                            query,
-                            scope=cast(Any, unified_scope),
-                            mode=cast(Any, mode),
-                            limit=limit_value,
-                        )
-                    )
-                finally:
-                    engine.close()
+            finally:
+                engine.close()
             _emit_success(ctx, result.to_dict(), command)
             return
         try:
@@ -255,10 +225,11 @@ def cli_search(
             if metadata_filters.any or metadata_filters.all or metadata_filters.none
             else None
         )
-        if search_preset is not None and catalog_path is None:
-            raise MetadataSearchInputError
-        if catalog_path is not None:
-            timed_catalog = SQLiteCatalog.open(catalog_path)
+        if search_preset is not None:
+            assert storage is not None
+            timed_catalog = getattr(storage, "resource_store", None)
+            if timed_catalog is None:
+                raise MetadataSearchInputError
             if mode == "semantic" or (
                 mode == "hybrid"
                 and (search_preset is not None or config.search.semantic_weight > 0.0)
@@ -409,8 +380,6 @@ def cli_search(
                 asyncio.run(close_async_resource(provider))
             except Exception:
                 logger.debug("embedding.provider.close_failed reason=cleanup_error")
-        if timed_catalog is not None:
-            timed_catalog.close()
         if storage is not None:
             storage.close()
 

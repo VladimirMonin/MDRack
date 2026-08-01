@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from mdrack.application.video_composition import VideoCompositionService
+from mdrack.adapters.sqlite.canonical_catalog import open_application_catalog
 from mdrack.cli import main
 from mdrack.config.models import MDRackConfig
 from mdrack.ingestion.frame_captions import FrameCaptionManifestError, read_frame_captions
@@ -17,15 +17,6 @@ from mdrack.ingestion.media_manifests import MediaManifestError, read_video_reso
 from mdrack.ingestion.transcripts import read_transcript
 from mdrack.public_api import MDRackEngine
 from mdrack_media import FrameCaptionArtifact, ProducerFingerprint, frame_id, resource_id
-from mdrack_sqlite import SQLiteCatalog
-
-
-class _EngineStorage:
-    def __init__(self, catalog: SQLiteCatalog) -> None:
-        self.resource_store = catalog
-
-    def close(self) -> None:
-        pass
 
 
 def _manifest_bytes() -> tuple[bytes, str]:
@@ -58,7 +49,7 @@ def _manifest_bytes() -> tuple[bytes, str]:
                         "timestamp_ms": 1_750,
                         "caption": "closing title card",
                         "metadata": {},
-                    }
+                    },
                 ],
             }
         ).encode()
@@ -108,51 +99,34 @@ def _invalid_manifest(source: bytes, *, defect: str) -> bytes:
     return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
 
 
+def _initialize(runner: CliRunner, root: Path) -> None:
+    result = runner.invoke(main, ["--root", str(root), "init"])
+    assert result.exit_code == 0, result.output
+
+
 def test_cli_and_engine_compose_the_same_provider_free_video_graph(tmp_path: Path) -> None:
     source, resource = _manifest_bytes()
     source_path = tmp_path / "PRIVATE_VIDEO_MANIFEST.json"
     source_path.write_bytes(source)
-    cli_database = tmp_path / "cli.sqlite3"
-    engine_database = tmp_path / "engine.sqlite3"
-    with SQLiteCatalog.create(cli_database):
-        pass
-    with SQLiteCatalog.create(engine_database):
-        pass
+    cli_root = tmp_path / "cli-root"
+    engine_root = tmp_path / "engine-root"
+    cli_root.mkdir()
+    engine_root.mkdir()
+    runner = CliRunner()
+    _initialize(runner, cli_root)
+    _initialize(runner, engine_root)
 
-    cli_result = CliRunner().invoke(
+    cli_result = runner.invoke(
         main,
-        [
-            "ingest",
-            "video",
-            str(source_path),
-            "--no-embeddings",
-            "--catalog",
-            str(cli_database),
-        ],
+        ["--root", str(cli_root), "ingest", "video", str(source_path), "--no-embeddings"],
     )
     assert cli_result.exit_code == 0, cli_result.output
     cli_data = json.loads(cli_result.stdout)["data"]
 
     manifest = read_video_resource_manifest(source)
-    with SQLiteCatalog.open(engine_database) as catalog:
-        engine = MDRackEngine(
-            root=tmp_path,
-            config=MDRackConfig(),
-            storage=_EngineStorage(catalog),
-        )
-        engine_result = asyncio.run(
-            engine.ingest_video(
-                manifest.transcript,
-                manifest.frame_captions,
-                media_type=manifest.media_type,
-                source_namespace=manifest.source_namespace,
-                source_locator=manifest.source_locator,
-                source_metadata=manifest.source_metadata,
-                title=manifest.title,
-                embeddings=False,
-            )
-        )
-        direct = VideoCompositionService(catalog).prepare(
+    engine = MDRackEngine(root=engine_root, config=MDRackConfig())
+    engine_result = asyncio.run(
+        engine.ingest_video(
             manifest.transcript,
             manifest.frame_captions,
             media_type=manifest.media_type,
@@ -160,11 +134,15 @@ def test_cli_and_engine_compose_the_same_provider_free_video_graph(tmp_path: Pat
             source_locator=manifest.source_locator,
             source_metadata=manifest.source_metadata,
             title=manifest.title,
+            embeddings=False,
         )
+    )
+    engine.close()
+    with open_application_catalog(engine_root, MDRackConfig(), create=False) as catalog:
         stored = catalog.read_resource(resource)
 
     assert cli_data == {**engine_result.to_dict(), "persisted": True}
-    assert direct.resource.content_hash == stored.content_hash  # type: ignore[union-attr]
+    assert stored is not None
     assert cli_data["transcript_unit_count"] == 1
     assert cli_data["frame_unit_count"] == 2
     assert cli_data["vector_count"] == 0
@@ -172,6 +150,8 @@ def test_cli_and_engine_compose_the_same_provider_free_video_graph(tmp_path: Pat
     assert str(source_path) not in cli_result.stdout + cli_result.stderr
     assert "speech transaction boundary" not in cli_result.stderr
     assert "unique architecture diagram" not in cli_result.stderr
+    assert (cli_root / ".mdrack" / "catalog.sqlite3").is_file()
+    assert (engine_root / ".mdrack" / "catalog.sqlite3").is_file()
 
 
 def test_complete_manifest_rejects_semantic_duplicates_and_forbidden_frame_metadata() -> None:
@@ -185,13 +165,8 @@ def test_complete_manifest_rejects_semantic_duplicates_and_forbidden_frame_metad
 def test_engine_rejects_invalid_frame_artifacts_before_persistence(tmp_path: Path) -> None:
     source, _ = _manifest_bytes()
     valid = read_video_resource_manifest(source)
-    database = tmp_path / "engine-validation.sqlite3"
-    with SQLiteCatalog.create(database) as catalog:
-        engine = MDRackEngine(
-            root=tmp_path,
-            config=MDRackConfig(),
-            storage=_EngineStorage(catalog),
-        )
+    with open_application_catalog(tmp_path, MDRackConfig(), create=True) as catalog:
+        engine = MDRackEngine(root=tmp_path, config=MDRackConfig())
         for defect, error in (
             ("duplicate_identity", "frame_manifest_duplicate"),
             ("duplicate_pair", "frame_manifest_duplicate"),
@@ -211,4 +186,5 @@ def test_engine_rejects_invalid_frame_artifacts_before_persistence(tmp_path: Pat
                         embeddings=False,
                     )
                 )
+        engine.close()
         assert catalog.verify().resources == 0

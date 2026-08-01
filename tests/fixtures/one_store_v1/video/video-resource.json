@@ -1,0 +1,108 @@
+{
+  "frame_captions": {
+    "metadata": {},
+    "normalization_fingerprint": "sha256:903ef4a373ed45e19e73e8778a4e02f35d99a00ef5776ef3409ce0f5cbf91df9",
+    "observations": [
+      {
+        "caption": "Canonical frame caption names the shared textual embedding space.",
+        "content_fingerprint": "sha256:c458bc0a6db144d9ea6074805717f871942cf355f8b99253a6287a4392d094b8",
+        "frame_id": "frame_2e55ccc1ded94c93a44fb6c8dc8384504fb799ead6ce6b33d7ce451cd7240159",
+        "metadata": {},
+        "normalization_fingerprint": "sha256:903ef4a373ed45e19e73e8778a4e02f35d99a00ef5776ef3409ce0f5cbf91df9",
+        "observation_identity": "one-store-frame-001",
+        "ordinal": 0,
+        "producer_fingerprint": "sha256:38d0cadac5b2401c7ac0360593eda1ce081f48d06802645164610389c655d4d5",
+        "resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3",
+        "timestamp_ms": 750,
+        "token_count": {
+          "count": 9,
+          "counter_fingerprint": "sha256:5a9880ae2ada75f9ea080967e5ebfe42940705c563701a749694d3700b21507e",
+          "kind": "estimated"
+        }
+      },
+      {
+        "caption": "Canonical frame caption confirms source bytes remain immutable.",
+        "content_fingerprint": "sha256:0da1f3a871c704d3376306e6ccae679694d39f4a71fb05786236ec5d6868efa8",
+        "frame_id": "frame_0a6c7abeac33141f8c09c3a1c6d7ccde17dde65f5f889d9e3b239fb24cfeeced",
+        "metadata": {},
+        "normalization_fingerprint": "sha256:903ef4a373ed45e19e73e8778a4e02f35d99a00ef5776ef3409ce0f5cbf91df9",
+        "observation_identity": "one-store-frame-002",
+        "ordinal": 1,
+        "producer_fingerprint": "sha256:38d0cadac5b2401c7ac0360593eda1ce081f48d06802645164610389c655d4d5",
+        "resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3",
+        "timestamp_ms": 1500,
+        "token_count": {
+          "count": 8,
+          "counter_fingerprint": "sha256:5a9880ae2ada75f9ea080967e5ebfe42940705c563701a749694d3700b21507e",
+          "kind": "estimated"
+        }
+      }
+    ],
+    "producer_fingerprint": "sha256:38d0cadac5b2401c7ac0360593eda1ce081f48d06802645164610389c655d4d5",
+    "representation_id": "representation_e1be24c171a20d492ca648e1e2e650261d433da5e6aa8659b56eee7d5bd59445",
+    "representation_kind": "frame_caption",
+    "resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3"
+  },
+  "resource": {
+    "locator": {
+      "kind": "external_record",
+      "payload": {
+        "source_ref": "video-001"
+      }
+    },
+    "media_type": "video/mp4",
+    "resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3",
+    "source_metadata": {},
+    "source_namespace": "one-store-fixture",
+    "title": "Canonical one-store video"
+  },
+  "schema": "mdrack.video-resource.v1",
+  "transcript": {
+    "atoms": [
+      {
+        "atom_id": "atom_49ac91c3f0214ae19950128af0be07b62c25d3f26d0077190df8ebd2e9d0a125",
+        "confidence": null,
+        "end_ms": 1000,
+        "metadata": {
+          "timing_precision": "segment"
+        },
+        "normalization_fingerprint": "sha256:01cdd7ae292d5fe48674018f0ebfd3c85e5af717c0c337c7a5078cbd51ceb87c",
+        "ordinal": 0,
+        "producer_fingerprint": "sha256:31805e336b819b7b36b5be980218d23642497b83924bb44baf104319d6ab1a31",
+        "resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3",
+        "speaker": null,
+        "start_ms": 0,
+        "text": "Canonical video transcript explains single catalog recovery.",
+        "token_count": null
+      },
+      {
+        "atom_id": "atom_b3dc7c34820533affde2103a90ef271f7c44409df2d7f2795ef158cbc98dbe0c",
+        "confidence": null,
+        "end_ms": 2000,
+        "metadata": {
+          "timing_precision": "segment"
+        },
+        "normalization_fingerprint": "sha256:01cdd7ae292d5fe48674018f0ebfd3c85e5af717c0c337c7a5078cbd51ceb87c",
+        "ordinal": 1,
+        "producer_fingerprint": "sha256:31805e336b819b7b36b5be980218d23642497b83924bb44baf104319d6ab1a31",
+        "resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3",
+        "speaker": null,
+        "start_ms": 1000,
+        "text": "Frame captions contribute to the whole video textual projection.",
+        "token_count": null
+      }
+    ],
+    "duration_ms": 2000,
+    "language": null,
+    "metadata": {
+      "diagnostic_count": 0,
+      "reader_format": "whisper_json",
+      "source_fingerprint": "sha256:74c87b0fd2ef9837f5f33ddc7815c8233df3919566895ea07f0a669800875c30"
+    },
+    "normalization_fingerprint": "sha256:01cdd7ae292d5fe48674018f0ebfd3c85e5af717c0c337c7a5078cbd51ceb87c",
+    "producer_fingerprint": "sha256:31805e336b819b7b36b5be980218d23642497b83924bb44baf104319d6ab1a31",
+    "representation_id": "representation_2569c1312fe9d650b4f32d832b09c452baddd215b535cab8d9016e7519b0ab23",
+    "representation_kind": "audio_transcript",
+    "resource_id": "resource_c6666e46646ce2bb561cef71164fe34e1eef9f2b3291bf09941d8977c5f10dd3"
+  }
+}

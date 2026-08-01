@@ -1,4 +1,4 @@
-"""Tests for CLI help output, command groups, and JSON error envelope."""
+"""Tests for the current CLI help and fixed-catalog command surface."""
 
 from __future__ import annotations
 
@@ -12,114 +12,97 @@ from mdrack.cli import main
 
 def test_help_outputs_usage() -> None:
     """Verify that `mdrack --help` exits 0 and shows usage."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["--help"])
+    result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "MDRack" in result.output
 
 
 def test_version_outputs_version() -> None:
     """Verify that `mdrack --version` prints the version string."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["--version"])
+    result = CliRunner().invoke(main, ["--version"])
     assert result.exit_code == 0
     assert "1.3.0" in result.output
 
-
-# ---------------------------------------------------------------------------
-# Command group existence checks
-# ---------------------------------------------------------------------------
 
 _COMMAND_GROUPS = ["init", "scan", "status", "doctor"]
 
 
 def test_top_level_commands_exist(tmp_path: Path) -> None:
-    """Each top-level command should be callable offline and return JSON."""
+    """Each basic top-level command is callable offline and returns JSON."""
     (tmp_path / "offline.md").write_text("# Offline\n\nContract test.\n", encoding="utf-8")
     runner = CliRunner()
-    for cmd in _COMMAND_GROUPS:
-        args = ["--root", str(tmp_path), cmd]
-        if cmd == "scan":
+    for command in _COMMAND_GROUPS:
+        args = ["--root", str(tmp_path), command]
+        if command == "scan":
             args.extend(["--provider", "fake"])
         result = runner.invoke(main, args)
-        assert result.exit_code == 0, f"Command '{cmd}' failed: {result.output}"
+        assert result.exit_code == 0, f"Command '{command}' failed: {result.output}"
         payload = json.loads(result.output)
-        assert payload["ok"] is True, f"Command '{cmd}' returned ok=false"
+        assert payload["ok"] is True, f"Command '{command}' returned ok=false"
         assert "data" in payload
 
 
 def test_search_requires_query() -> None:
-    """search command exists and accepts QUERY argument plus options."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["search", "--help"])
+    """search command exists and accepts QUERY plus its current options."""
+    result = CliRunner().invoke(main, ["search", "--help"])
     assert result.exit_code == 0
     assert "QUERY" in result.output
     assert "--mode" in result.output
     assert "--limit" in result.output
     assert "--provider" in result.output
+    assert "--catalog" not in result.output
 
 
-_SUBGROUPS = ["read", "files", "sections"]
-
-
-def test_subgroup_exists() -> None:
-    """Each subgroup should be callable without crashing."""
+def test_current_reader_groups_exist() -> None:
+    """The fixed catalog exposes only the ported reader groups."""
     runner = CliRunner()
-    for grp in _SUBGROUPS:
-        result = runner.invoke(main, [grp, "--help"])
-        assert result.exit_code == 0, f"Subgroup '{grp}' failed: {result.output}"
+    for group in ("read", "files"):
+        result = runner.invoke(main, [group, "--help"])
+        assert result.exit_code == 0, f"Group '{group}' failed: {result.output}"
+
+    read_help = runner.invoke(main, ["read", "--help"])
+    assert "chunk" in read_help.output
+    assert "file" in read_help.output
+    assert "section" not in read_help.output
 
 
-def test_read_subcommands_exist() -> None:
-    """read chunk / read section / read file should be listed in help."""
+def test_files_list_exists_for_an_initialized_empty_catalog(tmp_path: Path) -> None:
+    """files list reads the fixed catalog and returns the standard envelope."""
     runner = CliRunner()
-    result = runner.invoke(main, ["read", "--help"])
-    assert result.exit_code == 0
-    assert "chunk" in result.output
-    assert "section" in result.output
-    assert "file" in result.output
+    init = runner.invoke(main, ["--root", str(tmp_path), "init"])
+    assert init.exit_code == 0, init.output
 
-
-def test_files_list_exists() -> None:
-    """files list should return JSON."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["files", "list"])
-    assert result.exit_code == 0
+    result = runner.invoke(main, ["--root", str(tmp_path), "files", "list"])
+    assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["ok"] is True
+    assert payload["data"]["files"] == []
 
 
-def test_sections_list_exists() -> None:
-    """sections list should require a FILE_ID argument."""
+def test_retained_public_groups_are_registered_without_legacy_catalog_bypass() -> None:
+    """S2 keeps catalog-backed outcomes while removing legacy lifecycle commands."""
     runner = CliRunner()
-    result = runner.invoke(main, ["sections", "list", "--help"])
-    assert result.exit_code == 0
-    assert "FILE_ID" in result.output
+    for command in ("resource", "eval"):
+        result = runner.invoke(main, [command, "--help"])
+        assert result.exit_code == 0, result.output
+        assert "--catalog" not in result.output
 
+    read_help = runner.invoke(main, ["read", "--help"])
+    assert read_help.exit_code == 0, read_help.output
+    assert "outline" in read_help.output
 
-def test_resource_export_is_registered_once_with_manifest_projection_options() -> None:
-    runner = CliRunner()
-    group = runner.invoke(main, ["resource", "--help"])
-    command = runner.invoke(main, ["resource", "export", "--help"])
-
-    assert group.exit_code == command.exit_code == 0
-    assert group.output.count("export") == 1
-    assert "RESOURCE_ID" in command.output
-    assert "--catalog" in command.output
-    assert "--output" in command.output
-    assert "--include-vectors / --no-vectors" in command.output
-    assert "--include-text / --no-text" in command.output
-    assert "--redact-source-metadata" in command.output
+    for command in ("storage", "sections"):
+        result = runner.invoke(main, [command, "--help"])
+        assert result.exit_code == 2
+        assert f"No such command '{command}'" in result.output
 
 
 # ---------------------------------------------------------------------------
 # JSON envelope shape checks
 # ---------------------------------------------------------------------------
-
 def test_json_envelope_success_shape() -> None:
     """Every successful response has ok, data, meta.command keys."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["status"])
+    result = CliRunner().invoke(main, ["status"])
     payload = json.loads(result.output)
     assert "ok" in payload
     assert "data" in payload
@@ -129,46 +112,29 @@ def test_json_envelope_success_shape() -> None:
 
 
 def test_json_envelope_error_shape() -> None:
-    """Running an unknown command produces a JSON error envelope."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["nonexistent-cmd"])
-    # Click's default for unknown commands is exit_code != 0
+    """Running an unknown command produces a nonzero Click result."""
+    result = CliRunner().invoke(main, ["nonexistent-cmd"])
     assert result.exit_code != 0
 
 
 def test_pretty_json_flag() -> None:
-    """When --json flag is set, output should still be valid JSON."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["--json", "status"])
+    """When --json is set, output remains valid JSON."""
+    result = CliRunner().invoke(main, ["--json", "status"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
-    assert payload["ok"] is True
+    assert json.loads(result.output)["ok"] is True
 
-
-# ---------------------------------------------------------------------------
-# Global option: --root
-# ---------------------------------------------------------------------------
 
 def test_root_option_accepted() -> None:
-    """The --root option should be accepted without error."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["--root", ".", "status"])
+    """The --root option is accepted without error."""
+    result = CliRunner().invoke(main, ["--root", ".", "status"])
     assert result.exit_code == 0
 
 
-# ---------------------------------------------------------------------------
-# Config loading via --config-file
-# ---------------------------------------------------------------------------
-
 def test_config_file_missing_falls_back() -> None:
-    """If --config-file points to a missing file, the CLI should still start."""
-    runner = CliRunner()
-    result = runner.invoke(main, ["--config-file", "/nonexistent/path.toml", "status"])
-    # Should fail gracefully with a JSON error envelope
+    """A missing config file produces a private-safe JSON error envelope."""
+    result = CliRunner().invoke(main, ["--config-file", "/nonexistent/path.toml", "status"])
     assert result.exit_code != 0
     try:
-        payload = json.loads(result.output)
-        assert payload["ok"] is False
+        assert json.loads(result.output)["ok"] is False
     except (json.JSONDecodeError, ValueError):
-        # If Click intercepts before our handler, it's still acceptable
         pass

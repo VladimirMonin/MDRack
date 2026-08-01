@@ -1,9 +1,12 @@
 # SQLite persistence
 
-SQLite is MDRack's only persistent backend. The legacy compatibility store is
-normally `.mdrack/knowledge.db`; resource-core data is built in a separate store
-generation selected through an app-owned pointer. Source Markdown and image bytes
-remain outside databases and are never rewritten by indexing.
+SQLite is MDRack's only persistent backend. Normal application startup creates or
+opens exactly `<store>/catalog.sqlite3` and requires the complete
+`mdrack_sqlite_catalog_v2` identity. It rejects any other SQLite main file and the
+obsolete `knowledge.db`, pointer, or generation-directory lifecycle artifacts.
+Existing v1/app-bridge stores are unsupported and are never read, copied, or
+migrated by the application. Source Markdown and image bytes remain outside the
+database and are never rewritten by indexing.
 
 ## Connection and migration rules
 
@@ -27,12 +30,13 @@ one `BEGIN IMMEDIATE` transaction.
 | `0007` | Create-only generic resources, representations, search units, embedding spaces/vectors, facets, and manual resource FTS. No legacy row is changed or backfilled. |
 
 The runner validates a compiled ordered filename/content manifest and digest before
-touching a connection. `apply_migrations` is intentionally bounded at `0006` for
-the legacy database; only explicit candidate composition may apply `0007`.
+touching a connection. The historical app runner is bounded at `0006`; its
+`apply_candidate_migrations` helper exists only to verify the frozen bridge schema
+and is not part of normal application startup.
 
 The standalone package has two separate immutable clean histories. Legacy
-`mdrack_sqlite_catalog_v1` ends at `0003_search`. Fresh compact app generations
-use `mdrack_sqlite_catalog_v2`: `0000_identity`, `0001_catalog`,
+`mdrack_sqlite_catalog_v1` ends at `0003_search`. The fixed application catalog
+uses `mdrack_sqlite_catalog_v2`: `0000_identity`, `0001_catalog`,
 `0002_vectors_facets`, `0003_search`, and `0004_vector_encoding`. V2 adds exact
 codec and backend registries (`mdrack_vector_codecs`, `mdrack_vector_backends`) to
 the same `core_*` graph and persists filename/content digests plus the final
@@ -52,24 +56,14 @@ FTS5 shadow tables are checked as a fixed inventory before their engine-generate
 DDL is excluded from the fingerprint. Prefix lookalikes are not excluded. The
 frozen app bridge retains its existing compatibility verification.
 
-## Store generations and recovery
+## Fixed-store creation and recovery
 
-Generation metadata records identity, readiness, migration manifest, contract
-version, producer fingerprints, verification time, and a stable failure reason.
-States are `legacy_only`, `rebuild_required`, `building`, `ready`, and `failed`;
-only `ready` may serve core-backed search/write.
-
-A fresh candidate is created exclusively with the v2 package manifest, rebuilt from
-source inputs, verified (identity/digest, FK/integrity, canonical records, vector
-codec/backend registry, FTS/vector/facet graph), checkpointed, closed and fsynced
-before its ready metadata becomes durable. The Markdown rebuild path snapshots source
-bytes before and after reparse; explicitly supplied non-Markdown rebuild inputs carry
-their own immutable source digests. Under one-writer quiescence, one-way promotion
-reads a predecessor pointer only as metadata and file presence, never opens its SQLite
-database, then replaces the pointer and fsyncs its directory. Readers see the old or
-new generation only. Retained legacy stores remain preservation-only: runtime pointer
-rollback is unsupported, and cleanup is a separate destructive action outside release
-acceptance.
+The application creates the final `catalog.sqlite3` path exclusively, applies the
+immutable v2 migration manifest, verifies schema identity, integrity and foreign
+keys, and removes the database plus WAL/SHM sidecars if initial creation fails. A
+concurrent opener waits only for that reserved path to become a complete verified
+v2 catalog and otherwise fails after a bounded timeout. There is no application
+candidate, active pointer, activation, rollback, retention, or cleanup flow.
 
 ## Current ER model
 
@@ -228,7 +222,7 @@ failure preserves the previous complete graph. Delete is atomic and idempotent.
 there are no triggers. Text search uses FTS5 rank and highlighted snippets, with
 a quoted-phrase retry only for plain invalid syntax.
 
-Vector payloads are generation-specific. The legacy app compatibility schema keeps
+Vector payloads are schema-specific. The historical app compatibility schema keeps
 canonical JSON-encoded finite float arrays in its `chunk_embeddings` BLOB column.
 Standalone/generic catalogs, including fresh v2, use little-endian IEEE-754
 float64 bytes by default: an explicit `ieee754-f64-le-v1` codec or missing
@@ -273,7 +267,6 @@ lossless whole-document archive.
   `packages/mdrack-sqlite/src/mdrack_sqlite/migrations_v2.py` with
   `v2_migrations/0000_identity.sql` through `0004_vector_encoding.sql`
 - App compatibility re-export: `src/mdrack/adapters/sqlite/resource_store.py`
-- Generation manager/runtime: `src/mdrack/application/generation_manager.py`,
-  `src/mdrack/adapters/sqlite/generation_runtime.py`
+- Fixed application lifecycle: `src/mdrack/adapters/sqlite/canonical_catalog.py`
 - FTS: `src/mdrack/storage/sqlite/fts.py`
 - Vectors: `src/mdrack/storage/sqlite/vector.py`

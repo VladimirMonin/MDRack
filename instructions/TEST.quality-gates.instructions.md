@@ -83,9 +83,9 @@ source-tree imports alone are insufficient.
 - Compatibility: exact CLI envelope and DTO key/alias/rank/nullability/locator
   tests, CLI/engine parity, importer inventory, and installed-wheel imports from
   `docs/compatibility/v0.3-compatibility-registry.md`.
-- Storage generations: expected migration manifest, fresh/populated migration,
-  non-ready fail-closed states, candidate interruption, atomic pointer switch,
-  reader old/new visibility, rollback, and separate cleanup authorization.
+- Fixed app store: expected v2 migration manifest, exclusive fresh creation,
+  concurrent open, interrupted-create cleanup, v1/bridge and mixed-store rejection,
+  reopen/read visibility, integrity/FK checks, and exactly one main SQLite file.
 - Adapter contracts: the same memory and SQLite suite for replace/read/delete,
   injected failure atomicity, filters before limits, vector spaces/metrics,
   facets/hash, stable ordering, and no internal IDs.

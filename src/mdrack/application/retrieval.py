@@ -587,6 +587,10 @@ class RetrievalService:
                                 vector,
                                 candidate_limit=limit,
                                 expected_fingerprint=self.profile_fingerprint,
+                                scope_override=BranchScopeOverride(
+                                    representation_kinds=("retrieval_text",),
+                                    unit_kinds=("text_chunk",),
+                                ),
                             ),
                         ),
                         scope=scope,
@@ -659,6 +663,10 @@ class RetrievalService:
                                 weight=self.semantic_weight,
                                 candidate_limit=limit * 2,
                                 expected_fingerprint=self.profile_fingerprint,
+                                scope_override=BranchScopeOverride(
+                                    representation_kinds=("retrieval_text",),
+                                    unit_kinds=("text_chunk",),
+                                ),
                             ),
                         )
             request = SearchRequest(

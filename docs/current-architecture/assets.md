@@ -25,7 +25,7 @@ because historical migrations are immutable.
 on a caller-selected local file. The application reads the file to establish its
 media type, byte size, and content hash, obtains caption/OCR text from explicit
 arguments or an injected extractor, prepares ready vectors outside core, and
-atomically replaces one typed image resource in a ready resource-store generation.
+atomically replaces one typed image resource in the fixed application catalog.
 
 The source bytes remain outside SQLite. Each bounded caption/OCR representation
 owns one `whole_resource` search unit by default. Text and visual vectors use

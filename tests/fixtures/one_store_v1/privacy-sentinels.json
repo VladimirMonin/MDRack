@@ -1,0 +1,12 @@
+{
+  "schema": "mdrack.one-store-privacy-sentinels.v1",
+  "sentinels": [
+    "PRIVATE_ONE_STORE_ROOT_SENTINEL",
+    "PRIVATE_ONE_STORE_SOURCE_PATH_SENTINEL",
+    "PRIVATE_ONE_STORE_CONTENT_SENTINEL",
+    "PRIVATE_ONE_STORE_PROVIDER_BODY_SENTINEL",
+    "PRIVATE_ONE_STORE_VECTOR_SENTINEL",
+    "PRIVATE_ONE_STORE_METADATA_SENTINEL"
+  ],
+  "forbidden_surfaces": ["stdout", "stderr", "logs", "diagnostics", "evidence"]
+}

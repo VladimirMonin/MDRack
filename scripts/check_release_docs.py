@@ -18,8 +18,12 @@ LEDGER = ROOT / "docs/compatibility/v0.4-public-surface-ledger.json"
 QUERY_MANIFEST = ROOT / "tests/evaluation/queries-v1/queries.json"
 
 
-def _sha256(relative_path: str) -> str:
-    return hashlib.sha256((ROOT / relative_path).read_bytes()).hexdigest()
+def _sha256(relative_path: str) -> str | None:
+    """Return a digest only for an extant repository-relative release input."""
+    try:
+        return hashlib.sha256((ROOT / relative_path).read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def _relative_links_exist(path: Path) -> bool:

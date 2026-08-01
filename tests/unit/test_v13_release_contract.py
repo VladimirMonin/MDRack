@@ -128,7 +128,7 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
     assert any("No existing v1 or 0007 database" in item for item in packet["non_claims"])
 
 
-def test_v13_current_docs_describe_compact_builtin_cutover_without_false_rollback() -> None:
+def test_v13_release_history_and_current_docs_preserve_their_store_boundaries() -> None:
     release_notes = RELEASE_NOTES.read_text(encoding="utf-8")
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     architecture_index = (REPO_ROOT / "docs" / "current-architecture" / "README.md").read_text(encoding="utf-8")
@@ -141,10 +141,14 @@ def test_v13_current_docs_describe_compact_builtin_cutover_without_false_rollbac
     assert "builtin exact" in release_notes
     assert "sqlite-vec" in release_notes
     assert "one-way" in release_notes
-    assert "ieee754-f32-le-v1" in recovery
-    assert "one-way" in recovery
-    assert "runtime rollback" in recovery
-    assert "Retained legacy generations are not automatically deleted" in limitations
+    assert "Historical:" in recovery
+    assert "superseded generation/pointer rollout" in recovery
+    assert "current operating procedure" in recovery
+    assert "<store>/catalog.sqlite3" in recovery
+    assert "exactly one physical database" in limitations
+    assert "Existing v1," in limitations
+    assert "There is no candidate" in limitations
+    assert "Retained legacy generations are not automatically deleted" not in limitations
     assert "Semantic retrieval linearly scans canonical binary vectors" in limitations
     assert "mdrack_sqlite_catalog_v2" in data_instruction
     assert "mdrack-sqlite-vec" not in (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")

@@ -30,6 +30,11 @@ CORE_EVENT_NAMES = frozenset(
         "core.search.failed",
         "core.similarity.started",
         "core.similarity.completed",
+        "core.lifecycle.started",
+        "core.lifecycle.completed",
+        "core.lifecycle.degraded",
+        "core.lifecycle.failed",
+        "core.lifecycle.recovered",
     }
 )
 
@@ -37,6 +42,7 @@ SAFE_FIELD_NAMES = frozenset(
     {
         "request_id",
         "run_id",
+        "execution_id",
         "operation",
         "status",
         "reason",
@@ -86,6 +92,27 @@ class LifecycleStatus(StrEnum):
     SKIPPED = "skipped"
     DEGRADED = "degraded"
     FAILED = "failed"
+    RECOVERED = "recovered"
+
+
+class LifecycleOperation(StrEnum):
+    """Closed operation categories permitted in privacy-safe lifecycle events."""
+
+    ACCEPTANCE = "acceptance"
+    CATALOG = "catalog"
+    INDEXING = "indexing"
+    INGESTION = "ingestion"
+    RETRIEVAL = "retrieval"
+
+
+class LifecycleReason(StrEnum):
+    """Closed reason categories permitted in lifecycle evidence."""
+
+    CLEANUP_FAILED = "cleanup_failed"
+    DEPENDENCY_UNAVAILABLE = "dependency_unavailable"
+    DEPENDENCY_FAILED = "dependency_failed"
+    INTEGRITY_FAILED = "integrity_failed"
+    VALIDATION_FAILED = "validation_failed"
 
 
 @dataclass(frozen=True)
@@ -121,7 +148,10 @@ def _sanitize_value(value: object) -> object:
         return value.value
     if isinstance(value, _SafeRequestId):
         return str(value)
-    if isinstance(value, (LifecycleStatus, ErrorCategory, DegradationCategory)):
+    if isinstance(
+        value,
+        (LifecycleStatus, LifecycleOperation, LifecycleReason, ErrorCategory, DegradationCategory),
+    ):
         return value.value
     return REDACTED
 

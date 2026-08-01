@@ -58,9 +58,10 @@ explicitly changes that architecture.
   `packages/mdrack-core/src/mdrack_core/`. The `mdrack` app distribution depends on
   it and remains the compatibility/application owner around the reusable core.
 - The approved SQLite boundary is the standalone `mdrack-sqlite` distribution at
-  `packages/mdrack-sqlite/`. It opens and verifies existing bridge databases and
-  owns the independent clean `mdrack_sqlite_catalog_v1` `0000`–`0003` history.
-  App cutover remains a later explicit gate.
+  `packages/mdrack-sqlite/`. Its generic API may open recognized bridge/v1 stores,
+  but normal app composition uses only `<store>/catalog.sqlite3` and requires the
+  independent clean `mdrack_sqlite_catalog_v2` `0000`–`0004` identity. The app
+  never reads, copies, or migrates an obsolete store.
 - `mdrack_core` is stdlib-only and must not import `mdrack`, Click, HTTP, SQLite,
   Markdown/parser, provider/model, filesystem, or network code.
 - Current Markdown IR, `PreparedFile`, `SourceLocator`, `EmbeddingProfile`, and

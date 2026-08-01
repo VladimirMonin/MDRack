@@ -354,7 +354,7 @@ def test_f32_space_uses_canonical_payloads_and_rejects_mixed_or_corrupt_data(
         store.read_vector("unit-f32", "f32-space")
 
 
-def test_resolve_embedding_spaces_accepts_canonical_sha256_equivalence(
+def test_resolve_embedding_spaces_requires_one_exact_canonical_fingerprint(
     store: SQLiteResourceStore,
 ) -> None:
     fingerprint = "a" * 64
@@ -378,7 +378,14 @@ def test_resolve_embedding_spaces_accepts_canonical_sha256_equivalence(
         dimensions=2,
     )
 
-    assert [space.space_id for space in spaces] == ["space-prefixed", "space-raw"]
+    assert [space.space_id for space in spaces] == ["space-raw"]
+    assert [
+        space.space_id
+        for space in store.resolve_embedding_spaces(
+            fingerprint=f"sha256:{fingerprint}",
+            dimensions=2,
+        )
+    ] == ["space-prefixed"]
 
 
 def test_replace_is_atomic_rejects_caller_transaction_and_preserves_old_graph(

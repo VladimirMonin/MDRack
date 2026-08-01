@@ -31,6 +31,7 @@ from mdrack_media import (
     TimedChunkingPolicy,
     frame_id,
     resource_id,
+    weighted_centroid,
 )
 from mdrack_sqlite import SQLiteCatalog
 
@@ -371,6 +372,8 @@ async def test_one_composer_persists_transcript_frames_metadata_and_text_vectors
     }
     assert {row["modality"] for row in rows} == {"text"}
     assert prepared_whole.metadata["aggregation"] == "direct_text_v1"
+    assert "unique architecture diagram" in (prepared_whole.text or "")
+    assert "closing title card" in (prepared_whole.text or "")
     assert stored_whole is not None
     assert stored_whole.metadata["aggregation"] == "direct_text_v1"
     frame_locators = [json.loads(row["evidence_locator_json"]) for row in rows if row["unit_kind"] == "frame"]
@@ -443,12 +446,40 @@ async def test_long_video_builds_centroid_only_after_passage_vectors_exist(
             "SELECT metadata_json FROM core_search_units WHERE resource_id=? AND unit_kind='whole_resource'",
             (resource,),
         ).fetchone()
+        vector_rows = catalog.connection.execute(
+            """
+            SELECT units.unit_id, units.unit_kind, units.token_count, embeddings.space_id
+            FROM core_search_units AS units
+            JOIN core_unit_embeddings AS embeddings ON embeddings.unit_id = units.unit_id
+            WHERE units.resource_id = ?
+            ORDER BY units.unit_id
+            """,
+            (resource,),
+        ).fetchall()
+        vectors = {
+            str(row["unit_id"]): catalog.read_vector(str(row["unit_id"]), str(row["space_id"])).vector
+            for row in vector_rows
+        }
+        component_weights = {
+            str(row["unit_id"]): int(row["token_count"])
+            for row in vector_rows
+            if str(row["unit_kind"]) != "whole_resource"
+        }
 
     assert result.transcript_unit_count == 1
     assert result.frame_unit_count == 1
     assert result.vector_count == 3
     assert whole is not None
     assert json.loads(whole[0])["aggregation"] == "token_weighted_centroid_v1"
+    whole_unit_id = next(
+        str(row["unit_id"]) for row in vector_rows if row["unit_kind"] == "whole_resource"
+    )
+    assert vectors[whole_unit_id] == pytest.approx(
+        weighted_centroid(
+            {unit_id: vectors[unit_id] for unit_id in component_weights},
+            component_weights,
+        )
+    )
 
 
 @pytest.mark.asyncio

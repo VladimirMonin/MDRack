@@ -12,7 +12,7 @@
       {"path": "scripts/offline_release_matrix.py", "sha256": "5b04b347e738924ccbbf064a80f2d62dd404b9e91fc6fdc10bce1ca14216c65f"},
       {"path": "scripts/verify.ps1", "sha256": "938ba7bef2ed791b24289976fca95154939b000bd4f3f267ea933ec1149cbe45"},
       {"path": "scripts/verify.sh", "sha256": "9bd0983ff2693bba26cf7982e59b8fa0c4479acb10a4c41c8ad9dce52297793b"},
-      {"path": "tests/cli/test_cli_resource_manifest.py", "sha256": "88e15de862fc64b26529507a97b5866c4f99a9236ba3fce346c9eb1851481eef"},
+      {"path": "tests/cli/test_cli_resource_manifest.py", "sha256": "5d917e7cb2386a911ff087e428121ca316f648708f734bd8ab8fea78a5f5de5d"},
       {"path": "tests/e2e/conftest.py", "sha256": "f8aaee8fc47f18bbbaad22512053b06905b95a534fcc0414caea738c0b4f59f0"},
       {"path": "tests/unit/conftest.py", "sha256": "fb40934028aaf76809b277c296e5c416e95f32fe602da7e8da26e29b2458f5b5"},
       {"path": "tests/unit/test_eval_privacy.py", "sha256": "1d0af27ec2cb906019ed128d916492511c17f3ab34d33aa0e87645ec6a20a4d9"},
@@ -20,7 +20,7 @@
       {"path": "tests/unit/test_offline_release_matrix.py", "sha256": "3842c98ff9a03034e0adc7d95b74f19b7d23c4093ed9e004a61d6978198a697f"},
       {"path": "tests/unit/test_privacy_evidence_oracle.py", "sha256": "543d16ce79dd32f81f6222cf702c5d24f855b2ecb394235d8bd17344e5cce9e5"},
       {"path": "tests/unit/test_s8_failure_matrix.py", "sha256": "28983242d7fcc6d3a7ea14ddfea0061458b37773fac3c4cf641c01d46295246e"},
-      {"path": "tests/unit/test_s8_privacy_contracts.py", "sha256": "0d808d4ed270f28fa171349c4698800c65107bd876200375f9fff9c8b915e969"}
+      {"path": "tests/unit/test_s8_privacy_contracts.py", "sha256": "3197db104fcc45968cd2d105936c67358e2876bd1a6da7dd6555705ba9cecfcb"}
     ],
     "publication_outputs": [
       "README.md",

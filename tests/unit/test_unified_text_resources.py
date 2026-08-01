@@ -215,7 +215,7 @@ async def test_unified_text_search_filters_by_alias_and_degrades_hybrid_without_
     assert hybrid.degraded_reason == "embedding_provider_unavailable"
 
 
-async def test_unified_semantic_search_fuses_all_compatible_embedding_spaces() -> None:
+async def test_unified_semantic_search_requires_the_exact_canonical_fingerprint() -> None:
     catalog = MemoryCatalog()
     fingerprint = "a" * 64
     first_space = EmbeddingSpaceRecord(
@@ -260,7 +260,7 @@ async def test_unified_semantic_search_fuses_all_compatible_embedding_spaces() -
     ).search("meaning", scope="all", mode="semantic")
 
     assert result.degraded is False
-    assert {item.resource_id for item in result.results} == {"document-1", "video-1"}
+    assert {item.resource_id for item in result.results} == {"document-1"}
 
 
 async def test_unified_semantic_search_canonicalizes_a_noncanonical_query_for_a_real_f32_catalog(
@@ -317,6 +317,16 @@ def test_resource_similarity_resolves_only_one_textual_whole_unit_and_rejects_fr
     )
     catalog.replace_resource(
         _batch(
+            resource_id="image-text-a",
+            resource_kind="image",
+            unit_id="image-text-unit",
+            text="image candidate",
+            vector=(0.8, 0.2),
+            similarity_basis="image_text_aggregate",
+        )
+    )
+    catalog.replace_resource(
+        _batch(
             resource_id="video-a",
             resource_kind="video",
             unit_id="video-a-whole-unit",
@@ -368,6 +378,7 @@ def test_resource_similarity_resolves_only_one_textual_whole_unit_and_rejects_fr
     )
 
     result = service.find_similar_resource("document-a", scope="all", limit=1)
+    target_filtered = service.find_similar_resource("document-a", scope="images", limit=1)
     video_result = service.find_similar_resource("video-a", scope="video", limit=1)
     ambiguous = ambiguous_service.find_similar_resource("document-a", scope="all")
     rejected = service.find_similar_resource("video-frame-only", scope="frames")
@@ -375,6 +386,8 @@ def test_resource_similarity_resolves_only_one_textual_whole_unit_and_rejects_fr
 
     assert result.degraded is False
     assert [item.resource_id for item in result.results] == ["document-b"]
+    assert target_filtered.degraded is False
+    assert [item.resource_id for item in target_filtered.results] == ["image-text-a"]
     assert video_result.degraded is False
     assert [item.resource_id for item in video_result.results] == ["video-b"]
     assert ambiguous.results == ()

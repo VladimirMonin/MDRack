@@ -11,7 +11,7 @@ activates one.
 |---|---|
 | `src/mdrack/domain/` | App domain values and invariants. |
 | `src/mdrack/ports/` | Storage, parser, embedding, and related contracts. |
-| `src/mdrack/application/` | Canonical indexing, retrieval, read, and generation orchestration. |
+| `src/mdrack/application/` | Canonical indexing, retrieval, read, and fixed-catalog composition. |
 | `src/mdrack/adapters/` | Markdown, SQLite compatibility, and LM Studio adapters. |
 | `src/mdrack/storage/sqlite/` | App-owned migrations and legacy persistence. |
 | `src/mdrack/cli/` | Click composition and JSON presentation. |
@@ -31,7 +31,7 @@ Start with [`AGENTS.md`](../AGENTS.md). It routes work to focused files in
 [`instructions/`](../instructions/):
 
 - architecture/public surfaces → `ARCH.system.instructions.md`;
-- SQLite/schema/generations → `DATA.sqlite.instructions.md`;
+- SQLite/schema/catalog → `DATA.sqlite.instructions.md`;
 - tests and evidence → `TEST.quality-gates.instructions.md`;
 - current docs and links → `DOCS.architecture.instructions.md`;
 - logging/diagnostics/privacy → `OBS.logging.instructions.md`;
@@ -57,8 +57,11 @@ git diff --check
 ```
 
 Use focused tests while iterating, then run the gates required by the changed
-slice. A green fake/offline test does not prove live LM Studio, an installed wheel,
-Windows, or a real private corpus. Report exact commands and honest non-claims.
+slice. For the fixed SQLite acceptance slice, run the
+[one-store acceptance runner](one-store-acceptance.md) with an evidence directory
+outside the checkout; it covers the synthetic fixture and a temporary wheel target.
+A green fake/offline test does not prove live LM Studio, Windows, or a real private
+corpus. Report exact commands and honest non-claims.
 
 ## Change discipline
 

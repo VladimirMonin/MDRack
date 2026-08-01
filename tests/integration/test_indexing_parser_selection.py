@@ -10,7 +10,6 @@ from mdrack.application.indexing import IndexingService
 from mdrack.config.loader import load_config
 from mdrack.config.models import MDRackConfig, ParsingConfig, PathsConfig
 from mdrack.embeddings.fake import FakeEmbeddingProvider
-from mdrack.storage.sqlite.connection import get_connection
 
 
 def _config(tmp_path: Path, backend: Literal["markdown_it", "legacy"]) -> MDRackConfig:
@@ -26,14 +25,17 @@ def _index_run_identity(root: Path, config: MDRackConfig) -> tuple[str, str]:
     result = service.scan(force_reindex=True)
     service.close()
     assert result.status == "success"
-    connection = get_connection(Path(config.paths.store) / "knowledge.db")
+    storage = create_sqlite_index_storage(root, config)
     try:
-        row = connection.execute(
-            "SELECT parser_name, chunk_strategy_name FROM index_runs ORDER BY started_at DESC LIMIT 1"
-        ).fetchone()
-        return row["parser_name"], row["chunk_strategy_name"]
+        record = storage.get_file_by_path("note.md")
+        assert record is not None
+        parser_name = record["parser_name"]
+        chunk_strategy_name = record["chunk_strategy_name"]
+        assert isinstance(parser_name, str)
+        assert isinstance(chunk_strategy_name, str)
+        return parser_name, chunk_strategy_name
     finally:
-        connection.close()
+        storage.close()
 
 
 def test_default_pipeline_is_markdown_it_structural(tmp_path: Path) -> None:

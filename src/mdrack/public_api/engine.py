@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from types import TracebackType
 from typing import Any, cast
 
-from mdrack.application.compatibility import create_application_storage, embedding_space_id
+from mdrack.application.compatibility import create_application_storage
 from mdrack.application.indexing import IndexingService
 from mdrack.application.manifest import PreparedResourceFacade
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
@@ -16,8 +17,13 @@ from mdrack.application.resource_catalog import (
     MetadataFacetValue,
     MetadataInspection,
     PreparedResourceExportService,
+    ResourceDeleteResult,
+    ResourceExportResult,
     ResourceImportResult,
+    ResourceInspection,
     ResourceSearchResult,
+    delete_resource,
+    inspect_resource,
 )
 from mdrack.application.resources import (
     DuplicateResourceResult,
@@ -39,6 +45,7 @@ from mdrack.application.retrieval import (
     ResourceSearchPresetName,
     RetrievalService,
 )
+from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.application.transcript_ingestion import (
     TimedRetrievalMode,
     TimedRetrievalService,
@@ -52,6 +59,7 @@ from mdrack.application.video_composition import (
 )
 from mdrack.diagnostics.storage import StorageAnalysis, analyze_application_storage
 from mdrack.domain.indexing import IndexingResult, SourceLocator
+from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.runtime import embedding_profile_from_config
 from mdrack.ingestion.images import (
@@ -98,34 +106,70 @@ class MDRackEngine:
         self.embedding_provider = embedding_provider
         self.profile = profile
         self.root_id = root_id
-        if storage is None:
-            storage = create_application_storage(self.root, config)
-        self.storage = storage
-        self.search_index = search_index or storage
-        self.read_storage = read_storage or storage
+        self._storage = storage
+        self._search_index = search_index
+        self._read_storage = read_storage
         self.image_extractor = image_extractor
         self.visual_embedding_provider = visual_embedding_provider
         self.visual_embedding_space = visual_embedding_space
         self._images: ImageIngestionService | None = None
-        self.search_service = RetrievalService(
+        self._search_service: RetrievalService | None = None
+        self._text_embedding_profile: EmbeddingProfile | None = None
+
+    def _active_embedding_profile(self) -> EmbeddingProfile | None:
+        if self.embedding_provider is None:
+            return None
+        if self._text_embedding_profile is None:
+            self._text_embedding_profile = embedding_profile_from_config(
+                self.config,
+                self.embedding_provider,
+                self.profile,
+            )
+        return self._text_embedding_profile
+
+    def _application_storage(self, *, create: bool) -> KnowledgeStorage:
+        if self._storage is None:
+            self._storage = create_application_storage(self.root, self.config, create=create)
+        return self._storage
+
+    @property
+    def storage(self) -> KnowledgeStorage:
+        """Open the fixed catalog only when an operation needs it."""
+        return self._application_storage(create=False)
+
+    @property
+    def search_index(self) -> RetrievalStorage:
+        if self._search_index is not None:
+            return self._search_index
+        return cast(RetrievalStorage, self.storage)
+
+    @property
+    def read_storage(self) -> ReadStorage:
+        if self._read_storage is not None:
+            return self._read_storage
+        return cast(ReadStorage, self.storage)
+
+    @property
+    def search_service(self) -> RetrievalService:
+        if self._search_service is not None:
+            return self._search_service
+        embedding_profile = self._active_embedding_profile()
+        self._search_service = RetrievalService(
             self.search_index,
             embedding_provider=self.embedding_provider,
             profile=self.profile,
-            profile_fingerprint=(
-                embedding_profile_from_config(config, self.embedding_provider, self.profile).fingerprint
-                if self.embedding_provider is not None
-                else None
-            ),
+            profile_fingerprint=None if embedding_profile is None else embedding_profile.fingerprint,
             rrf_k=self.config.search.rrf_k,
             text_weight=self.config.search.text_weight,
             semantic_weight=self.config.search.semantic_weight,
         )
+        return self._search_service
 
     def scan(self, *, force_reindex: bool = False) -> IndexingResult:
         service = IndexingService(
             self.root,
             self.config,
-            self.storage,
+            self._application_storage(create=True),
             provider=self.embedding_provider,
             profile=self.profile,
             root_id=self.root_id,
@@ -340,6 +384,32 @@ class MDRackEngine:
             redact_source_metadata=redact_source_metadata,
         )
 
+    def export_resource_manifest_file(
+        self,
+        resource_id: str,
+        output_path: str | Path,
+        *,
+        include_vectors: bool = True,
+        include_text: bool = True,
+        redact_source_metadata: bool = False,
+    ) -> ResourceExportResult:
+        """Atomically export one active resource through the manifest-v1 grammar."""
+        return PreparedResourceExportService(self._transcript_catalog()).export_file(
+            resource_id,
+            output_path,
+            include_vectors=include_vectors,
+            include_text=include_text,
+            redact_source_metadata=redact_source_metadata,
+        )
+
+    def inspect_resource(self, resource_id: str) -> ResourceInspection:
+        """Return a redacted aggregate lifecycle projection for one resource."""
+        return inspect_resource(self._transcript_catalog(), resource_id)
+
+    def delete_resource(self, resource_id: str) -> ResourceDeleteResult:
+        """Delete one active logical resource graph without exposing storage IDs."""
+        return delete_resource(self._transcript_catalog(), resource_id)
+
     async def ingest_image(
         self,
         path: Path,
@@ -457,6 +527,14 @@ class MDRackEngine:
             return result if isinstance(result, dict) or result is None else None
         return ReadService(self.read_storage).get_file_by_path(relative_path)
 
+    def get_file_outline(self, logical_id_value: str) -> dict[str, Any] | None:
+        """Read canonical document headings through a file logical ID."""
+        reader = getattr(self.read_storage, "get_file_outline", None)
+        if not callable(reader):
+            raise NotImplementedError("read storage does not support outlines")
+        result = reader(logical_id_value)
+        return result if isinstance(result, dict) or result is None else None
+
     def get_chunk(self, logical_id: str) -> dict[str, Any] | None:
         """Read one chunk by its public logical identity."""
         reader = getattr(self.read_storage, "get_chunk_by_logical_id", None)
@@ -475,18 +553,11 @@ class MDRackEngine:
         if catalog is None:
             raise RuntimeError("active resource-core generation is required for image operations")
         text_space = None
-        if self.embedding_provider is not None:
-            profile = embedding_profile_from_config(
-                self.config,
-                self.embedding_provider,
-                self.profile,
-            )
+        profile = self._active_embedding_profile()
+        if profile is not None:
+            canonical_space = CanonicalTextEmbeddingSpace(profile)
             text_space = ImageEmbeddingSpace(
-                embedding_space_id(
-                    profile.name,
-                    profile.fingerprint,
-                    profile.vector_value_policy,
-                ),
+                canonical_space.space_id,
                 profile.output_dimensions,
                 profile.fingerprint,
                 profile_name=profile.name,
@@ -611,28 +682,18 @@ class MDRackEngine:
         }
 
     def _transcript_embedding_fingerprint(self) -> str | None:
-        if self.embedding_provider is None:
-            return None
-        return embedding_profile_from_config(
-            self.config,
-            self.embedding_provider,
-            self.profile,
-        ).fingerprint
+        profile = self._active_embedding_profile()
+        return None if profile is None else profile.fingerprint
 
     def _transcript_embedding_value_policy(self) -> str | None:
-        if self.embedding_provider is None:
-            return None
-        return embedding_profile_from_config(
-            self.config,
-            self.embedding_provider,
-            self.profile,
-        ).vector_value_policy
+        profile = self._active_embedding_profile()
+        return None if profile is None else profile.vector_value_policy
 
     def _transcript_ingestion_service(self) -> TranscriptIngestionService:
         return TranscriptIngestionService(
             self._transcript_catalog(),
             embedding_provider=self.embedding_provider,
-            embedding_fingerprint=self._transcript_embedding_fingerprint(),
+            embedding_profile=self._active_embedding_profile(),
             profile=self.profile,
             vector_value_policy=self._transcript_embedding_value_policy(),
         )
@@ -652,20 +713,27 @@ class MDRackEngine:
         return VideoCompositionService(
             self._transcript_catalog(),
             embedding_provider=self.embedding_provider,
-            embedding_fingerprint=self._transcript_embedding_fingerprint(),
+            embedding_profile=self._active_embedding_profile(),
             profile=self.profile,
             vector_value_policy=self._transcript_embedding_value_policy(),
         )
 
     def analyze_storage(self) -> StorageAnalysis:
-        """Return read-only aggregate diagnostics for the active application store."""
+        """Return read-only aggregate diagnostics for the fixed application catalog."""
         return analyze_application_storage(self.root, self.config)
 
     def close(self) -> None:
-        self.storage.close()
+        if self._storage is not None:
+            self._storage.close()
 
     def __enter__(self) -> MDRackEngine:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        del exc_type, exc_value, traceback
         self.close()

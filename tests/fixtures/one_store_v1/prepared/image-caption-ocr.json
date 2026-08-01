@@ -1,0 +1,13 @@
+{
+  "schema": "mdrack.one-store-image-text.v1",
+  "resource_id": "one-store-image-001",
+  "source_namespace": "one-store-fixture",
+  "source_ref": "image-001",
+  "caption": "Canonical diagram of one catalog.sqlite3 serving text-derived similarity.",
+  "ocr": "ONE STORE: CATALOG SQLITE3",
+  "provenance": {
+    "classification": "synthetic",
+    "license_spdx": "CC0-1.0",
+    "pii_status": "reviewed_no_pii"
+  }
+}

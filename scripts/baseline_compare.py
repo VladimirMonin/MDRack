@@ -69,6 +69,7 @@ def metric_values(source_facts, retrieved, k):
 request = json.loads(sys.stdin.read())
 root = Path(request["root"])
 queries = request["queries"]
+current_v2 = bool(request.get("current_v2"))
 config = MDRackConfig()
 provider = FakeEmbeddingProvider()
 
@@ -77,20 +78,41 @@ index_started = time.perf_counter()
 index_result = run_indexer(root=root, config=config, provider=provider)
 index_ms = (time.perf_counter() - index_started) * 1000
 
-conn = get_connection(root / ".mdrack" / "knowledge.db")
+conn = None
+storage = None
 try:
-    counts = {
-        "files": conn.execute("SELECT COUNT(*) FROM files WHERE status = 'active'").fetchone()[0],
-        "blocks": block_count,
-        "chunks": conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
-        "errors": index_result.errors_count,
-    }
+    if current_v2:
+        from mdrack.application.compatibility import create_application_storage
+
+        storage = create_application_storage(root, config, create=False)
+        counts = {
+            "files": storage.connection.execute(
+                "SELECT COUNT(*) FROM core_resources WHERE resource_kind='document'"
+            ).fetchone()[0],
+            "blocks": block_count,
+            "chunks": storage.connection.execute(
+                "SELECT COUNT(*) FROM core_search_units WHERE unit_kind='text_chunk'"
+            ).fetchone()[0],
+            "errors": index_result.errors_count,
+        }
+    else:
+        conn = get_connection(root / ".mdrack" / "knowledge.db")
+        counts = {
+            "files": conn.execute("SELECT COUNT(*) FROM files WHERE status = 'active'").fetchone()[0],
+            "blocks": block_count,
+            "chunks": conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
+            "errors": index_result.errors_count,
+        }
     results = []
     search_ms = 0.0
     for query in queries:
         k = int(query["metrics"]["recall_at"])
         started = time.perf_counter()
-        search_result = text_search(conn, query["query"], limit=k)
+        search_result = (
+            storage.search_text(query["query"], limit=k)
+            if storage is not None
+            else text_search(conn, query["query"], limit=k)
+        )
         search_ms += (time.perf_counter() - started) * 1000
         source_facts = query["expected"]["source_facts"]
         normalized = [
@@ -115,7 +137,10 @@ try:
             }
         )
 finally:
-    conn.close()
+    if storage is not None:
+        storage.close()
+    if conn is not None:
+        conn.close()
 
 packages = ("click", "pydantic", "markdown-it-py", "PyYAML")
 dependencies = {}
@@ -285,7 +310,10 @@ def _run_checkout(
     with tempfile.TemporaryDirectory(prefix="mdrack-baseline-") as temp_dir:
         sandbox = Path(temp_dir) / "corpus"
         shutil.copytree(corpus, sandbox)
-        request = json.dumps({"root": str(sandbox), "queries": queries}, ensure_ascii=False)
+        request = json.dumps(
+            {"root": str(sandbox), "queries": queries, "current_v2": not historical},
+            ensure_ascii=False,
+        )
         env = os.environ.copy()
         env["PYTHONPATH"] = str(checkout / "src")
         env["PYTHONDONTWRITEBYTECODE"] = "1"

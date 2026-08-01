@@ -24,9 +24,14 @@ classDiagram
         +find_similar_resource(resource_id, scope, limit) UnifiedTextSimilarityResult
         +import_resource_manifest(payload) ResourceImportResult
         +export_resource_manifest(resource_id, options) bytes
+        +export_resource_manifest_file(resource_id, output_path, options) ResourceExportResult
+        +inspect_resource(resource_id) ResourceInspection
+        +delete_resource(resource_id) ResourceDeleteResult
         +get_file_by_path(relative_path) dict
+        +get_file_outline(file_logical_id) dict
         +get_chunk(logical_id) dict
         +get_chunk_source_locator(chunk_id) SourceLocator
+        +analyze_storage() StorageAnalysis
         +close()
     }
 
@@ -100,28 +105,27 @@ Live command registration exposes:
 
 | Command | Current role |
 |---|---|
-| `init` | Create the store and apply migrations. |
+| `init` | Create or verify the only application store, `<store>/catalog.sqlite3`, as clean schema `mdrack_sqlite_catalog_v2`. |
 | `scan` | Change-detect and index Markdown with LM Studio or test-only fake composition where exposed. |
 | `search` | Text, semantic, or hybrid retrieval. |
-| `search --scope all\|notes\|audio\|video\|frames\|images` | Unified 1.2 resource-level text retrieval over the ready generation. |
+| `search --scope all\|notes\|audio\|video\|frames\|images` | Unified resource-level text retrieval from the fixed catalog. |
 | `find-similar RESOURCE_ID` | Provider-free 1.2 textual whole-resource similarity by logical resource ID. |
 | `read chunk` | Read a public logical chunk, optionally with neighbors. |
-| `read section` | Read a section and its chunks by public logical section ID. |
-| `read file` | Read file metadata and sections by public logical file ID. |
-| `files list`, `files info` | Legacy repository inspection with raw SQLite record identities. |
-| `sections list` | Legacy section inspection keyed by raw file record identity. |
+| `read file` | Read file metadata by public logical file ID. |
+| `read outline` | Read deterministic heading records by public file logical ID; no raw section IDs are exposed. |
+| `resource import`, `resource export`, `resource inspect`, `resource delete` | Prepared-resource lifecycle through the configured fixed catalog; no alternate `--catalog` path is registered. |
+| `eval retrieval` | Privacy-safe ordinal retrieval-quality metrics against the configured fixed catalog. |
+| `files list`, `files info` | List and inspect documents by public logical identity. |
 | `status` | Counts, active profile details, and schema version. |
 | `doctor` | Store, FTS, embedding, migration, and configuration diagnostics. |
 | `rebuild fts` | Rebuild the manually maintained FTS projection. |
 | `rebuild embeddings` | Recreate vectors for the active profile. |
-| `storage rebuild-fresh`, `verify`, `activate` | Build, inspect, and explicitly one-way-promote a verified clean v2 float32 candidate. |
-| `eval retrieval` | Run retrieval evaluation against the indexed store. |
-| `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against a ready resource generation; never triggered by Markdown scan. |
-| `resource import`, `export`, `inspect`, `delete` | Provider-free prepared-resource lifecycle against one explicitly named clean standalone catalog. Export uses the existing manifest-v1 grammar. |
+| `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against the fixed catalog; never triggered by Markdown scan. |
 | `resources duplicates`, `similar` | Provider-free exact hash and existing-vector discovery with typed/facet scope filters. |
-| `resources search`, `search` | Provider-free lexical search against the configured ready resource-core generation; `--target unit|resource` and scope filters are applied before limiting. |
-| `resources facets`, `facets` | Deterministic catalog facet listing, optionally narrowed by namespace. |
+| `resources search` | Provider-free lexical search against the fixed catalog; target and scope filters are applied before limiting. |
+| `resources facets`, `facets` | Deterministic facet listing, optionally narrowed by namespace. |
 | `benchmark` | Provider-free local catalog verification timing and aggregate counts; this is not retrieval-quality evidence. |
+| `storage-analyze` | Read-only allowlisted size/count analysis of the fixed catalog. |
 | `model list`, `loaded`, `download`, `download-status`, `load`, `unload`, `switch` | LM Studio model discovery and lifecycle operations. |
 
 
@@ -136,22 +140,23 @@ application degradation states to command errors; see [retrieval](retrieval.md).
 - scan with optional force reindex;
 - text, semantic, and hybrid search;
 - unified text search over notes, audio/video transcripts, frame captions, and image text;
-- file lookup by relative path;
+- file lookup by relative path and canonical heading outlines by file logical ID;
 - chunk lookup by logical ID;
 - source-locator lookup;
 - explicit direct-image ingest/search/delete;
 - exact duplicate and whole-resource vector similarity discovery;
 - provider-free unified textual whole-resource similarity by logical resource ID;
-- active-catalog manifest-v1 import and deterministic semantic export;
+- active-catalog manifest-v1 import, atomic export to a caller-supplied destination, redacted inspection, and logical-resource deletion;
+- read-only aggregate analysis of the fixed catalog;
 - explicit or context-managed close.
 
-It does not expose CLI diagnostics, status, model lifecycle, rebuild, evaluation,
-or legacy section listing methods.
+It does not expose CLI `status`/`doctor`, model lifecycle, rebuild, or benchmark
+methods. `analyze_storage()` is the separate read-only aggregate diagnostic API.
 
 The separate Click-free `PreparedResourceCatalog` public facade opens one explicit
 clean standalone catalog path and provides manifest import/export, redacted inspect/delete,
 provider-free lexical/vector search with `unit|resource` targets, and deterministic
-facet listing. It does not use `MDRackEngine`, configured generations, providers,
+facet listing. It does not use `MDRackEngine`, the configured application store, providers,
 source files, or the network.
 
 The engine imports no Click modules. By default it composes
@@ -169,9 +174,8 @@ Public retrieval and read-chunk results prefer logical IDs. `chunk_id` and read
 `id` remain compatibility aliases equal to the logical ID. `SourceLocator`
 contains no absolute path. `heading_path` is serialized as a JSON array.
 
-The `files` and `sections` inspection groups are a documented legacy asymmetry:
-they still expose/use raw database record IDs. Do not generalize that behavior
-into a new public contract.
+The normal `files` and `read` groups use logical resource/unit identities. Raw
+SQLite row IDs are not a public application contract.
 
 New image/resource results contain only logical resource/unit/representation IDs,
 stable ranks/scores/degradation categories, and portable source references. They
