@@ -20,6 +20,40 @@ uv run mdrack guide
 `mdrack-sqlite` together with the application. Do not use system `pip` for this
 checkout.
 
+## Agent skill from this checkout
+
+The repository ships one self-contained agent skill for the MDRack CLI. From a
+source checkout, install it into a local skill directory with:
+
+```bash
+mkdir -p "$HOME/.hermes/skills/mdrack"
+cp skills/mdrack/SKILL.md "$HOME/.hermes/skills/mdrack/SKILL.md"
+```
+
+When working from a fresh home without a checkout copy, the same single file
+can be fetched from the repository's raw source URL:
+
+```bash
+mkdir -p "$HOME/.hermes/skills/mdrack"
+curl --fail --location \
+  https://raw.githubusercontent.com/VladimirMonin/MDRack/master/skills/mdrack/SKILL.md \
+  --output "$HOME/.hermes/skills/mdrack/SKILL.md"
+```
+
+PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.hermes\skills\mdrack" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/VladimirMonin/MDRack/master/skills/mdrack/SKILL.md" `
+  -OutFile "$HOME\.hermes\skills\mdrack\SKILL.md"
+```
+
+The skill is self-contained and is invoked by an agent when the request is
+about MDRack installation, configuration, status, diagnostics, or search. This
+source checkout has not been externally smoke-tested from a fresh home here;
+the URL is an installation path, not a claim of public registry publication.
+
 ## Static CLI guide
 
 The pre-configuration guide is safe to run before a config file or store exists:

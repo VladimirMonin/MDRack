@@ -48,6 +48,7 @@ LM Studio model-management commands. Host applications can use
 ## Documentation
 
 - [Getting started: installation, configuration, CLI, and engine](docs/getting-started.md)
+- [MDRack agent skill](skills/mdrack/SKILL.md) — self-contained terminal workflow
 - [Operations, diagnostics, privacy, and troubleshooting](docs/operations.md)
 - [Development guide for humans and coding agents](docs/development.md)
 - [Current architecture index](docs/current-architecture/README.md)
