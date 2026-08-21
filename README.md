@@ -16,6 +16,7 @@ package.
 ```bash
 uv sync --all-extras
 uv run mdrack --help
+uv run mdrack guide
 mkdir -p ./notes
 uv run mdrack --root ./notes init
 uv run mdrack --root ./notes scan --provider fake
@@ -24,9 +25,10 @@ uv run mdrack --root ./notes search "architecture" --mode text
 
 This is an offline installation smoke: fake embeddings are deterministic test
 data, not semantic-quality evidence. Configure LM Studio before ordinary
-semantic or hybrid use; see [Getting started](docs/getting-started.md).
+semantic or hybrid use; see [Getting started](docs/getting-started.md) and the
+[CLI guide](docs/getting-started.md#static-cli-guide).
 
-The CLI also provides read, files, sections, status, doctor, rebuild, eval, and
+The CLI also provides read, files, status, doctor, rebuild, eval, and
 LM Studio model-management commands. Host applications can use
 `MDRackEngine` without importing Click.
 

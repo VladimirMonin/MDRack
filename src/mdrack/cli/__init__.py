@@ -27,6 +27,7 @@ from mdrack.cli.commands.scan import cli_scan
 from mdrack.cli.commands.search import cli_search
 from mdrack.cli.commands.transcript import ingest as ingest_group
 from mdrack.cli.commands.video import ingest_video
+from mdrack.cli.help_topics import guide as guide_command
 from mdrack.config.loader import load_config, resolve_config_path
 from mdrack.diagnostics.storage import analyze_application_storage
 from mdrack.output.envelope import error as envelope_error
@@ -143,7 +144,7 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
     ctx.obj[CTX_JSON] = json_output
     ctx.obj[CTX_CONFIG_FILE] = config_file
 
-    if ctx.invoked_subcommand == "storage-analyze":
+    if ctx.invoked_subcommand in {"guide", "storage-analyze"}:
         return
 
     # Load configuration
@@ -169,6 +170,12 @@ def main(ctx: click.Context, root: str, json_output: bool, config_file: str | No
 
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
+
+
+# ---------------------------------------------------------------------------
+# Command: guide
+# ---------------------------------------------------------------------------
+main.add_command(guide_command)
 
 
 # ---------------------------------------------------------------------------

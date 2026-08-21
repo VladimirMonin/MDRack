@@ -13,11 +13,26 @@ Install `uv`, clone the repository, and run:
 uv sync --all-extras
 uv run mdrack --version
 uv run mdrack --help
+uv run mdrack guide
 ```
 
 `uv` resolves the workspace distributions `mdrack-core`, `mdrack-media`, and
 `mdrack-sqlite` together with the application. Do not use system `pip` for this
 checkout.
+
+## Static CLI guide
+
+The pre-configuration guide is safe to run before a config file or store exists:
+
+```bash
+uv run mdrack guide quickstart
+uv run mdrack guide configuration
+uv run mdrack guide search
+uv run mdrack guide media
+```
+
+It only prints help and does not load configuration, open SQLite, contact a
+provider, or create `.mdrack` state.
 
 ## Offline quick start
 
