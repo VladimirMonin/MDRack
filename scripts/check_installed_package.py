@@ -142,7 +142,7 @@ class _MemoryCatalog:
             self.batch = None
 
 
-def _batch():
+def _batch(*, space_fingerprint: str = "installed-smoke-space"):
     from mdrack_core import (
         EmbeddingSpaceRecord,
         Locator,
@@ -193,8 +193,8 @@ def _batch():
                 {},
             ),
         ),
-        (EmbeddingSpaceRecord("space-installed-smoke", 2, "dot", "installed-smoke-space", {}),),
-        (VectorRecord("unit-installed-smoke", "space-installed-smoke", (1.0, -0.0)),),
+        (EmbeddingSpaceRecord("space-installed-smoke", 1024, "dot", space_fingerprint, {}),),
+        (VectorRecord("unit-installed-smoke", "space-installed-smoke", (1.0,) * 1024),),
         (),
     )
 
@@ -354,88 +354,45 @@ def _check_cli_json() -> None:
     assert payload["meta"] == {"command": "status"}
 
 
-def _check_legacy_retrieval_parity() -> int:
+def _check_catalog_retrieval_parity() -> int:
     from click.testing import CliRunner
 
     from mdrack.cli import main as cli_main
-    from mdrack.config.models import MDRackConfig, PathsConfig
+    from mdrack.config.models import MDRackConfig
     from mdrack.embeddings.fake import FakeEmbeddingProvider
     from mdrack.embeddings.runtime import embedding_profile_from_config
     from mdrack.public_api import MDRackEngine
-    from mdrack.storage.sqlite.connection import get_connection
-    from mdrack.storage.sqlite.migrations import apply_migrations, get_migrations_dir
 
     with tempfile.TemporaryDirectory(prefix="mdrack-installed-parity-") as directory:
         root = Path(directory)
+        from mdrack_sqlite import SQLiteCatalog
+
         store = root / ".mdrack"
         store.mkdir()
-        connection = get_connection(store / "knowledge.db")
-        apply_migrations(connection, get_migrations_dir())
+        catalog = SQLiteCatalog.create_v2(store / "catalog.sqlite3")
         provider = FakeEmbeddingProvider(dimensions=1024)
-        config = MDRackConfig(paths=PathsConfig(root=".", store=str(store)))
+        config = MDRackConfig()
         profile = embedding_profile_from_config(config, provider, "default")
-        content = "Installed retrieval parity"
-        vector = provider._text_to_vector(content)
-        connection.execute(
-            "INSERT INTO embedding_profiles (name, model, dimensions, fingerprint) VALUES (?, ?, ?, ?)",
-            ("default", "fake", 1024, profile.fingerprint),
-        )
-        connection.execute(
-            "INSERT INTO files (id, logical_id, root_id, relative_path, source_hash, indexed_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            ("file-record", "file-logical", "root", "docs/parity.md", "hash", "2026-01-01T00:00:00Z"),
-        )
-        connection.execute(
-            "INSERT INTO chunks "
-            "(id, logical_id, file_id, content, content_type, chunk_index, heading_path, "
-            "start_line, end_line, block_logical_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                "chunk-record",
-                "chunk-logical",
-                "file-record",
-                content,
-                "text",
-                0,
-                json.dumps(["Parity"]),
-                2,
-                3,
-                "block-logical",
-            ),
-        )
-        connection.execute(
-            "INSERT INTO chunks_fts (chunk_id, content, content_type, heading_path) VALUES (?, ?, ?, ?)",
-            ("chunk-record", content, "text", "Parity"),
-        )
-        connection.execute(
-            "INSERT INTO chunk_embeddings "
-            "(chunk_id, profile_name, embedding, embedded_at, profile_fingerprint) VALUES (?, ?, ?, ?, ?)",
-            (
-                "chunk-record",
-                "default",
-                json.dumps(vector).encode("utf-8"),
-                "2026-01-01T00:00:00Z",
-                profile.fingerprint,
-            ),
-        )
-        connection.commit()
-        connection.close()
+        batch = _batch(space_fingerprint=profile.fingerprint)
+        catalog.replace_resource(batch)
+        catalog.close()
 
         engine = MDRackEngine(root=root, config=config, embedding_provider=provider)
         try:
             for mode in ("text", "semantic", "hybrid"):
                 if mode == "text":
-                    embedded = engine.search_text("Installed", limit=10).to_dict()
+                    embedded = engine.search_text("installed", limit=10).to_dict()
                 elif mode == "semantic":
-                    embedded = asyncio.run(engine.search_semantic("Installed", limit=10)).to_dict()
+                    embedded = asyncio.run(engine.search_semantic("installed", limit=10)).to_dict()
                 else:
-                    embedded = asyncio.run(engine.search_hybrid("Installed", limit=10)).to_dict()
+                    embedded = asyncio.run(engine.search_hybrid("installed", limit=10)).to_dict()
                 cli = CliRunner().invoke(
                     cli_main,
                     [
                         "--root",
                         str(root),
                         "search",
-                        "Installed",
+                        "installed",
                         "--mode",
                         mode,
                         "--provider",
@@ -449,7 +406,7 @@ def _check_legacy_retrieval_parity() -> int:
                     f"installed CLI emitted no stdout for {mode}: "
                     f"stderr={cli.stderr!r}, exception={cli.exception!r}"
                 )
-                assert json.loads(cli.stdout)["data"] == embedded
+                assert json.loads(cli.stdout).get("data") == embedded, cli.stdout
         finally:
             engine.close()
     return 3
@@ -469,7 +426,7 @@ def main() -> None:
         _check_sqlite_candidate()
         _check_installed_audio_retrieval()
         _check_cli_json()
-        parity_mode_count = _check_legacy_retrieval_parity()
+        parity_mode_count = _check_catalog_retrieval_parity()
 
     assert network_attempts == 0
     print(

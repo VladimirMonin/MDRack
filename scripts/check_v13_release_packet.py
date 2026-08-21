@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -37,6 +39,53 @@ def _fail(reason: str) -> None:
     raise ValueError(reason)
 
 
+def _source_snapshot() -> dict[str, Any]:
+    """Return reproducible source identity, excluding this packet itself."""
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+    ).stdout.splitlines()
+    packet_relative = PACKET_PATH.relative_to(REPO_ROOT).as_posix()
+    dirty_paths = sorted(line[3:] for line in status if line[3:] != packet_relative)
+    diff = subprocess.run(
+        ["git", "diff", "HEAD", "--binary", "--", ".", f":!{packet_relative}"],
+        cwd=REPO_ROOT, check=True, capture_output=True,
+    ).stdout
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+    return {
+        "head": head,
+        "dirty_paths": dirty_paths,
+        "dirty_diff_sha256": hashlib.sha256(diff).hexdigest(),
+        "packet_excluded_from_identity": packet_relative,
+    }
+
+
+def _current_pytest_result() -> str:
+    """Run the declared full-suite command and return its parsed result."""
+    env = os.environ.copy()
+    env["UV_OFFLINE"] = "1"
+    completed = subprocess.run(
+        ["uv", "run", "pytest", "-q"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for line in reversed(completed.stdout.splitlines()):
+        match = re.search(r"(?P<passed>\d+) passed(?:, (?P<skipped>\d+) skipped)?", line)
+        if match:
+            result = f"{match.group('passed')} passed"
+            if match.group("skipped") is not None:
+                result += f", {match.group('skipped')} skipped"
+            return result
+    _fail("quality_result_unverifiable")
+    return ""  # pragma: no cover
+
+
 def _validate_packet(packet: dict[str, Any]) -> None:
     expected_keys = {
         "schema_version",
@@ -44,6 +93,7 @@ def _validate_packet(packet: dict[str, Any]) -> None:
         "classification",
         "release",
         "source_plan",
+        "source_snapshot",
         "package_artifacts",
         "artifact_matrix_sha256",
         "clean_v2_schema",
@@ -82,6 +132,8 @@ def _validate_packet(packet: dict[str, Any]) -> None:
     plan_path = REPO_ROOT / plan["path"]
     if not plan_path.is_file() or plan["sha256"] != _sha256(plan_path):
         _fail("source_plan_hash_invalid")
+    if packet["source_snapshot"] != _source_snapshot():
+        _fail("source_snapshot_mismatch")
 
     artifacts = packet["package_artifacts"]
     if not isinstance(artifacts, list) or len(artifacts) != 8:
@@ -153,6 +205,15 @@ def _validate_packet(packet: dict[str, Any]) -> None:
         _fail("source_hash_evidence_invalid")
     if evidence["privacy"].get("status") != "passed" or evidence["installed_package"].get("status") != "passed":
         _fail("release_gate_status_invalid")
+    quality = evidence["quality"]
+    if quality.get("status") not in {"passed", "not_run"}:
+        _fail("quality_status_invalid")
+    if quality.get("status") == "passed" and not re.fullmatch(
+        r"\d+ passed(?:, \d+ skipped)?", quality.get("pytest", "")
+    ):
+        _fail("quality_result_invalid")
+    if quality.get("status") == "passed" and quality["pytest"] != _current_pytest_result():
+        _fail("quality_result_stale")
 
     rendered = json.dumps(packet, sort_keys=True)
     if any(value in rendered for value in ("PRIVATE_", "/home/", "localhost", "http://", "https://")):

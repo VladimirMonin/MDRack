@@ -1,18 +1,24 @@
 # Offline release verification
 
-This page is the contributor-facing runbook for the v0.4 W5-CI release contract.
-The normative contract is [v0.4 W5-CI contract](contracts/v0.4-w5-ci-contract.md);
-this page keeps the supported cells, commands, and evidence boundaries visible
-without requiring access to live workflow configuration.
+This page is the contributor-facing runbook for the MDRack 1.3 offline release
+contract. The historical [v0.4 W5-CI contract](contracts/v0.4-w5-ci-contract.md)
+is retained for audit history and is not a current release gate.
 
 ## Non-negotiable default
 
-The release path is local and offline. Set `UV_OFFLINE=1` for the workflow and
-its subprocesses, install only from the lockfile/cache, and do not contact a
-provider, HTTP endpoint, source corpus, external service, or remote runner.
-Provider calls, network attempts, online-index fallback, and remote execution are
-hard failures. The live evaluator is opt-in and confirmation-guarded; it is not
-part of this release path and must not be imported or contacted by omission.
+The release commands are local and offline. Set `UV_OFFLINE=1` for the commands
+and their subprocesses, install only from the lockfile/cache, and do not contact
+a provider, HTTP endpoint, source corpus, or package index. Provider calls,
+online-index fallback, and application network access are hard failures. The
+GitHub workflow is nevertheless hosted CI: checkout, tool setup/cache, matrix
+scheduling, and evidence upload are remote CI infrastructure, not local offline
+execution evidence. The live evaluator is opt-in and confirmation-guarded; it is
+not part of this release path.
+
+The workflow runs on `workflow_dispatch` and `pull_request`. Its `ubuntu-latest`
+and `windows-latest` / Python 3.11 and 3.12 cells execute independently with
+`fail-fast: false`; the setup action's cache is used only to supply dependencies
+to those hosted cells.
 
 Use the repository root for all commands:
 
@@ -154,16 +160,16 @@ only to make a gate green.
 ```bash
 uv run python scripts/offline_release_matrix.py \
   --output-dir "${TMPDIR:-/tmp}/mdrack-release-artifacts" \
-  --candidate-packet docs/evidence/v0.4-release-packet.json \
-  --smoke \
-  --expected-manifest docs/evidence/w5-offline-release-matrix.json
+  --smoke
+uv run python scripts/check_v13_release_packet.py \
+  --artifacts-dir "${TMPDIR:-/tmp}/mdrack-release-artifacts"
 ```
 
-The harness first materializes only the packet's committed base plus its
-content-addressed `candidate_snapshot.build_inputs`; publication outputs are not
-copied into that candidate. It then builds and audits all four distributions as wheel and sdist,
-verify metadata and package isolation, run isolated smoke cells, and record zero
-network attempts. A build error, hash mismatch, install error, source-tree
+The harness builds and audits all four distributions as wheel and sdist, verifies
+metadata and package isolation, runs isolated smoke cells, and enforces the
+offline controls `UV_OFFLINE=1` plus the installed-smoke socket block. It does
+does not provide process-wide network-attempt telemetry. A build error, hash
+mismatch, install error, source-tree
 import, missing artifact, or non-zero smoke command fails. The output directory
 must remain outside the source checkout; it is disposable evidence and must not
 be committed.
@@ -171,14 +177,12 @@ be committed.
 ### 8. Documentation and whitespace
 
 ```bash
-test -s docs/evidence/w5-offline-release-matrix.md
-test -s docs/evidence/w5-offline-release-matrix.json
-uv run python scripts/check_release_docs.py
+uv run python scripts/check_v13_release_packet.py
 git diff --check
 ```
 
-Missing/empty evidence, invalid privacy-safe manifest, missing required
-terminology, or whitespace errors fail the cell. Reports must preserve explicit
+Missing/empty evidence, invalid packet metadata, missing required terminology, or
+whitespace errors fail the cell. Reports must preserve explicit
 non-claims for unexecuted matrix cells and stronger evidence boundaries.
 
 ## Local baseline versus W5 lanes

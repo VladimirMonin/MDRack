@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import runpy
+import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 import mdrack
 from mdrack_sqlite.contract_v2 import (
@@ -52,6 +56,7 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
         "classification",
         "release",
         "source_plan",
+        "source_snapshot",
         "package_artifacts",
         "artifact_matrix_sha256",
         "clean_v2_schema",
@@ -77,6 +82,11 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
             (REPO_ROOT / "docs" / "plans" / "2026-07-24-v1.3-compact-storage-sqlite-vec.md").read_bytes()
         ).hexdigest(),
     }
+    snapshot = packet["source_snapshot"]
+    assert snapshot["head"] == "076af7bb0816d1ea9c5d32a297fb9decbd69c074"
+    assert snapshot["packet_excluded_from_identity"] == "docs/evidence/v1.3.0-base-release-packet.json"
+    assert snapshot["dirty_paths"]
+    assert len(snapshot["dirty_diff_sha256"]) == 64
 
     artifacts = packet["package_artifacts"]
     assert isinstance(artifacts, list)
@@ -126,6 +136,55 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
         assert forbidden not in rendered
     assert any("No package was published" in item for item in packet["non_claims"])
     assert any("No existing v1 or 0007 database" in item for item in packet["non_claims"])
+
+
+def test_v13_packet_rejects_source_identity_from_another_revision() -> None:
+    packet = json.loads(PACKET.read_text(encoding="utf-8"))
+    packet["source_snapshot"]["head"] = "0" * 40
+    validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
+    with pytest.raises(ValueError, match="source_snapshot_mismatch"):
+        validator["_validate_packet"](packet)
+
+
+def test_v13_source_identity_changes_for_distinct_staged_bytes(tmp_path: Path) -> None:
+    validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
+    repo = tmp_path / "repo"
+    (repo / "docs" / "evidence").mkdir(parents=True)
+    source = repo / "tracked.txt"
+    source.write_text("base\n", encoding="utf-8")
+    packet_path = repo / "docs" / "evidence" / "v1.3.0-base-release-packet.json"
+    packet_path.write_text("{}\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "base"],
+        cwd=repo,
+        check=True,
+    )
+    source.write_text("staged-a\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    validator["_source_snapshot"].__globals__["REPO_ROOT"] = repo
+    validator["_source_snapshot"].__globals__["PACKET_PATH"] = packet_path
+    first = validator["_source_snapshot"]()
+    source.write_text("staged-b\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    second = validator["_source_snapshot"]()
+    assert first["dirty_paths"] == second["dirty_paths"] == ["tracked.txt"]
+    assert first["dirty_diff_sha256"] != second["dirty_diff_sha256"]
+
+
+def test_v13_packet_rejects_stale_full_pytest_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
+    packet = json.loads(PACKET.read_text(encoding="utf-8"))
+    packet["evidence"]["quality"]["pytest"] = "1643 passed, 5 skipped"
+    validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
+    packet["source_snapshot"] = validator["_source_snapshot"]()
+    monkeypatch.setitem(
+        validator["_validate_packet"].__globals__,
+        "_current_pytest_result",
+        lambda: "1644 passed, 5 skipped",
+    )
+    with pytest.raises(ValueError, match="quality_result_stale"):
+        validator["_validate_packet"](packet)
 
 
 def test_v13_release_history_and_current_docs_preserve_their_store_boundaries() -> None:

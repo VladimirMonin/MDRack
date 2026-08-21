@@ -25,8 +25,7 @@ def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     assert "python-version: ['3.11', '3.12']" in workflow
     assert "uv sync --all-extras --frozen --offline" in workflow
     assert "offline_release_matrix.py --output-dir \"${{ runner.temp }}/mdrack-release-artifacts\"" in workflow
-    assert "--candidate-packet docs/evidence/v0.4-release-packet.json" in workflow
-    assert "--expected-manifest docs/evidence/w5-offline-release-matrix.json" in workflow
+    assert "check_v13_release_packet.py --artifacts-dir" in workflow
     for gate in (
         "ruff check",
         "mypy",
@@ -38,17 +37,30 @@ def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
         "check_sqlite_boundaries.py",
         "check_media_boundaries.py",
         "compileall",
-        "check_release_docs.py",
         "git diff --check",
     ):
         assert gate in workflow
-    assert "test -s docs/evidence/w5-offline-release-matrix.md" in workflow
-    assert "test -s docs/evidence/w5-offline-release-matrix.json" in workflow
+    assert "v0.4-release-packet" not in workflow
+    runbook = (REPO_ROOT / "docs" / "offline-release-verification.md").read_text(encoding="utf-8")
+    assert "hosted CI" in runbook
+    assert "evidence upload are remote CI infrastructure" in runbook
+    assert "workflow_dispatch" in runbook and "pull_request" in runbook
+    assert "does not provide process-wide network-attempt telemetry" in runbook
+
+
+def test_current_verification_wrappers_use_the_v13_packet_gate() -> None:
+    for path in (REPO_ROOT / "scripts" / "verify.sh", REPO_ROOT / "scripts" / "verify.ps1"):
+        source = path.read_text(encoding="utf-8")
+        assert "check_v13_release_packet.py" in source
+        assert "v0.4-release-packet" not in source
+        assert "w5-offline-release-matrix" not in source
+        assert "check_release_docs.py" not in source
 
 
 def test_matrix_script_has_no_network_enabled_default() -> None:
     source = (REPO_ROOT / "scripts" / "offline_release_matrix.py").read_text(encoding="utf-8")
-    assert '"network": {"allowed": False, "attempts": 0}' in source
+    assert '"telemetry": "not_measured"' in source
+    assert "installed-smoke-socket-block" in source
     assert "--offline" in source
     assert '"SOURCE_DATE_EPOCH"' in source
     assert '"PYTHONPATH": ""' in source

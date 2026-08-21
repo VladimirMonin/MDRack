@@ -16,40 +16,142 @@
     "path": "docs/plans/2026-07-24-v1.3-compact-storage-sqlite-vec.md",
     "sha256": "81f977e3669f8111a66167a0a82e3f3ef38a07b4153c84ba9ae7bc2f7fa37cb0"
   },
+  "source_snapshot": {
+    "head": "076af7bb0816d1ea9c5d32a297fb9decbd69c074",
+    "dirty_paths": [
+      ".github/workflows/offline-release-matrix.yml",
+      "docs/offline-release-verification.md",
+      "scripts/check_installed_package.py",
+      "scripts/check_v13_release_packet.py",
+      "scripts/offline_release_matrix.py",
+      "scripts/verify.ps1",
+      "scripts/verify.sh",
+      "tests/unit/test_offline_release_matrix.py",
+      "tests/unit/test_v13_release_contract.py"
+    ],
+    "dirty_diff_sha256": "9c2d7381ceef8698130c3b9eacca97c5562a903b350a8bae9f3447eb8f6f4d41",
+    "packet_excluded_from_identity": "docs/evidence/v1.3.0-base-release-packet.json"
+  },
   "package_artifacts": [
-    {"distribution": "mdrack", "version": "1.3.0", "kind": "sdist", "filename": "mdrack-1.3.0.tar.gz", "bytes": 908384, "sha256": "3a67f7d3351470458d46979e7cfa5ee796bf7812185042f37d6390efe90c30e4"},
-    {"distribution": "mdrack", "version": "1.3.0", "kind": "wheel", "filename": "mdrack-1.3.0-py3-none-any.whl", "bytes": 275352, "sha256": "5eca82b5b99c72001671f03300ce8fc747aefc5b5ff507f0f658277560945b1c"},
-    {"distribution": "mdrack-core", "version": "1.0.0rc1", "kind": "sdist", "filename": "mdrack_core-1.0.0rc1.tar.gz", "bytes": 20676, "sha256": "de192ffb76b431071732fb9de33274a29c741c17c78f2803c9007c604f8c25e5"},
-    {"distribution": "mdrack-core", "version": "1.0.0rc1", "kind": "wheel", "filename": "mdrack_core-1.0.0rc1-py3-none-any.whl", "bytes": 27408, "sha256": "3f8df736259895b0854afd7922967fc91bad21a6218dc6889276ddd75f26791a"},
-    {"distribution": "mdrack-media", "version": "1.0.0rc1", "kind": "sdist", "filename": "mdrack_media-1.0.0rc1.tar.gz", "bytes": 30153, "sha256": "bad5984878a7e170ae825b84c07d42c2c4a29b847c541353b1337722248bc3a7"},
-    {"distribution": "mdrack-media", "version": "1.0.0rc1", "kind": "wheel", "filename": "mdrack_media-1.0.0rc1-py3-none-any.whl", "bytes": 33456, "sha256": "0c8aadd3312ca4e34771fe570924661a2a2bb3ce58fad4dcbda94139e2d13dee"},
-    {"distribution": "mdrack-sqlite", "version": "1.0.0rc2", "kind": "sdist", "filename": "mdrack_sqlite-1.0.0rc2.tar.gz", "bytes": 28009, "sha256": "0283e6c0548af4a093a6c47e74f109e9a26bf8b39e5da76b4d41a142cc7b0dbd"},
-    {"distribution": "mdrack-sqlite", "version": "1.0.0rc2", "kind": "wheel", "filename": "mdrack_sqlite-1.0.0rc2-py3-none-any.whl", "bytes": 36552, "sha256": "0b4efb205a2e9a2b99dad333b05a05cd8a638bbf6b56959aae4bad9ba08258d8"}
+    {
+      "distribution": "mdrack",
+      "version": "1.3.0",
+      "kind": "sdist",
+      "filename": "mdrack-1.3.0.tar.gz",
+      "bytes": 850633,
+      "sha256": "e34b87e4064eef091f4492bbbcf7e00673c4b0f734a6b117c2c3dbb584249b2d"
+    },
+    {
+      "distribution": "mdrack",
+      "version": "1.3.0",
+      "kind": "wheel",
+      "filename": "mdrack-1.3.0-py3-none-any.whl",
+      "bytes": 254709,
+      "sha256": "c3f8b969f9cc9bce26c14ac0fff1458fa53abcd50b5c46783e069401ccea3789"
+    },
+    {
+      "distribution": "mdrack-core",
+      "version": "1.0.0rc1",
+      "kind": "sdist",
+      "filename": "mdrack_core-1.0.0rc1.tar.gz",
+      "bytes": 20898,
+      "sha256": "d7f74d95c65b515c7e59c8cb99440b64a7fa20c5112a6c918bf630147778117e"
+    },
+    {
+      "distribution": "mdrack-core",
+      "version": "1.0.0rc1",
+      "kind": "wheel",
+      "filename": "mdrack_core-1.0.0rc1-py3-none-any.whl",
+      "bytes": 27690,
+      "sha256": "b8b8aa1517a97df60a283f0ecd8f60b3b408c200da4967a0232e2ecfc4d01847"
+    },
+    {
+      "distribution": "mdrack-media",
+      "version": "1.0.0rc1",
+      "kind": "sdist",
+      "filename": "mdrack_media-1.0.0rc1.tar.gz",
+      "bytes": 30145,
+      "sha256": "b704a7fd699b5d5de270a2cb80a9823f27d6fe59f00919a5c0e16c058bbfb9f6"
+    },
+    {
+      "distribution": "mdrack-media",
+      "version": "1.0.0rc1",
+      "kind": "wheel",
+      "filename": "mdrack_media-1.0.0rc1-py3-none-any.whl",
+      "bytes": 33457,
+      "sha256": "9dc1fb832d136d74a16fce1bbba95c01b9cb5159abba808a086d28e7344be3e6"
+    },
+    {
+      "distribution": "mdrack-sqlite",
+      "version": "1.0.0rc2",
+      "kind": "sdist",
+      "filename": "mdrack_sqlite-1.0.0rc2.tar.gz",
+      "bytes": 27840,
+      "sha256": "83e25b17dbfaa43d927bf1be0585cdad54c700934a91778be5e3841bbe9489fd"
+    },
+    {
+      "distribution": "mdrack-sqlite",
+      "version": "1.0.0rc2",
+      "kind": "wheel",
+      "filename": "mdrack_sqlite-1.0.0rc2-py3-none-any.whl",
+      "bytes": 36377,
+      "sha256": "6faa894d57edb0def23463565335e4d3e6b9989220fb49d3bc7d37fe147642c5"
+    }
   ],
-  "artifact_matrix_sha256": "9b0778e979035b9e29447f75952e55a03c4956591721f4a897299ab593043101",
+  "artifact_matrix_sha256": "933e1875feac7ea7d7d445745f2e1ba8304f3193987171a2c9c4e5ea46725902",
   "clean_v2_schema": {
     "schema_id": "mdrack_sqlite_catalog_v2",
     "schema_version": "0004",
     "migration_manifest": [
-      {"name": "0000_identity.sql", "sha256": "079a67a9e90d423e6e020fe37cbb0829818a6dbbe5d9a5b1817a249c46a6e3c1"},
-      {"name": "0001_catalog.sql", "sha256": "5df6b532ffa5247dd08dc0200830d0371b97abd447dc0b81cd5936ca634ac60a"},
-      {"name": "0002_vectors_facets.sql", "sha256": "09e8d9a60722ee4c87515e2e1173305db6f6406add7c9ed2e42a685f36ace7b6"},
-      {"name": "0003_search.sql", "sha256": "be76b2774d51c344f01b4a497ba91ebd8b4de02c01838cbecd316852708fb00b"},
-      {"name": "0004_vector_encoding.sql", "sha256": "e6ef422ce7aa80b2b7d4e1d8b181e70788be904011e65ef2e3798a46d63405bc"}
+      {
+        "name": "0000_identity.sql",
+        "sha256": "079a67a9e90d423e6e020fe37cbb0829818a6dbbe5d9a5b1817a249c46a6e3c1"
+      },
+      {
+        "name": "0001_catalog.sql",
+        "sha256": "5df6b532ffa5247dd08dc0200830d0371b97abd447dc0b81cd5936ca634ac60a"
+      },
+      {
+        "name": "0002_vectors_facets.sql",
+        "sha256": "09e8d9a60722ee4c87515e2e1173305db6f6406add7c9ed2e42a685f36ace7b6"
+      },
+      {
+        "name": "0003_search.sql",
+        "sha256": "be76b2774d51c344f01b4a497ba91ebd8b4de02c01838cbecd316852708fb00b"
+      },
+      {
+        "name": "0004_vector_encoding.sql",
+        "sha256": "e6ef422ce7aa80b2b7d4e1d8b181e70788be904011e65ef2e3798a46d63405bc"
+      }
     ],
     "manifest_digest": "353facc85a46cfc30fea8511993e06aa49910b09d60fe7750cb1855df120dd98"
   },
   "evidence": {
-    "storage_analyzer": {"path": "docs/evidence/v1.3.0-storage-analyzer.json", "sha256": "4b9b5e60de433b25a79f1273e9cc7ca4badd87ab5aa00e69842a2be3fa8c1c5d"},
-    "benchmark": {"path": "docs/evidence/v1.3.0-builtin-exact-benchmark.json", "sha256": "c0b5176229ebddf349cf2107d93851c8a95205511254b0f31bda1f8ab13025d4"},
+    "storage_analyzer": {
+      "path": "docs/evidence/v1.3.0-storage-analyzer.json",
+      "sha256": "4b9b5e60de433b25a79f1273e9cc7ca4badd87ab5aa00e69842a2be3fa8c1c5d"
+    },
+    "benchmark": {
+      "path": "docs/evidence/v1.3.0-builtin-exact-benchmark.json",
+      "sha256": "c0b5176229ebddf349cf2107d93851c8a95205511254b0f31bda1f8ab13025d4"
+    },
     "quality": {
       "status": "passed",
       "boundary": "full_offline_pytest",
-      "command": "UV_FIND_LINKS=<temporary-local-wheelhouse> UV_OFFLINE=1 uv run pytest -q",
-      "pytest": "1959 passed"
+      "command": "UV_OFFLINE=1 uv run pytest -q",
+      "pytest": "1645 passed, 5 skipped"
     },
-    "privacy": {"status": "passed", "boundary": "unit_offline", "pytest": "49 passed", "network_attempts": 0},
-    "source_hash": {"scope": "synthetic_multimodal_fixture", "unchanged": true, "report": "benchmark.parity_oracle"},
+    "privacy": {
+      "status": "passed",
+      "boundary": "unit_offline",
+      "pytest": "49 passed",
+      "network_attempts": 0
+    },
+    "source_hash": {
+      "scope": "synthetic_multimodal_fixture",
+      "unchanged": true,
+      "report": "benchmark.parity_oracle"
+    },
     "installed_package": {
       "status": "passed",
       "boundary": "temporary_venv_with_local_third_party_wheelhouse",

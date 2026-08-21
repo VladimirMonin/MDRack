@@ -23,10 +23,7 @@ uv run python scripts/check_media_boundaries.py
 uv run python -m compileall -q scripts src packages/mdrack-core/src packages/mdrack-media/src packages/mdrack-sqlite/src
 uv run python scripts/offline_release_matrix.py \
   --output-dir "${TMPDIR:-/tmp}/mdrack-release-artifacts" \
-  --candidate-packet docs/evidence/v0.4-release-packet.json \
-  --smoke \
-  --expected-manifest docs/evidence/w5-offline-release-matrix.json
-test -s docs/evidence/w5-offline-release-matrix.md
-test -s docs/evidence/w5-offline-release-matrix.json
-uv run python scripts/check_release_docs.py
+  --smoke
+uv run python scripts/check_v13_release_packet.py \
+  --artifacts-dir "${TMPDIR:-/tmp}/mdrack-release-artifacts"
 git diff --check

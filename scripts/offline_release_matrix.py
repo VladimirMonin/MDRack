@@ -395,7 +395,11 @@ def main() -> None:
         {
             "schema_version": 1,
             "generated_for": "offline-release-matrix",
-            "network": {"allowed": False, "attempts": 0},
+            "network": {
+                "allowed": False,
+                "telemetry": "not_measured",
+                "controls": ["UV_OFFLINE=1", "installed-smoke-socket-block"],
+            },
             "python": f"{sys.version_info.major}.{sys.version_info.minor}",
             "platform": sys.platform,
         }

@@ -23,8 +23,6 @@ uv run python scripts/check_sqlite_boundaries.py
 uv run python scripts/check_media_boundaries.py
 uv run python -m compileall -q scripts src packages/mdrack-core/src packages/mdrack-media/src packages/mdrack-sqlite/src
 $releaseArtifacts = Join-Path ([System.IO.Path]::GetTempPath()) 'mdrack-release-artifacts'
-uv run python scripts/offline_release_matrix.py --output-dir $releaseArtifacts --candidate-packet docs/evidence/v0.4-release-packet.json --smoke --expected-manifest docs/evidence/w5-offline-release-matrix.json
-if (-not (Test-Path docs/evidence/w5-offline-release-matrix.md) -or (Get-Item docs/evidence/w5-offline-release-matrix.md).Length -eq 0) { throw 'missing offline release markdown evidence' }
-if (-not (Test-Path docs/evidence/w5-offline-release-matrix.json) -or (Get-Item docs/evidence/w5-offline-release-matrix.json).Length -eq 0) { throw 'missing offline release JSON evidence' }
-uv run python scripts/check_release_docs.py
+uv run python scripts/offline_release_matrix.py --output-dir $releaseArtifacts --smoke
+uv run python scripts/check_v13_release_packet.py --artifacts-dir $releaseArtifacts
 git diff --check
