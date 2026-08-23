@@ -95,6 +95,10 @@ extension inferred from an existing protocol or reserved field.
 - A private real-corpus unified-search smoke is a separate explicit data-
   authorization boundary. The 1.2 offline release evidence does not claim that
   boundary, raw-media recognition, or live LM Studio semantic quality.
+- ADR-0012 and the app-owned raw-source provenance values define a bounded,
+  fixture-tested contract only. They do not expose raw-media ingestion, decode
+  audio/video, perform OCR/STT/VLM work, or change the existing raw-media
+  non-claim.
 
 ## Related current documentation
 
