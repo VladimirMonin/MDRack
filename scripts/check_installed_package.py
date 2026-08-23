@@ -354,6 +354,37 @@ def _check_cli_json() -> None:
     assert payload["meta"] == {"command": "status"}
 
 
+def _check_installed_raw_text_cli() -> None:
+    with tempfile.TemporaryDirectory(prefix="mdrack-installed-raw-text-") as directory:
+        root = Path(directory) / "root"
+        root.mkdir()
+        source = Path(directory) / "outside-root.txt"
+        source.write_text("installed raw needle", encoding="utf-8")
+        executable = str(Path(sys.executable).with_name("mdrack"))
+        ingest = subprocess.run(
+            [executable, "--root", str(root), "ingest", "text", str(source), "--source-ref", "docs/installed.txt", "--media-type", "text/plain"],  # noqa: E501
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert ingest.returncode == 0, ingest.stderr
+        payload = json.loads(ingest.stdout)
+        assert payload["data"]["resource_kind"] == "raw_text"
+        assert str(source) not in ingest.stdout and "installed raw needle" not in ingest.stdout
+        search = subprocess.run(
+            [executable, "--root", str(root), "search", "needle", "--scope", "all", "--mode", "text"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert search.returncode == 0, search.stderr
+        search_payload = json.loads(search.stdout)
+        assert search_payload["data"]["results"][0]["resource_kind"] == "raw_text"
+        locator = search_payload["data"]["results"][0]["evidence"][0]["locator"]
+        assert locator["kind"] == "raw_local_source_span"
+        assert str(source) not in search.stdout and "installed raw needle" not in search.stdout
+
+
 def _check_catalog_retrieval_parity() -> int:
     from click.testing import CliRunner
 
@@ -426,6 +457,7 @@ def main() -> None:
         _check_sqlite_candidate()
         _check_installed_audio_retrieval()
         _check_cli_json()
+        _check_installed_raw_text_cli()
         parity_mode_count = _check_catalog_retrieval_parity()
 
     assert network_attempts == 0
@@ -442,6 +474,7 @@ def main() -> None:
                     "sqlite_candidate": "passed",
                     "installed_audio_retrieval": "passed",
                     "cli_json": "passed",
+                    "installed_raw_text_cli": "passed",
                     "legacy_retrieval_parity_modes": parity_mode_count,
                     "network_attempts": 0,
                 },

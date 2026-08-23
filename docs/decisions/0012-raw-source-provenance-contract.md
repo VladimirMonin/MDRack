@@ -37,3 +37,12 @@ public envelope changes. It does not claim raw-media ingestion or recognition
 quality, installed-package behavior, Windows execution, or real-source evidence.
 A later adapter must return to architecture ownership if it requires core,
 media, sqlite, migration, public API, or raw absolute-path changes.
+
+## R1 relation
+
+R1 adds the CLI-only `ingest text` adapter. It accepts one explicitly selected
+UTF-8 plain-text or Markdown file outside the scan root, preserves the R0 raw
+digest, and stores one `raw_text` graph in the existing `catalog.sqlite3`.
+Prepared evidence is hashed independently; `raw_local_source_span` is the
+portable unit locator. No engine method, migration, provider, or second store
+is introduced.

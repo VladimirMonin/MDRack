@@ -196,3 +196,13 @@ For a successfully initialized normal store, the only SQLite database file is
 `<store>/catalog.sqlite3`. SQLite may use transient lock/WAL sidecars while the
 catalog is open; those sidecars are not alternate stores. Normal operations do
 not create a legacy database, generation directory, or active-pointer file.
+
+## Explicit text ingestion
+
+`mdrack --root ROOT ingest text SOURCE_PATH --source-ref PORTABLE_REF
+--media-type text/plain|text/markdown` captures one strict UTF-8 source outside
+the scan root and atomically replaces its deterministic `raw_text` resource in
+the existing catalog. The command is provider-free and emits only logical IDs,
+counts, and `persisted`; source paths, content, digests, and exceptions are not
+returned. Search with `--scope all --mode text` exposes portable
+`raw_local_source_span` evidence.

@@ -203,3 +203,8 @@ remain under `mdrack_core`.
 The machine-readable owner/version/deprecation/removal/install inventory for the
 v0.4 development surface is
 [`docs/compatibility/v0.4-public-surface-ledger.json`](../compatibility/v0.4-public-surface-ledger.json).
+
+The CLI additionally exposes `ingest text` for one explicit raw local source.
+This is intentionally not an `MDRackEngine` method in R1; retrieval uses the
+existing unified text CLI/engine surface and reports `raw_text` resources with
+portable raw-source span locators.

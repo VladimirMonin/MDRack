@@ -216,6 +216,23 @@ def _portable_evidence_locator(locator: Locator) -> dict[str, object]:
         if isinstance(block_kind, str) and block_kind:
             safe_payload["block_kind"] = block_kind
         return {"kind": locator.kind, "payload": safe_payload}
+    if locator.kind == "raw_local_source_span":
+        source_ref = _portable_relative_path(payload.get("source_ref"))
+        if source_ref is None:
+            return {"kind": "opaque", "payload": {}}
+        safe_payload["source_ref"] = source_ref
+        for field_name in ("start_line", "end_line", "start_char", "end_char"):
+            value = payload.get(field_name)
+            if type(value) is int and value >= 0:
+                safe_payload[field_name] = value
+        heading_path = payload.get("heading_path")
+        if isinstance(heading_path, (list, tuple)) and all(isinstance(item, str) for item in heading_path):
+            safe_payload["heading_path"] = list(heading_path)
+        for field_name in ("block_kind", "chunk_kind"):
+            value = payload.get(field_name)
+            if isinstance(value, str) and value:
+                safe_payload[field_name] = value
+        return {"kind": locator.kind, "payload": safe_payload}
     if locator.kind == "time_segment":
         for field_name in ("start_ms", "end_ms"):
             value = payload.get(field_name)

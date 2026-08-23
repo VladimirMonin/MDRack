@@ -215,6 +215,33 @@ async def test_unified_text_search_filters_by_alias_and_degrades_hybrid_without_
     assert hybrid.degraded_reason == "embedding_provider_unavailable"
 
 
+async def test_unified_text_search_makes_nonportable_raw_source_ref_opaque() -> None:
+    catalog = MemoryCatalog()
+    catalog.replace_resource(
+        _batch(
+            resource_id="raw-text-1",
+            resource_kind="raw_text",
+            unit_id="raw-text-unit",
+            text="raw needle",
+            representation_kind="retrieval_text",
+            unit_kind="text_chunk",
+            locator_kind="raw_local_source_span",
+            locator_payload={
+                "source_ref": "/PRIVATE_REF_SENTINEL",
+                "start_line": 1,
+                "end_line": 1,
+                "start_char": 0,
+                "end_char": 10,
+            },
+        )
+    )
+
+    result = await UnifiedTextSearchService(catalog).search("needle", scope="all", mode="text")
+
+    assert result.results[0].evidence[0].locator == {"kind": "opaque", "payload": {}}
+    assert "PRIVATE_REF_SENTINEL" not in repr(result.to_dict())
+
+
 async def test_unified_semantic_search_requires_the_exact_canonical_fingerprint() -> None:
     catalog = MemoryCatalog()
     fingerprint = "a" * 64

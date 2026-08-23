@@ -16,6 +16,7 @@ from mdrack.cli.commands.files import files as files_group
 from mdrack.cli.commands.images import image as image_group
 from mdrack.cli.commands.metadata import metadata as metadata_group
 from mdrack.cli.commands.model import model as model_group
+from mdrack.cli.commands.raw_text import ingest_text
 from mdrack.cli.commands.read import read
 from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
 from mdrack.cli.commands.resource import resource as resource_group
@@ -221,6 +222,7 @@ main.add_command(cli_scan, name="scan")
 # ---------------------------------------------------------------------------
 main.add_command(cli_search, name="search")
 main.add_command(ingest_group)
+ingest_group.add_command(ingest_text)
 ingest_group.add_command(ingest_video)
 
 # Explicit direct-image lifecycle is separate from Markdown scan.

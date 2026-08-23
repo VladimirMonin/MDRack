@@ -108,3 +108,9 @@ extension inferred from an existing protocol or reserved field.
 - [Retrieval](retrieval.md)
 - [Assets](assets.md)
 - [Public interfaces](public-interfaces.md)
+
+Raw text R1 is limited to strict UTF-8 plain text and Markdown selected outside
+the scan root. It performs no provider, model, OCR, STT, VLM, network, or
+external asset work, and has no semantic embedding path. The installed CLI
+smoke remains provider-free; Windows and private real-source quality are not
+claimed.

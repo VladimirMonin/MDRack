@@ -146,3 +146,9 @@ the prior complete graph visible.
   `packages/mdrack-core/src/mdrack_core/application/indexing.py`
 - Domain records: `src/mdrack/domain/blocks.py`,
   `src/mdrack/domain/documents.py`, `src/mdrack/domain/chunks.py`
+
+Explicit raw text ingestion is a separate CLI-owned producer in
+`src/mdrack/ingestion/raw_text.py`. It reuses the Markdown parser/chunker for
+Markdown, treats plain text as literal prose, and guards the single core write
+with an R0 after-read source check. The scanner remains the owner of in-root
+Markdown files.
