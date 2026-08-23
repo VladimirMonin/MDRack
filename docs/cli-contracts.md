@@ -216,3 +216,16 @@ surface. `PORTABLE_REF` must be a normalized relative POSIX reference; it is
 not a filesystem path. The source must have PNG, JPEG, GIF, or WEBP magic bytes.
 The success envelope remains `image ingest` with the existing result keys.
 Failures use the payload-free `IMAGE_INGEST_ERROR` envelope.
+
+## Explicit local WAVE audio ingestion
+
+`mdrack --root ROOT ingest audio SOURCE_PATH --source-ref PORTABLE_REF
+--allow-external-stt --stt-command EXECUTABLE [--language LANGUAGE]
+[--producer PRODUCER_ID]` accepts only a parseable RIFF/WAVE file outside the
+root. The command captures the bounded source privately, sends that snapshot
+to the explicitly authorized executable on stdin (`shell=False`), and accepts
+only strict `mdrack.timed-transcript.v1` JSON on bounded stdout. It never uses
+an embedding provider or a network fallback. The result replaces one `audio`
+resource through the existing atomic catalog path with `embeddings=False`.
+The success envelope contains only logical IDs, verified media type, counts,
+and `persisted`; failures use the payload-free `RAW_AUDIO_INGEST_ERROR`.

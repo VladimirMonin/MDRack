@@ -18,8 +18,11 @@ This page is a current-state boundary, not a roadmap promise.
 - Production embeddings require a reachable LM Studio HTTP endpoint. The Python
   package does not load embedding model weights itself.
 - Audio and video retrieval consumes supplied timed transcripts and frame-caption
-  text. MDRack does not transcribe raw audio, decode media, or perform acoustic,
-  pixel, or visual-similarity search.
+  text. The CLI now has a narrow direct WAVE path for raw audio that delegates transcription
+  to an explicitly supplied local stdin executable; MDRack does not provide an
+  STT model, provider, network fallback, or general media decoder. ISO-BMFF,
+  Matroska, acoustic similarity, pixel search, and visual similarity remain
+  unsupported.
 - Unified 1.2 retrieval is text-first: it searches Markdown text, supplied audio/
   video transcripts, frame-caption text, and explicit image caption/OCR text. Its
   `find-similar` command reuses stored textual whole-resource vectors only; it does
@@ -98,10 +101,10 @@ extension inferred from an existing protocol or reserved field.
 - A private real-corpus unified-search smoke is a separate explicit data-
   authorization boundary. The 1.2 offline release evidence does not claim that
   boundary, raw-media recognition, or live LM Studio semantic quality.
-- ADR-0012 and the app-owned raw-source provenance values define a bounded,
-  fixture-tested contract only. They do not expose raw-media ingestion, decode
-  audio/video, perform OCR/STT/VLM work, or change the existing raw-media
-  non-claim.
+- ADR-0012 and the app-owned raw-source provenance values define the bounded
+  contract for raw-local adapters. R3 adds only CLI WAVE ingestion through an
+  opt-in shell-free local command; offline fake-command evidence is orchestration
+  evidence, not STT recognition quality. No engine method or schema is added.
 
 ## Related current documentation
 

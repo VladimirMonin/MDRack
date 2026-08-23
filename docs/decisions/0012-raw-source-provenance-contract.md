@@ -61,3 +61,16 @@ source re-read. A changed source returns `source_changed` and leaves the
 previous graph intact. Image locators and metadata contain only validated
 relative POSIX `source_ref` values; CLI failures retain the payload-free
 `IMAGE_INGEST_ERROR` envelope. No binary image bytes are persisted.
+
+## R3 direct local WAVE adapter
+
+R3 implements the first raw-audio adapter as the CLI-only command
+`ingest audio`. It accepts RIFF/WAVE magic plus a parseable stdlib `wave`
+stream, derives bounded duration, and captures the source before invoking an
+explicit `--allow-external-stt --stt-command` executable with shell-free stdin.
+The executable output is bounded and parsed only by the existing strict timed
+JSON reader. A guarded write port rechecks the source immediately before the
+single existing transcript replacement, decorates the resulting resource with
+the raw digest and prepared-evidence digest, and leaves the previous graph
+untouched on failure. The path remains provider-free, stores no audio bytes,
+adds no engine API or migration, and does not claim live STT quality.

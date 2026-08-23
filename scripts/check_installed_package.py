@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import wave
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -436,6 +437,47 @@ def _check_installed_image_cli() -> None:
         assert str(source) not in search.stdout and "installed image needle" not in search.stdout
 
 
+def _check_installed_raw_audio_cli() -> None:
+    with tempfile.TemporaryDirectory(prefix="mdrack-installed-raw-audio-") as directory:
+        root = Path(directory) / "root"
+        root.mkdir()
+        source = Path(directory) / "outside-root.wav"
+        with wave.open(str(source), "wb") as stream:
+            stream.setnchannels(1)
+            stream.setsampwidth(2)
+            stream.setframerate(8000)
+            stream.writeframes(b"\0\0" * 8000)
+        fake = Path(directory) / "fake-stt.py"
+        fake.write_text(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "sys.stdin.buffer.read()\n"
+            "print('{\"schema\":\"mdrack.timed-transcript.v1\",\"atoms\":["
+            "{\"start_ms\":0,\"end_ms\":100,\"text\":\"installed audio needle\"}]}')\n",
+            encoding="utf-8",
+        )
+        fake.chmod(0o755)
+        executable = str(Path(sys.executable).with_name("mdrack"))
+        ingest = subprocess.run(
+            [executable, "--root", str(root), "ingest", "audio", str(source),
+             "--source-ref", "recordings/installed.wav", "--allow-external-stt",
+             "--stt-command", str(fake)],
+            check=False, capture_output=True, text=True,
+        )
+        assert ingest.returncode == 0, ingest.stderr
+        payload = json.loads(ingest.stdout)
+        assert payload["data"]["resource_kind"] == "audio"
+        assert str(source) not in ingest.stdout
+        search = subprocess.run(
+            [executable, "--root", str(root), "search", "needle", "--scope", "audio", "--mode", "text"],
+            check=False, capture_output=True, text=True,
+        )
+        assert search.returncode == 0, search.stderr
+        search_payload = json.loads(search.stdout)
+        assert search_payload["data"]["results"]
+        assert str(source) not in search.stdout and "installed audio needle" not in search.stdout
+
+
 def _check_catalog_retrieval_parity() -> int:
     from click.testing import CliRunner
 
@@ -510,6 +552,7 @@ def main() -> None:
         _check_cli_json()
         _check_installed_raw_text_cli()
         _check_installed_image_cli()
+        _check_installed_raw_audio_cli()
         parity_mode_count = _check_catalog_retrieval_parity()
 
     assert network_attempts == 0
@@ -528,6 +571,7 @@ def main() -> None:
                     "cli_json": "passed",
                     "installed_raw_text_cli": "passed",
                     "installed_image_cli": "passed",
+                    "installed_raw_audio_cli": "passed",
                     "legacy_retrieval_parity_modes": parity_mode_count,
                     "network_attempts": 0,
                 },

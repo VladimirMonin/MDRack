@@ -208,3 +208,10 @@ The CLI additionally exposes `ingest text` for one explicit raw local source.
 This is intentionally not an `MDRackEngine` method in R1; retrieval uses the
 existing unified text CLI/engine surface and reports `raw_text` resources with
 portable raw-source span locators.
+
+The CLI also exposes `ingest audio SOURCE_PATH --source-ref REF
+--allow-external-stt --stt-command EXECUTABLE` for bounded RIFF/WAVE input.
+This is intentionally not an `MDRackEngine` method. The executable receives
+the private source snapshot on stdin and must return strict timed-transcript
+JSON; the command persists no raw audio and reports no path, command, source
+reference, transcript, or exception details.
