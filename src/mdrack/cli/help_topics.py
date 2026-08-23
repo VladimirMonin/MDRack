@@ -64,7 +64,7 @@ explicit local-file operation with caller-provided caption or OCR text.
     --kind audio --media-type audio/transcript --namespace local --no-embeddings
   mdrack --root ./notes ingest video MANIFEST_PATH --dry-run
   mdrack --root ./notes image ingest IMAGE_PATH --resource-id ID \\
-    --source-namespace local --source-ref IMAGE_PATH --caption "A caption"
+    --source-namespace local --source-ref images/example.png --caption "A caption"
 
 Review `mdrack ingest --help` and `mdrack image --help` before using a recipe;
 these operations are separate from Markdown scanning.

@@ -206,3 +206,13 @@ the existing catalog. The command is provider-free and emits only logical IDs,
 counts, and `persisted`; source paths, content, digests, and exceptions are not
 returned. Search with `--scope all --mode text` exposes portable
 `raw_local_source_span` evidence.
+
+## Explicit image ingestion
+
+`mdrack --root ROOT image ingest SOURCE_PATH --resource-id ID
+--source-namespace NAMESPACE --source-ref PORTABLE_REF [--caption TEXT]
+[--ocr TEXT] [--provider fake|lmstudio]` uses the existing direct-image
+surface. `PORTABLE_REF` must be a normalized relative POSIX reference; it is
+not a filesystem path. The source must have PNG, JPEG, GIF, or WEBP magic bytes.
+The success envelope remains `image ingest` with the existing result keys.
+Failures use the payload-free `IMAGE_INGEST_ERROR` envelope.

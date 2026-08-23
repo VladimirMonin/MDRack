@@ -27,9 +27,16 @@ media type, byte size, and content hash, obtains caption/OCR text from explicit
 arguments or an injected extractor, prepares ready vectors outside core, and
 atomically replaces one typed image resource in the fixed application catalog.
 
-The source bytes remain outside SQLite. Each bounded caption/OCR representation
+The source bytes remain outside SQLite. Signature validation uses PNG, JPEG, GIF,
+or WEBP magic bytes rather than filename extensions. Each bounded caption/OCR representation
 owns one `whole_resource` search unit by default. Text and visual vectors use
 different explicit embedding spaces and are never compared across spaces.
+
+The persisted resource metadata records the frozen raw-source provenance,
+verified media type, source byte digest, budget fingerprint, and prepared
+caption/OCR evidence digest. The source is checked again immediately before the
+existing atomic replacement transaction; a changed source cannot replace a
+previous complete graph.
 
 Image text, semantic, and hybrid search apply `resource_kind=image` before the
 candidate limit. Provider failure degrades safely. Delete is idempotent and

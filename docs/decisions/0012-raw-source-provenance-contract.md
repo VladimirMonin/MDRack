@@ -46,3 +46,18 @@ digest, and stores one `raw_text` graph in the existing `catalog.sqlite3`.
 Prepared evidence is hashed independently; `raw_local_source_span` is the
 portable unit locator. No engine method, migration, provider, or second store
 is introduced.
+
+## R2 direct-image hardening
+
+The existing `image ingest` command and `MDRackEngine.ingest_image` path now use
+the frozen contract without adding a public surface. Image bytes are captured
+once within the image budget and identified by stdlib magic bytes for PNG,
+JPEG, GIF, or WEBP; a caller-supplied media type is an assertion, not an
+override. Caption/OCR observations are bounded before provider calls and their
+canonical prepared evidence receives a separate digest.
+
+The existing single catalog replacement is guarded by an immediate bounded
+source re-read. A changed source returns `source_changed` and leaves the
+previous graph intact. Image locators and metadata contain only validated
+relative POSIX `source_ref` values; CLI failures retain the payload-free
+`IMAGE_INGEST_ERROR` envelope. No binary image bytes are persisted.

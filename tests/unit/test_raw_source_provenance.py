@@ -282,3 +282,27 @@ def test_after_check_uses_capture_bound_for_default_and_equal_budget(
         assert reads == []
     finally:
         snapshot.cleanup()
+
+
+def test_capture_signature_probe_receives_only_bounded_bytes(tmp_path: Path) -> None:
+    source = tmp_path / "probe.png"
+    source.write_bytes(b"1234")
+    seen: list[bytes] = []
+
+    def probe(content: bytes) -> RawSignatureFact:
+        seen.append(content)
+        return png_fact()
+
+    budget = RawInputBudget(max_source_bytes=4)
+    snapshot = capture_source(
+        source,
+        "fixtures/probe.png",
+        RawMediaKind.IMAGE,
+        budget=budget,
+        signature_probe=probe,
+    )
+    try:
+        assert seen == [b"1234"]
+        assert snapshot.provenance.signature == png_fact()
+    finally:
+        snapshot.cleanup()

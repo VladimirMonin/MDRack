@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import math
-import mimetypes
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +15,22 @@ from mdrack.application.vector_values import (
     value_policy_metadata,
 )
 from mdrack.domain.identifiers import logical_id
+from mdrack.ingestion.raw_source_provenance import (
+    RawInputBudget,
+    RawMediaKind,
+    RawSignatureFact,
+    RawSignatureKind,
+    RawSourceError,
+    RawSourceErrorCode,
+    RawSourceSnapshot,
+    canonical_json,
+    capture_source,
+    check_source_after,
+    resource_metadata,
+    sha256_digest,
+    validate_budget,
+    validate_source_ref,
+)
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
@@ -51,6 +65,44 @@ _SUPPORTED_MEDIA_TYPES = frozenset({"image/gif", "image/jpeg", "image/png", "ima
 _TEXT_REPRESENTATION_KINDS = frozenset({REPRESENTATION_CAPTION_TEXT, REPRESENTATION_OCR_TEXT})
 _TEXT_AGGREGATE_REPRESENTATION = "image_text_aggregate"
 _CENTROID_TEXT_AGGREGATION = "token_weighted_centroid_v1"
+
+
+def _image_signature_probe(content: bytes) -> RawSignatureFact:
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return RawSignatureFact(RawSignatureKind.PNG, "image/png", "image-magic-v1")
+    if len(content) >= 3 and content[:2] == b"\xff\xd8" and content[2] == 0xFF:
+        return RawSignatureFact(RawSignatureKind.JPEG, "image/jpeg", "image-magic-v1")
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return RawSignatureFact(RawSignatureKind.GIF, "image/gif", "image-magic-v1")
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return RawSignatureFact(RawSignatureKind.WEBP, "image/webp", "image-magic-v1")
+    raise RawSourceError(RawSourceErrorCode.SIGNATURE_UNSUPPORTED)
+
+
+class _GuardedWritePort:
+    def __init__(
+        self,
+        delegate: object,
+        snapshot: RawSourceSnapshot,
+        source_path: Path,
+        budget: RawInputBudget,
+    ) -> None:
+        self._delegate = delegate
+        self._snapshot = snapshot
+        self._source_path = source_path
+        self._budget = budget
+        self.source_error: RawSourceError | None = None
+
+    def replace_resource(self, batch: PreparedResourceBatch) -> None:
+        try:
+            check_source_after(self._snapshot, self._source_path, self._budget)
+        except RawSourceError as error:
+            self.source_error = error
+            return
+        self._delegate.replace_resource(batch)  # type: ignore[attr-defined]
+
+    def delete_resource(self, resource_id: str) -> None:
+        self._delegate.delete_resource(resource_id)  # type: ignore[attr-defined]
 
 
 @dataclass(frozen=True)
@@ -237,262 +289,318 @@ class ImageIngestionService:
         self._require_non_empty(resource_id, "resource_id")
         self._require_non_empty(source_namespace, "source_namespace")
         self._require_non_empty(source_ref, "source_ref")
-        resolved_media_type = self._resolve_media_type(path, media_type)
-        content = self._read_bounded(path)
-        content_hash = "sha256:" + hashlib.sha256(content).hexdigest()
-        extracted = await self._extract(content, resolved_media_type)
-        token_counts = tuple(self._estimated_tokens(item.text) for item in extracted)
-        if any(count > self._max_text_tokens for count in token_counts):
-            raise ValueError("image text exceeds the configured whole-resource limit")
-
-        representations: list[RepresentationRecord] = []
-        units: list[SearchUnitRecord] = []
-        spaces: dict[str, EmbeddingSpaceRecord] = {}
-        vectors: list[VectorRecord] = []
-
-        text_vectors: Sequence[Sequence[float]] = ()
-        if extracted and self._text_provider is not None:
-            try:
-                text_vectors = await self._text_provider.embed(
-                    [item.text for item in extracted],
-                    profile=self._profile,
-                )
-            except Exception:
-                logger.warning(
-                    "image.ingest.provider_failed",
-                    extra={"reason": "embedding_provider_error"},
-                )
-                raise EmbeddingError("embedding_provider_error") from None
-            if len(text_vectors) != len(extracted):
-                raise ValueError("text embedding count mismatch")
-            assert self._text_space is not None
-            spaces[self._text_space.space_id] = self._text_space.core_record(modality=MODALITY_TEXT)
-
-        for index, (item, token_count) in enumerate(zip(extracted, token_counts, strict=True)):
-            representation_id = logical_id(
-                "image-representation",
-                resource_id,
-                item.kind,
-                item.producer_fingerprint,
-                index,
+        validate_source_ref(source_ref)
+        budget = RawInputBudget(
+            max_source_bytes=self._max_image_bytes,
+            max_whole_resource_tokens=self._max_text_tokens,
+        )
+        snapshot = capture_source(
+            path,
+            source_ref,
+            RawMediaKind.IMAGE,
+            budget=budget,
+            signature_probe=_image_signature_probe,
+        )
+        try:
+            content = snapshot.source_bytes
+            resolved_media_type = snapshot.provenance.signature.verified_media_type
+            content_hash = snapshot.provenance.raw_source_sha256
+            if media_type is not None and media_type != resolved_media_type:
+                snapshot.cleanup()
+                raise RawSourceError(RawSourceErrorCode.MIME_SIGNATURE_MISMATCH)
+            extracted = await self._extract(content, resolved_media_type)
+            token_counts = tuple(self._estimated_tokens(item.text) for item in extracted)
+            aggregate_text = "\n\n".join(item.text for item in extracted)
+            validate_budget(
+                snapshot.provenance,
+                budget,
+                prepared_text=aggregate_text,
+                whole_resource_tokens=sum(token_counts),
             )
-            unit_id = logical_id("image-unit", representation_id, UNIT_WHOLE_RESOURCE)
-            representations.append(
-                RepresentationRecord(
-                    representation_id,
+            evidence = {
+                "schema": "mdrack.image-prepared-evidence.v1",
+                "media_type": resolved_media_type,
+                "observations": [
+                    {
+                        "kind": item.kind,
+                        "text": item.text,
+                        "language": item.language,
+                        "producer_fingerprint": item.producer_fingerprint,
+                    }
+                    for item in extracted
+                ],
+            }
+            prepared_digest = sha256_digest(canonical_json(evidence))
+            provenance = snapshot.provenance
+            provenance = type(provenance)(
+                provenance.source_ref,
+                provenance.media_kind,
+                provenance.raw_source_sha256,
+                provenance.byte_size,
+                provenance.signature,
+                provenance.duration_ms,
+                provenance.selected_frame_count,
+                prepared_digest,
+                provenance.budget_fingerprint,
+            )
+
+            representations: list[RepresentationRecord] = []
+            units: list[SearchUnitRecord] = []
+            spaces: dict[str, EmbeddingSpaceRecord] = {}
+            vectors: list[VectorRecord] = []
+
+            text_vectors: Sequence[Sequence[float]] = ()
+            if extracted and self._text_provider is not None:
+                try:
+                    text_vectors = await self._text_provider.embed(
+                        [item.text for item in extracted],
+                        profile=self._profile,
+                    )
+                except Exception:
+                    logger.warning(
+                        "image.ingest.provider_failed",
+                        extra={"reason": "embedding_provider_error"},
+                    )
+                    raise EmbeddingError("embedding_provider_error") from None
+                if len(text_vectors) != len(extracted):
+                    raise ValueError("text embedding count mismatch")
+                assert self._text_space is not None
+                spaces[self._text_space.space_id] = self._text_space.core_record(modality=MODALITY_TEXT)
+
+            for index, (item, token_count) in enumerate(zip(extracted, token_counts, strict=True)):
+                representation_id = logical_id(
+                    "image-representation",
                     resource_id,
                     item.kind,
-                    MODALITY_TEXT,
-                    item.text,
-                    item.language,
                     item.producer_fingerprint,
-                    token_count,
-                    "estimated",
-                    {},
+                    index,
                 )
-            )
-            units.append(
-                SearchUnitRecord(
-                    unit_id,
-                    resource_id,
-                    representation_id,
-                    UNIT_WHOLE_RESOURCE,
-                    MODALITY_TEXT,
-                    item.text,
-                    Locator("whole_image", {"source_ref": source_ref}),
-                    0,
-                    token_count,
-                    "estimated",
-                    {"representation_kind": item.kind},
+                unit_id = logical_id("image-unit", representation_id, UNIT_WHOLE_RESOURCE)
+                representations.append(
+                    RepresentationRecord(
+                        representation_id,
+                        resource_id,
+                        item.kind,
+                        MODALITY_TEXT,
+                        item.text,
+                        item.language,
+                        item.producer_fingerprint,
+                        token_count,
+                        "estimated",
+                        {},
+                    )
                 )
-            )
-            if text_vectors:
-                assert self._text_space is not None
-                vector = self._validated_vector(
-                    text_vectors[index],
-                    self._text_space,
-                    modality=MODALITY_TEXT,
+                units.append(
+                    SearchUnitRecord(
+                        unit_id,
+                        resource_id,
+                        representation_id,
+                        UNIT_WHOLE_RESOURCE,
+                        MODALITY_TEXT,
+                        item.text,
+                        Locator("whole_image", {"source_ref": source_ref}),
+                        0,
+                        token_count,
+                        "estimated",
+                        {"representation_kind": item.kind},
+                    )
                 )
-                vectors.append(VectorRecord(unit_id, self._text_space.space_id, vector))
+                if text_vectors:
+                    assert self._text_space is not None
+                    vector = self._validated_vector(
+                        text_vectors[index],
+                        self._text_space,
+                        modality=MODALITY_TEXT,
+                    )
+                    vectors.append(VectorRecord(unit_id, self._text_space.space_id, vector))
 
-        if extracted:
-            aggregate_text = "\n\n".join(item.text for item in extracted)
-            aggregate_fingerprint = logical_id(
-                "image-text-aggregate",
-                resource_id,
-                tuple((item.kind, item.language, item.producer_fingerprint) for item in extracted),
-            )
-            aggregate_representation_id = logical_id(
-                "image-representation",
-                resource_id,
-                _TEXT_AGGREGATE_REPRESENTATION,
-                aggregate_fingerprint,
-            )
-            aggregate_unit_id = logical_id(
-                "image-unit",
-                aggregate_representation_id,
-                UNIT_WHOLE_RESOURCE,
-            )
-            aggregate_tokens = sum(token_counts)
-            aggregate_metadata = {
-                "aggregation": _CENTROID_TEXT_AGGREGATION,
-                "aggregation_fingerprint": aggregate_fingerprint,
-                "representation_kind": _TEXT_AGGREGATE_REPRESENTATION,
-                "similarity_basis": "image_text_aggregate",
-            }
-            representations.append(
-                RepresentationRecord(
-                    aggregate_representation_id,
+            if extracted:
+                aggregate_fingerprint = logical_id(
+                    "image-text-aggregate",
+                    resource_id,
+                    tuple((item.kind, item.language, item.producer_fingerprint) for item in extracted),
+                )
+                aggregate_representation_id = logical_id(
+                    "image-representation",
                     resource_id,
                     _TEXT_AGGREGATE_REPRESENTATION,
-                    MODALITY_TEXT,
-                    aggregate_text,
-                    producer_fingerprint=aggregate_fingerprint,
-                    token_count=aggregate_tokens,
-                    token_count_kind="estimated",
-                    metadata=aggregate_metadata,
+                    aggregate_fingerprint,
                 )
-            )
-            units.append(
-                SearchUnitRecord(
-                    aggregate_unit_id,
-                    resource_id,
+                aggregate_unit_id = logical_id(
+                    "image-unit",
                     aggregate_representation_id,
                     UNIT_WHOLE_RESOURCE,
-                    MODALITY_TEXT,
-                    aggregate_text,
-                    Locator("whole_image", {"source_ref": source_ref}),
-                    0,
-                    aggregate_tokens,
-                    "estimated",
-                    aggregate_metadata,
                 )
-            )
-            if text_vectors:
-                assert self._text_space is not None
-                text_units = tuple(units[:-1])
-                aggregate_vectors = {
-                    unit.unit_id: vector.vector
-                    for unit, vector in zip(text_units, vectors, strict=True)
+                aggregate_tokens = sum(token_counts)
+                aggregate_metadata = {
+                    "aggregation": _CENTROID_TEXT_AGGREGATION,
+                    "aggregation_fingerprint": aggregate_fingerprint,
+                    "representation_kind": _TEXT_AGGREGATE_REPRESENTATION,
+                    "similarity_basis": "image_text_aggregate",
                 }
-                if any(value != 0.0 for vector in aggregate_vectors.values() for value in vector):
-                    aggregate_vector = weighted_centroid(
-                        aggregate_vectors,
-                        {unit.unit_id: unit.token_count or 1 for unit in text_units},
+                representations.append(
+                    RepresentationRecord(
+                        aggregate_representation_id,
+                        resource_id,
+                        _TEXT_AGGREGATE_REPRESENTATION,
+                        MODALITY_TEXT,
+                        aggregate_text,
+                        producer_fingerprint=aggregate_fingerprint,
+                        token_count=aggregate_tokens,
+                        token_count_kind="estimated",
+                        metadata=aggregate_metadata,
                     )
-                    vectors.append(
-                        VectorRecord(
-                            aggregate_unit_id,
-                            self._text_space.space_id,
-                            self._validated_vector(
-                                aggregate_vector,
-                                self._text_space,
-                                modality=MODALITY_TEXT,
-                            ),
-                        )
-                    )
-
-        if self._visual_provider is not None:
-            assert self._visual_space is not None
-            representation_id = logical_id(
-                "image-representation",
-                resource_id,
-                REPRESENTATION_VISUAL,
-                self._visual_space.fingerprint,
-            )
-            unit_id = logical_id("image-unit", representation_id, UNIT_WHOLE_RESOURCE)
-            try:
-                visual = await self._visual_provider.embed_image(content, profile=self._profile)
-            except Exception:
-                logger.warning(
-                    "image.ingest.provider_failed",
-                    extra={"reason": "visual_embedding_provider_error"},
                 )
-                raise EmbeddingError("visual_embedding_provider_error") from None
-            vector = self._validated_vector(
-                visual,
-                self._visual_space,
-                modality=MODALITY_IMAGE,
-            )
-            representations.append(
-                RepresentationRecord(
-                    representation_id,
+                units.append(
+                    SearchUnitRecord(
+                        aggregate_unit_id,
+                        resource_id,
+                        aggregate_representation_id,
+                        UNIT_WHOLE_RESOURCE,
+                        MODALITY_TEXT,
+                        aggregate_text,
+                        Locator("whole_image", {"source_ref": source_ref}),
+                        0,
+                        aggregate_tokens,
+                        "estimated",
+                        aggregate_metadata,
+                    )
+                )
+                if text_vectors:
+                    assert self._text_space is not None
+                    text_units = tuple(units[:-1])
+                    aggregate_vectors = {
+                        unit.unit_id: vector.vector
+                        for unit, vector in zip(text_units, vectors, strict=True)
+                    }
+                    if any(value != 0.0 for vector in aggregate_vectors.values() for value in vector):
+                        aggregate_vector = weighted_centroid(
+                            aggregate_vectors,
+                            {unit.unit_id: unit.token_count or 1 for unit in text_units},
+                        )
+                        vectors.append(
+                            VectorRecord(
+                                aggregate_unit_id,
+                                self._text_space.space_id,
+                                self._validated_vector(
+                                    aggregate_vector,
+                                    self._text_space,
+                                    modality=MODALITY_TEXT,
+                                ),
+                            )
+                        )
+
+            if self._visual_provider is not None:
+                assert self._visual_space is not None
+                representation_id = logical_id(
+                    "image-representation",
                     resource_id,
                     REPRESENTATION_VISUAL,
-                    MODALITY_IMAGE,
-                    None,
-                    producer_fingerprint=self._visual_space.fingerprint,
+                    self._visual_space.fingerprint,
                 )
-            )
-            units.append(
-                SearchUnitRecord(
-                    unit_id,
+                unit_id = logical_id("image-unit", representation_id, UNIT_WHOLE_RESOURCE)
+                try:
+                    visual = await self._visual_provider.embed_image(content, profile=self._profile)
+                except Exception:
+                    logger.warning(
+                        "image.ingest.provider_failed",
+                        extra={"reason": "visual_embedding_provider_error"},
+                    )
+                    raise EmbeddingError("visual_embedding_provider_error") from None
+                vector = self._validated_vector(
+                    visual,
+                    self._visual_space,
+                    modality=MODALITY_IMAGE,
+                )
+                representations.append(
+                    RepresentationRecord(
+                        representation_id,
+                        resource_id,
+                        REPRESENTATION_VISUAL,
+                        MODALITY_IMAGE,
+                        None,
+                        producer_fingerprint=self._visual_space.fingerprint,
+                    )
+                )
+                units.append(
+                    SearchUnitRecord(
+                        unit_id,
+                        resource_id,
+                        representation_id,
+                        UNIT_WHOLE_RESOURCE,
+                        MODALITY_IMAGE,
+                        None,
+                        Locator("whole_image", {"source_ref": source_ref}),
+                        0,
+                        metadata={"representation_kind": REPRESENTATION_VISUAL},
+                    )
+                )
+                spaces[self._visual_space.space_id] = self._visual_space.core_record(modality=MODALITY_IMAGE)
+                vectors.append(VectorRecord(unit_id, self._visual_space.space_id, vector))
+
+            if not representations:
+                raise ValueError("image ingestion requires text extraction or a visual vector")
+
+            batch = PreparedResourceBatch(
+                ResourceRecord(
                     resource_id,
-                    representation_id,
-                    UNIT_WHOLE_RESOURCE,
-                    MODALITY_IMAGE,
-                    None,
-                    Locator("whole_image", {"source_ref": source_ref}),
-                    0,
-                    metadata={"representation_kind": REPRESENTATION_VISUAL},
-                )
+                    RESOURCE_IMAGE,
+                    resolved_media_type,
+                    source_namespace,
+                    Locator("local_image", {"source_ref": source_ref}),
+                    content_hash,
+                    title,
+                    {
+                        **resource_metadata(provenance),
+                        "adapter": "direct_image",
+                        "byte_size": len(content),
+                    },
+                ),
+                tuple(representations),
+                tuple(units),
+                tuple(spaces.values()),
+                tuple(vectors),
+                (),
             )
-            spaces[self._visual_space.space_id] = self._visual_space.core_record(modality=MODALITY_IMAGE)
-            vectors.append(VectorRecord(unit_id, self._visual_space.space_id, vector))
-
-        if not representations:
-            raise ValueError("image ingestion requires text extraction or a visual vector")
-
-        batch = PreparedResourceBatch(
-            ResourceRecord(
+            logger.info(
+                "image.ingest.started",
+                extra={
+                    "representation_count": len(representations),
+                    "unit_count": len(units),
+                    "vector_count": len(vectors),
+                    "byte_size": len(content),
+                },
+            )
+            guarded_port = _GuardedWritePort(self._catalog, snapshot, path, budget)
+            indexing = CoreIndexingService(guarded_port)  # type: ignore[arg-type]
+            indexing.index(batch)
+            if guarded_port.source_error is not None:
+                raise guarded_port.source_error
+            logger.info(
+                "image.ingest.completed",
+                extra={
+                    "representation_count": len(representations),
+                    "unit_count": len(units),
+                    "vector_count": len(vectors),
+                    "byte_size": len(content),
+                },
+            )
+            return ImageIngestionResult(
                 resource_id,
-                RESOURCE_IMAGE,
-                resolved_media_type,
-                source_namespace,
-                Locator("local_image", {"source_ref": source_ref}),
                 content_hash,
-                title,
-                {"byte_size": len(content)},
-            ),
-            tuple(representations),
-            tuple(units),
-            tuple(spaces.values()),
-            tuple(vectors),
-            (),
-        )
-        logger.info(
-            "image.ingest.started",
-            extra={
-                "representation_count": len(representations),
-                "unit_count": len(units),
-                "vector_count": len(vectors),
-                "byte_size": len(content),
-            },
-        )
-        self._indexing.index(batch)
-        logger.info(
-            "image.ingest.completed",
-            extra={
-                "representation_count": len(representations),
-                "unit_count": len(units),
-                "vector_count": len(vectors),
-                "byte_size": len(content),
-            },
-        )
-        return ImageIngestionResult(
-            resource_id,
-            content_hash,
-            resolved_media_type,
-            len(content),
-            tuple(item.representation_id for item in representations),
-            tuple(item.unit_id for item in units),
-            self._text_space.space_id if text_vectors and self._text_space is not None else None,
-            (
-                self._visual_space.space_id
-                if self._visual_provider is not None and self._visual_space is not None
-                else None
-            ),
-        )
+                resolved_media_type,
+                len(content),
+                tuple(item.representation_id for item in representations),
+                tuple(item.unit_id for item in units),
+                self._text_space.space_id if text_vectors and self._text_space is not None else None,
+                (
+                    self._visual_space.space_id
+                    if self._visual_provider is not None and self._visual_space is not None
+                    else None
+                ),
+            )
+        finally:
+            snapshot.cleanup()
 
     def delete(self, resource_id: str) -> None:
         self._indexing.delete(resource_id)
@@ -626,7 +734,8 @@ class ImageIngestionService:
 
     @staticmethod
     def _resolve_media_type(path: Path, requested: str | None) -> str:
-        media_type = requested or mimetypes.guess_type(path.name)[0]
+        del path
+        media_type = requested
         if media_type not in _SUPPORTED_MEDIA_TYPES:
             raise ValueError("unsupported image media type")
         return media_type

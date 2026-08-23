@@ -56,6 +56,9 @@ This page is a current-state boundary, not a roadmap promise.
   no image resource and never touches the referenced file.
 - Direct-image ingestion is explicit. Built-in static extraction requires supplied
   caption/OCR text; live OCR/caption/visual quality is not claimed by offline tests.
+- Direct images require PNG, JPEG, GIF, or WEBP magic bytes and a portable
+  relative POSIX source reference. The source-after-read guard protects the
+  existing atomic replacement, but does not provide a live filesystem lock.
 - There is no automatic image discovery, remote fetch, perceptual hashing, region
   detection, or binary image storage in SQLite.
 - Legacy `0005` asset tables remain in immutable history but have no production

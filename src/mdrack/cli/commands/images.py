@@ -22,6 +22,7 @@ from mdrack.ingestion.images import (
     ImageIngestionService,
     StaticImageExtractor,
 )
+from mdrack.ingestion.raw_source_provenance import RawSourceError
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
@@ -111,8 +112,6 @@ def ingest_image(
     storage = None
     provider: EmbeddingProvider | None = None
     try:
-        if not path.is_file():
-            raise ValueError("image_source_unavailable")
         storage, catalog = _open_catalog(ctx)
         config = ctx.obj["config"]
         provider = create_embedding_provider(provider_name, config)
@@ -140,6 +139,10 @@ def ingest_image(
             extra={"representation_count": len(result.representation_ids)},
         )
         _output(ctx, envelope_success(result.to_dict(), command=command))
+    except RawSourceError:
+        logger.error("cli.image.ingest.failed", extra={"reason": "image_ingest_error"})
+        _output(ctx, envelope_error("Image ingestion failed", "IMAGE_INGEST_ERROR", command))
+        ctx.exit(1)
     except Exception:
         logger.error("cli.image.ingest.failed", extra={"reason": "image_ingest_error"})
         _output(ctx, envelope_error("Image ingestion failed", "IMAGE_INGEST_ERROR", command))

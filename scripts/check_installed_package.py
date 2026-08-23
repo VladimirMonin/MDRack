@@ -385,6 +385,57 @@ def _check_installed_raw_text_cli() -> None:
         assert str(source) not in search.stdout and "installed raw needle" not in search.stdout
 
 
+def _check_installed_image_cli() -> None:
+    with tempfile.TemporaryDirectory(prefix="mdrack-installed-image-") as directory:
+        root = Path(directory) / "root"
+        root.mkdir()
+        source = Path(directory) / "outside-root"
+        source.write_bytes(b"\x89PNG\r\n\x1a\ninstalled-image")
+        executable = str(Path(sys.executable).with_name("mdrack"))
+        init = subprocess.run(
+            [executable, "--root", str(root), "init"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert init.returncode == 0, init.stderr
+        ingest = subprocess.run(
+            [
+                executable,
+                "--root",
+                str(root),
+                "image",
+                "ingest",
+                str(source),
+                "--resource-id",
+                "installed-image-1",
+                "--source-namespace",
+                "installed-smoke",
+                "--source-ref",
+                "images/installed.png",
+                "--caption",
+                "installed image needle",
+                "--provider",
+                "fake",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert ingest.returncode == 0, ingest.stderr
+        assert str(source) not in ingest.stdout and "installed image needle" not in ingest.stdout
+        search = subprocess.run(
+            [executable, "--root", str(root), "image", "search", "needle", "--mode", "text"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert search.returncode == 0, search.stderr
+        payload = json.loads(search.stdout)
+        assert payload["data"]["results"][0]["source_ref"] == "images/installed.png"
+        assert str(source) not in search.stdout and "installed image needle" not in search.stdout
+
+
 def _check_catalog_retrieval_parity() -> int:
     from click.testing import CliRunner
 
@@ -458,6 +509,7 @@ def main() -> None:
         _check_installed_audio_retrieval()
         _check_cli_json()
         _check_installed_raw_text_cli()
+        _check_installed_image_cli()
         parity_mode_count = _check_catalog_retrieval_parity()
 
     assert network_attempts == 0
@@ -475,6 +527,7 @@ def main() -> None:
                     "installed_audio_retrieval": "passed",
                     "cli_json": "passed",
                     "installed_raw_text_cli": "passed",
+                    "installed_image_cli": "passed",
                     "legacy_retrieval_parity_modes": parity_mode_count,
                     "network_attempts": 0,
                 },

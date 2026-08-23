@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 
 from mdrack_core import Locator
 
@@ -356,11 +356,20 @@ def validate_budget(provenance: RawSourceProvenance, budget: RawInputBudget = Ra
         raise RawSourceError(RawSourceErrorCode.PREPARED_EVIDENCE_INVALID)
 
 
-def capture_source(source_path: Path, source_ref: str, media_kind: RawMediaKind, signature: RawSignatureFact,
-                   budget: RawInputBudget = RawInputBudget(), *, duration_ms: int | None = None,
-                   selected_frame_count: int = 0) -> RawSourceSnapshot:
+def capture_source(
+    source_path: Path,
+    source_ref: str,
+    media_kind: RawMediaKind,
+    signature: RawSignatureFact | None = None,
+    budget: RawInputBudget = RawInputBudget(),
+    *,
+    duration_ms: int | None = None,
+    selected_frame_count: int = 0,
+    signature_probe: Callable[[bytes], RawSignatureFact] | None = None,
+) -> RawSourceSnapshot:
     validate_source_ref(source_ref)
-    validate_signature_for_media(media_kind, signature)
+    if (signature is None) == (signature_probe is None):
+        raise RawSourceError(RawSourceErrorCode.SIGNATURE_UNSUPPORTED)
     try:
         if not source_path.is_file():
             raise RawSourceError(RawSourceErrorCode.SOURCE_NOT_REGULAR)
@@ -374,6 +383,15 @@ def capture_source(source_path: Path, source_ref: str, media_kind: RawMediaKind,
         raise RawSourceError(RawSourceErrorCode.SOURCE_EMPTY)
     if len(source_bytes) > budget.max_source_bytes:
         raise RawSourceError(RawSourceErrorCode.SOURCE_TOO_LARGE)
+    if signature_probe is not None:
+        try:
+            signature = signature_probe(source_bytes)
+        except RawSourceError:
+            raise
+        except Exception:
+            raise RawSourceError(RawSourceErrorCode.SIGNATURE_UNSUPPORTED) from None
+    assert signature is not None
+    validate_signature_for_media(media_kind, signature)
     provenance = RawSourceProvenance(
         source_ref, media_kind, sha256_digest(source_bytes), len(source_bytes), signature,
         duration_ms, selected_frame_count, None, budget.fingerprint,

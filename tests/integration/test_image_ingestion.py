@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import mdrack.ingestion.images as image_ingestion_module
 from mdrack.adapters.sqlite.index_storage import create_sqlite_index_storage
 from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore
 from mdrack.application.indexing import IndexingService
@@ -20,6 +21,7 @@ from mdrack.ingestion.images import (
     ImageIngestionService,
     StaticImageExtractor,
 )
+from mdrack.ingestion.raw_source_provenance import RawSourceError, RawSourceErrorCode
 from mdrack.ports.embeddings import EmbeddingError
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_candidate_migrations, get_migrations_dir
@@ -32,6 +34,8 @@ from mdrack_core.domain import (
     SearchUnitRecord,
     VectorRecord,
 )
+
+PNG_BYTES = b"\x89PNG\r\n\x1a\nminimal-test-payload"
 
 
 class CountingFakeEmbeddingProvider(FakeEmbeddingProvider):
@@ -84,6 +88,16 @@ class NonCanonicalEmbeddingProvider(CountingFakeEmbeddingProvider):
         del text, profile
         self.query_calls += 1
         return [1.0 + 2**-30, *([0.0] * (self.dimensions - 1))]
+
+
+class MutatingImageExtractor:
+    def __init__(self, source: Path) -> None:
+        self._source = source
+
+    async def extract(self, content: bytes, *, media_type: str):  # type: ignore[no-untyped-def]
+        del content, media_type
+        self._source.write_bytes(PNG_BYTES + b"changed-after-capture")
+        return (ExtractedImageText("caption_text", "replacement", "caption-fake-v1"),)
 
 
 def _document_trap(store: SQLiteResourceStore, text: str) -> None:
@@ -139,7 +153,7 @@ async def test_explicit_image_create_search_replace_delete_and_source_immutabili
 ) -> None:
     database_path, connection, store = sqlite_store
     image = tmp_path / "private-image.png"
-    source_bytes = b"S9_IMAGE_SOURCE_BYTES_NOT_FOR_SQLITE_\x00\x01\x02"
+    source_bytes = PNG_BYTES + b"S9_IMAGE_SOURCE_BYTES_NOT_FOR_SQLITE_\x00\x01\x02"
     image.write_bytes(source_bytes)
     source_hash = hashlib.sha256(source_bytes).hexdigest()
     provider = CountingFakeEmbeddingProvider()
@@ -273,7 +287,7 @@ async def test_image_failures_preserve_the_previous_complete_graph_and_sanitize_
 ) -> None:
     _database_path, connection, store = sqlite_store
     image = tmp_path / "PRIVATE_PATH_SENTINEL.png"
-    image.write_bytes(b"source bytes")
+    image.write_bytes(PNG_BYTES + b"source bytes")
     provider = CountingFakeEmbeddingProvider()
     space = ImageEmbeddingSpace("image-text-space", 8, "image-text-fingerprint")
     original = ImageIngestionService(
@@ -338,7 +352,7 @@ async def test_image_text_embeddings_canonicalize_f32_values_and_queries_at_the_
 ) -> None:
     _database_path, connection, store = sqlite_store
     image = tmp_path / "f32-image.png"
-    image.write_bytes(b"f32 image bytes")
+    image.write_bytes(PNG_BYTES + b"f32 image bytes")
     provider = NonCanonicalEmbeddingProvider()
     space = ImageEmbeddingSpace(
         "image-f32-space",
@@ -391,7 +405,7 @@ async def test_image_provider_failure_degrades_search_and_preserves_graph_before
 ) -> None:
     _database_path, connection, store = sqlite_store
     image = tmp_path / "PRIVATE_PATH_SENTINEL.png"
-    image.write_bytes(b"source bytes")
+    image.write_bytes(PNG_BYTES + b"source bytes")
     provider = CountingFakeEmbeddingProvider()
     space = ImageEmbeddingSpace(
         "image-text-space",
@@ -470,13 +484,14 @@ async def test_image_provider_failure_degrades_search_and_preserves_graph_before
         text_space=space,
         max_text_tokens=1,
     )
-    with pytest.raises(ValueError, match="whole-resource limit"):
+    with pytest.raises(RawSourceError) as caught:
         await bounded.ingest(
             image,
             resource_id="image-logical-1",
             source_namespace="PRIVATE_ROOT_SENTINEL",
             source_ref="public-ref",
         )
+    assert caught.value.code is RawSourceErrorCode.PREPARED_EVIDENCE_INVALID
     assert provider.document_calls == calls_before
     assert provider.network_requests == 0
     for sentinel in (
@@ -496,7 +511,7 @@ async def test_image_zero_cosine_projection_fails_before_replace_and_preserves_g
 ) -> None:
     _database_path, connection, store = sqlite_store
     image = tmp_path / "PRIVATE_PATH_SENTINEL.png"
-    image.write_bytes(b"source bytes")
+    image.write_bytes(PNG_BYTES + b"source bytes")
     space = ImageEmbeddingSpace("image-text-space", 8, "image-text-fingerprint")
     original_service = ImageIngestionService(
         store,
@@ -551,6 +566,64 @@ async def test_image_zero_cosine_projection_fails_before_replace_and_preserves_g
     ) == prior
     assert zero_provider.document_calls == 1
     assert zero_provider.network_requests == 0
+
+
+async def test_image_prewrite_failure_cleans_transient_snapshot(
+    tmp_path: Path,
+    sqlite_store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _database_path, _connection, store = sqlite_store
+    image = tmp_path / "image.png"
+    image.write_bytes(PNG_BYTES)
+    temporary_paths: list[Path] = []
+    original_capture = image_ingestion_module.capture_source
+
+    def tracking_capture(*args, **kwargs):  # type: ignore[no-untyped-def]
+        snapshot = original_capture(*args, **kwargs)
+        temporary_paths.append(snapshot.temporary_path)
+        return snapshot
+
+    monkeypatch.setattr(image_ingestion_module, "capture_source", tracking_capture)
+    service = ImageIngestionService(
+        store,
+        extractor=StaticImageExtractor(
+            (ExtractedImageText("caption_text", "two words", "caption-fake-v1"),)
+        ),
+        max_text_tokens=1,
+    )
+
+    with pytest.raises(RawSourceError) as caught:
+        await service.ingest(
+            image,
+            resource_id="image-logical-1",
+            source_namespace="fixture",
+            source_ref="images/image.png",
+        )
+
+    assert caught.value.code is RawSourceErrorCode.PREPARED_EVIDENCE_INVALID
+    assert temporary_paths and all(not path.exists() for path in temporary_paths)
+
+
+async def test_image_source_mutation_returns_fixed_source_changed_error(
+    tmp_path: Path,
+    sqlite_store,
+) -> None:
+    _database_path, _connection, store = sqlite_store
+    image = tmp_path / "image.png"
+    image.write_bytes(PNG_BYTES)
+    service = ImageIngestionService(store, extractor=MutatingImageExtractor(image))
+
+    with pytest.raises(RawSourceError) as caught:
+        await service.ingest(
+            image,
+            resource_id="image-logical-1",
+            source_namespace="fixture",
+            source_ref="images/image.png",
+        )
+
+    assert caught.value.code is RawSourceErrorCode.SOURCE_CHANGED
+    assert store.read_resource("image-logical-1") is None
 
 
 def test_markdown_scan_never_calls_explicit_image_ingestion(
