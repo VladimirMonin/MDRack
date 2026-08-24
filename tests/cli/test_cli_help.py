@@ -50,6 +50,9 @@ def test_search_requires_query() -> None:
     assert "--mode" in result.output
     assert "--limit" in result.output
     assert "--provider" in result.output
+    assert "requires" in result.output
+    assert "--preset" in result.output
+    assert "--target" in result.output
     assert "--catalog" not in result.output
 
 
@@ -61,9 +64,13 @@ def test_current_reader_groups_exist() -> None:
         assert result.exit_code == 0, f"Group '{group}' failed: {result.output}"
 
     read_help = runner.invoke(main, ["read", "--help"])
+    assert "unit" in read_help.output
     assert "chunk" in read_help.output
     assert "file" in read_help.output
     assert "section" not in read_help.output
+
+    chunk_help = runner.invoke(main, ["read", "chunk", "--help"])
+    assert "neighbors" in chunk_help.output
 
 
 def test_files_list_exists_for_an_initialized_empty_catalog(tmp_path: Path) -> None:

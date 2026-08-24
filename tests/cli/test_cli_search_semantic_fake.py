@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import pytest
 from click.testing import CliRunner
 
 from mdrack.cli import main
@@ -201,3 +202,41 @@ def test_hybrid_search_reports_degraded_mode(
     assert isinstance(data, dict)
     assert data["degraded"] is True
     assert data["degraded_reason"] == "embedding_provider_error"
+
+
+@pytest.mark.parametrize("mode", ["semantic", "hybrid"])
+def test_raw_resource_filters_fail_before_storage_or_provider(
+    tmp_path: Path,
+    monkeypatch,
+    mode: str,
+) -> None:
+    def fail_storage(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise AssertionError("storage must not be opened")
+
+    def fail_provider(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise AssertionError("embedding provider must not be created")
+
+    monkeypatch.setattr("mdrack.cli.commands.search._open_storage", fail_storage)
+    monkeypatch.setattr("mdrack.cli.commands.search.create_embedding_provider", fail_provider)
+    result = CliRunner().invoke(
+        main,
+        [
+            "--root",
+            str(tmp_path),
+            "search",
+            "needle",
+            "--mode",
+            mode,
+            "--kind",
+            "video",
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["error"] == {
+        "message": "Metadata search options are invalid",
+        "code": "VALIDATION_ERROR",
+    }

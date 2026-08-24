@@ -16,13 +16,13 @@ When sources disagree, use this order:
 
 ## Architecture map
 
-- [System overview](system-overview.md) — layers, dependency direction, component diagram, and source anchors.
+- [System overview](system-overview.md) — layers, dependency direction, app-owned local-file adapters, prepared-resource boundaries, component diagram, and source anchors.
 - [Indexing and structural chunking](indexing-and-chunking.md) — scan, parsing, identities, exact spans, chunks, embeddings, and atomic replacement.
 - [SQLite persistence](sqlite-persistence.md) — the single clean-v2 application catalog, historical schemas, transactions, FTS, vectors, and identity.
 - [Retrieval](retrieval.md) — text, semantic, hybrid RRF, degradation, and the reranking boundary.
 - [Images](assets.md) — Markdown text projection versus explicit direct-image ingestion.
-- [Public interfaces](public-interfaces.md) — CLI capability matrix, embedded engine, class/port diagram, and DTO boundaries.
-- [Limitations](limitations.md) — explicit unsupported or asymmetric behavior.
+- [Public interfaces](public-interfaces.md) — CLI capability matrix, explicit local-file adapter boundaries, embedded engine, class/port diagram, and DTO boundaries.
+- [Limitations](limitations.md) — explicit unsupported or asymmetric behavior, including raw-adapter and external-process limits.
 
 ## Supporting current contracts
 

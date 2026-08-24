@@ -2,7 +2,8 @@
 
 MDRack 1.3.0 is a local Python 3.11+ command-line and embedded retrieval rack for
 Markdown, typed metadata, timed transcripts, frame-caption text, and explicitly
-supplied images.
+supplied images. Its primary operational user is an agent working under a human
+operator's explicit authority over locally held data.
 
 The application depends on standalone `mdrack-core` and `mdrack-sqlite`
 distributions. The first is the stdlib-only provider/persistence-neutral kernel;
@@ -27,6 +28,33 @@ This is an offline installation smoke: fake embeddings are deterministic test
 data, not semantic-quality evidence. Configure LM Studio before ordinary
 semantic or hybrid use; see [Getting started](docs/getting-started.md) and the
 [CLI guide](docs/getting-started.md#static-cli-guide).
+
+## Agent-first work with human data
+
+For a real task, an agent first identifies whether it is using the source-checkout
+command (`uv run mdrack`) or an already installed `mdrack` command, then asks for
+an explicit data root and the exact operation to perform. Keep private sources
+outside this repository and out of shell history, reports, and commits. The static
+guide and `--help` are read-only discovery steps; `init`, `scan`, explicit ingest,
+rebuild, delete, and provider/model actions change derived local state and must be
+named and authorized before the agent runs them.
+
+An authorized workflow can scan Markdown in the chosen root or ingest one selected
+raw text/Markdown file, image with caller-supplied text, WAVE file, or ISO-BMFF
+video. The WAVE and ISO-BMFF paths require the caller to opt in to a selected local
+adapter executable; MDRack does not provide built-in transcription, decoding, or
+visual analysis. Search by text and optional scope, retain only returned logical
+IDs and portable locators or time/line evidence, then use a new CLI process with
+the same root to run `status` against the same derived store. Source files remain
+unchanged. The complete safe sequence and its evidence boundary are in
+[Getting started](docs/getting-started.md#agent-workflow-for-authorized-human-data),
+[operations](docs/operations.md#agent-workflow-and-private-data), and the shipped
+[MDRack agent skill](skills/mdrack/SKILL.md).
+
+A real acceptance claim is stronger than this quick start: it requires an agent to
+exercise the installed public surface with separately authorized human-like private
+data while checking source immutability and privacy. Synthetic/offline checks are
+supporting evidence only; they do not substitute for that run.
 
 The CLI also provides read, files, status, doctor, rebuild, eval, and
 LM Studio model-management commands. Host applications can use

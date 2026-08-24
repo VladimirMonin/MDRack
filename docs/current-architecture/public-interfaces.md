@@ -134,6 +134,25 @@ CLI responses use the JSON envelope documented in
 [CLI contracts](../cli-contracts.md). The CLI presentation layer also maps some
 application degradation states to command errors; see [retrieval](retrieval.md).
 
+## Explicit local-file adapters
+
+`scan` is the Markdown-root path. The other local-file commands are explicit,
+separate app adapters: `ingest text` prepares one strict UTF-8 text or Markdown
+resource outside the scan root; `image ingest` prepares one direct image graph;
+`ingest audio` accepts only authorized RIFF/WAVE input; and `ingest raw-video`
+accepts only authorized ISO-BMFF `ftyp` input. Raw audio and video remain CLI-only;
+the embedded engine exposes direct-image ingestion but no raw text, WAVE, or raw
+video entry method.
+
+These commands own local capture and, for WAVE/video, the explicitly supplied
+shell-free stdin process. They must finish source validation and graph preparation
+before calling `CoreIndexingService` through the logical-ID `ResourceWritePort`.
+`mdrack_media` builds and validates prepared timed-media graphs without file,
+provider, database, or network access. `mdrack_core` then validates the prepared
+resource graph without performing file or subprocess work; `mdrack_sqlite` owns
+the resulting generic catalog/search persistence. This boundary does not provide
+built-in STT, a general media decoder, FFmpeg, or VLM capability.
+
 ## Embedded engine
 
 `MDRackEngine` supports:

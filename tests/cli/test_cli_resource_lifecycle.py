@@ -66,8 +66,20 @@ def test_resource_lifecycle_uses_the_configured_catalog_and_matches_engine(tmp_p
     engine = MDRackEngine(root=root, config=MDRackConfig())
     try:
         imported = engine.import_resource_manifest(_manifest()).to_dict()
+        engine_unit = engine.read_unit("unit-1")
     finally:
         engine.close()
+
+    assert engine_unit == {
+        "unit_id": "unit-1",
+        "resource_id": "resource-1",
+        "representation_id": "representation-1",
+        "unit_kind": "frame",
+        "modality": "text",
+        "text": "PRIVATE_TEXT",
+        "evidence_locator": {"kind": "video_frame", "payload": {"timestamp_ms": 1000}},
+        "ordinal": 0,
+    }
 
     output_path = root / "resource.json"
     exported = runner.invoke(

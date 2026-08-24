@@ -26,6 +26,31 @@ The normal command surface has no alternate-catalog or generation-management
 commands. `rebuild fts` and `rebuild embeddings` update only derived search data
 in the fixed catalog.
 
+## Agent workflow and private data
+
+MDRack is normally operated by an agent under a human's explicit authority. The
+agent must distinguish a source-checkout command (`uv run mdrack`) from a separately
+installed `mdrack` command, obtain an explicit `ROOT`, and name every operation that
+will alter derived state before it runs. `guide`, `--help`, text search, `status`,
+and `doctor` are suitable read-only discovery steps; initialization, scanning,
+explicit ingest, rebuild, deletion, and provider/model actions are not.
+
+Keep private human material outside the repository checkout. An authorized workflow
+may scan Markdown below the selected root or ingest exactly selected raw
+text/Markdown, direct-image, WAVE, or ISO-BMFF inputs. The WAVE and ISO-BMFF paths
+need their explicit authorization flags and a caller-selected local executable; do
+not silently substitute a tool, provider, or remote service. Search with text mode
+and, when useful, a unified scope. Retain logical IDs and portable locators or
+available line/time bounds rather than copying source text or paths into an issue.
+
+After a requested write completes, start a fresh CLI process with the same root and
+run `status`. It reopens the existing derived store and reports aggregate state;
+also verify independently that selected source bytes did not change. This is a
+real agent-use workflow only when the installed public CLI or engine is exercised
+on separately authorized human-like private data. Synthetic fixtures, fake
+providers, and offline checks remain supporting evidence and must not be reported
+as that real-use boundary.
+
 ## Output, logs, and privacy
 
 The CLI reserves stdout for one documented JSON object. Application logs go to

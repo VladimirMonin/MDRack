@@ -46,6 +46,10 @@ produces and audits both a wheel and an sdist, for eight artifacts total:
 The installed smoke must clear `PYTHONPATH`, run outside the source import path,
 verify distribution version and module location, and fail on any import or
 command error. Standalone artifacts must not contain the root `mdrack/` package.
+The application metadata pins `mdrack-core==1.0.0rc1`,
+`mdrack-media==1.0.0rc1`, and `mdrack-sqlite==1.0.0rc2`; the generated
+`install_graph` must include all three root edges. This local smoke is not an
+index-download installation check.
 
 ## Execution coverage and evidence
 
@@ -70,6 +74,11 @@ package`, `Windows`, and any separately authorized live boundary. This workflow
 claims none of the following: LM Studio/provider behavior, OCR/Whisper/VLM
 quality, real-source or real-vault behavior, visual/acoustic quality, or external
 runtime behavior.
+
+Package-index and publication cells are also separate from this workflow. Until
+they run, report TestPyPI upload/hash/index-install, PyPI upload/hash/index-install,
+Git tag, and GitHub Release as `not_run` rather than inferring them from an
+offline build or an installed local wheel.
 
 ## One-store acceptance evidence
 
@@ -174,6 +183,12 @@ import, missing artifact, or non-zero smoke command fails. The output directory
 must remain outside the source checkout; it is disposable evidence and must not
 be committed.
 
+Run the packet validator only against the exact clean candidate it describes.
+The packet is excluded from its own source manifest, but every other tracked
+file is included. A dirty documentation edit, even when `git diff --check`
+passes, is not authenticated as the prior candidate and must be followed by a
+fresh two-build packet/review cycle before an external release stage.
+
 ### 8. Documentation and whitespace
 
 ```bash
@@ -184,6 +199,18 @@ git diff --check
 Missing/empty evidence, invalid packet metadata, missing required terminology, or
 whitespace errors fail the cell. Reports must preserve explicit
 non-claims for unexecuted matrix cells and stronger evidence boundaries.
+
+## External package-index verification: not part of this runbook command
+
+After the local candidate, the four hosted matrix cells, and explicit release
+authority are all available, use the sequence in the
+[1.3 release notes](release-1.3.md#external-publication-sequence-not-run):
+TestPyPI first, then PyPI, with `mdrack-core`, `mdrack-media`,
+`mdrack-sqlite`, and `mdrack` uploaded in that order. Verify every returned
+index hash, then test a normal and `--no-binary mdrack` installation in separate
+fresh environments outside the checkout with `PYTHONPATH=`. Do not tag or create
+a GitHub Release before the PyPI checks pass; stop on any duplicate, partial
+upload, resolver/import failure, or hash mismatch.
 
 ## Local baseline versus W5 lanes
 

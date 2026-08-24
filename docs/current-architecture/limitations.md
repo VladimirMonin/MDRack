@@ -26,6 +26,12 @@ This page is a current-state boundary, not a roadmap promise.
   explicitly authorized local extractor returning strict timed transcript and
   selected-caption JSON; MDRack does not decode video or provide FFmpeg/STT/VLM
   quality guarantees.
+- Local source capture, bounded snapshots, source-after-read guards, and the
+  caller-selected WAVE/video subprocesses are app-ingestion responsibilities.
+  `mdrack_core` and `mdrack_media` do not open source files or run those
+  processes. Media builders accept prepared transcript/frame records only;
+  the core accepts prepared resource graphs through ports; `mdrack_sqlite` owns
+  their generic catalog/search persistence.
 - Unified 1.2 retrieval is text-first: it searches Markdown text, supplied audio/
   video transcripts, frame-caption text, and explicit image caption/OCR text. Its
   `find-similar` command reuses stored textual whole-resource vectors only; it does

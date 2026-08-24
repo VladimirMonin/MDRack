@@ -84,6 +84,7 @@ application catalog-path override.
 | `scan` | Index Markdown into the fixed catalog. |
 | `search` | Text, semantic, or hybrid retrieval from the fixed catalog. |
 | `read chunk` | Read one text chunk by public logical ID. `--context neighbors` returns adjacent text chunks derived from the same core representation. |
+| `read unit` | Read any persisted search unit by public logical ID, including timed transcript and frame-caption units, without treating it as a Markdown chunk. |
 | `read file` | Read one document resource by public logical ID. |
 | `read outline` | Read canonical document headings by file logical ID; heading identities are derived logical IDs, not SQLite or legacy section IDs. |
 | `resource import\|export\|inspect\|delete` | Perform one prepared-resource lifecycle operation through the configured catalog; no `--catalog` override exists. |
@@ -103,6 +104,12 @@ fixed catalog. `--mode text|semantic|hybrid` selects a lexical, vector, or
 fused branch; every result uses portable logical identities and source
 locators. Current v0.3 preserves the legacy-compatible RRF-only behavior for
 hybrid fusion. The command has no alternate-catalog option.
+
+The raw typed filters `--kind`, `--media-type`, `--namespace`,
+`--representation`, and `--unit-kind` are accepted only by the explicit
+`--preset ... --target resource` path. On generic text, semantic, or hybrid
+search they fail before provider or storage access with the payload-free
+`VALIDATION_ERROR`; they are never silently ignored.
 
 ## 3g. Unified provider-free resource similarity
 
@@ -161,6 +168,19 @@ row identifier. With `--context neighbors`, the response additionally contains
 representation.
 
 A missing chunk returns `NOT_FOUND`; a missing catalog returns `STORAGE_ERROR`.
+If the logical ID names a known timed, frame-caption, or other non-text unit,
+`read chunk` returns the payload-free `VALIDATION_ERROR`; it does not project
+that unit as a Markdown chunk and does not attempt neighbors.
+
+### Generic unit reads
+
+`read unit <logical-id>` and `MDRackEngine.read_unit(<logical-id>)` return the
+same portable eight-field projection for any persisted search unit: logical
+unit and resource IDs, representation ID, unit kind, ordinal, text, evidence
+locator, and metadata. This is the public continuation for timed transcript
+and frame-caption evidence returned by search. It exposes no SQLite row ID or
+absolute source path. Unknown IDs return `NOT_FOUND`; a missing catalog returns
+`STORAGE_ERROR`.
 
 ### Document outlines
 
@@ -243,3 +263,34 @@ The prepared transcript and generated frame artifact are composed once through
 the existing video service and replace one `video` resource with
 `embeddings=False`. Failures use `RAW_VIDEO_INGEST_ERROR` and never expose
 source paths, extractor output, or private content.
+
+## Agent operation over authorized human data
+
+The public CLI is intended for an agent acting under a human operator's explicit
+authority. An agent identifies its command boundary (`uv run mdrack` in a source
+checkout or a separately installed `mdrack` command), requires an explicit root and
+selected source, and starts with `guide`, `--help`, `status`, `doctor`, or text
+search. It names `init`, `scan`, explicit ingestion, rebuild, deletion, and
+provider/model lifecycle actions before execution because those actions can modify
+derived state.
+
+The complete input sequence is Markdown scanning under the selected root plus the
+separate raw text/Markdown, direct-image, WAVE, and ISO-BMFF contracts above. The
+audio and video adapters run only after their explicit authorization flags and use a
+caller-selected local executable with shell-free stdin. Their contracts do not add
+built-in transcription, decoding, visual/acoustic search, remote fallback, or a
+provider-quality claim.
+
+Use text search with an optional unified `--scope` to find public results. Follow
+their logical IDs with the documented read/files commands, and retain portable
+locators plus available line or time bounds rather than local paths or raw source
+values. A later `status` invocation from a fresh process and the same root reopens
+the fixed catalog and reports aggregate state. Source inputs are read-only: MDRack
+must not rewrite them, and reports or commits must exclude source content, queries,
+private paths, configuration secrets, raw adapter output, database state, and logs.
+
+Automated fake/offline checks are evidence for their fixture and environment only.
+A real-use acceptance claim additionally requires an agent to exercise the installed
+public CLI or engine on separately authorized human-like private data while checking
+source immutability and report privacy. This document does not claim that such a run
+has occurred.

@@ -4,8 +4,8 @@ MDRack now has standalone `mdrack-core` and `mdrack-sqlite` distributions beside
 the `mdrack` app. `mdrack_core` is the stdlib-only provider- and
 persistence-neutral kernel. `mdrack_sqlite` depends only on core and stdlib and is
 the single generic resource catalog/search adapter owner. `mdrack` owns
-Click/engine composition, Markdown and explicit image ingestion, the fixed
-application catalog lifecycle, and LM Studio HTTP integration.
+Click/engine composition, Markdown scanning, explicit local-file ingestion
+adapters, the fixed application catalog lifecycle, and LM Studio HTTP integration.
 
 ## Dependency direction
 
@@ -93,6 +93,36 @@ The canonical service path is `IndexingService`, `RetrievalService`, and
 `indexing/indexer.py` wrapper, and thin `search/` modules are compatibility
 surfaces rather than the preferred home for new behavior.
 
+## Local-file adapters and prepared-resource boundary
+
+Opening a caller-selected local source is application work, not a capability of
+`mdrack_core` or `mdrack_media`. The raw adapters capture a bounded transient
+snapshot, verify its signature and source reference, enforce budgets, and check
+that the source has not changed before replacement. WAVE and ISO-BMFF adapters
+also run only the caller-selected stdin executable with `shell=False`; the core
+and media packages never run that process.
+
+The entry paths are deliberately separate because they have different input and
+preparation contracts. They converge only after the app has prepared the value
+that will be replaced in the fixed catalog:
+
+| Entry path | Application-side owner and preparation | Neutral/persistent boundary |
+|---|---|---|
+| Markdown scan | `IndexingService` scans its configured root and creates the compatibility `PreparedFile` for `IndexStorage.replace_file`. | The app storage path writes the same fixed `core_*` catalog; a scan does not inspect image targets. |
+| Explicit raw text | `RawTextIngestionService` captures strict UTF-8 text or Markdown selected outside the scan root and prepares a `PreparedResourceBatch`. | `CoreIndexingService` validates it and calls the `ResourceWritePort`. |
+| Explicit direct image | `ImageIngestionService` captures and magic-checks one local image, then prepares its caller-supplied text and/or visual records. | `CoreIndexingService` validates the complete graph before the write port replaces it. |
+| Explicit WAVE | `RawAudioIngestionService` captures RIFF/WAVE and obtains strict timed JSON from the authorized local stdin command; `TranscriptIngestionService` prepares the timed-text graph. | `CoreIndexingService` validates the complete graph before the write port replaces it. |
+| Explicit ISO-BMFF video | `RawVideoIngestionService` captures `ftyp` input and obtains strict transcript/frame JSON from the authorized local stdin extractor; `VideoCompositionService` prepares one video graph. | `CoreIndexingService` validates the complete graph before the write port replaces it. |
+
+`mdrack_media` supplies the provider-free builders and validators used by the
+application composition services for prepared transcript and frame-caption
+graphs. It does not read media files, access a provider, database, or network,
+or create vectors. `mdrack_core` receives already prepared resource graphs through
+logical-ID ports and validates them; it does not open source files, invoke
+subprocesses, call providers, or persist data. `SQLiteResourceStore` in
+`mdrack_sqlite` is the sole generic catalog/search persistence owner and performs
+the atomic logical-resource replacement.
+
 ## Fixed architecture boundaries
 
 - SQLite is the only persistent database; there is no vector database or
@@ -138,6 +168,13 @@ surfaces rather than the preferred home for new behavior.
 - Services: `src/mdrack/application/indexing.py`,
   `src/mdrack/application/retrieval.py`, `src/mdrack/application/query.py`
 - Ports: `src/mdrack/ports/storage.py`, `src/mdrack/ports/embeddings.py`
+- Local-file adapters: `src/mdrack/ingestion/raw_text.py`,
+  `src/mdrack/ingestion/images.py`, `src/mdrack/ingestion/raw_audio.py`,
+  `src/mdrack/ingestion/raw_video.py`,
+  `src/mdrack/ingestion/raw_source_provenance.py`
+- Prepared media composition: `src/mdrack/application/transcript_ingestion.py`,
+  `src/mdrack/application/video_composition.py`, `packages/mdrack-media/`
+- Core prepared-resource port: `packages/mdrack-core/src/mdrack_core/ports/catalog.py`
 - Fixed document readers: `src/mdrack/application/compatibility.py`,
   `src/mdrack/cli/commands/files.py`, `src/mdrack/cli/commands/read.py`
 - Project invariants: `AGENTS.md`, `instructions/ARCH.system.instructions.md`

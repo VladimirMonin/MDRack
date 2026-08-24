@@ -24,6 +24,7 @@ from mdrack.application.resource_catalog import (
     ResourceSearchResult,
     delete_resource,
     inspect_resource,
+    project_unit,
 )
 from mdrack.application.resources import (
     DuplicateResourceResult,
@@ -542,6 +543,11 @@ class MDRackEngine:
             raise NotImplementedError("read storage does not support logical chunk reads")
         result = reader(logical_id)
         return result if isinstance(result, dict) or result is None else None
+
+    def read_unit(self, unit_id: str) -> dict[str, object] | None:
+        """Read any logical search unit without Markdown chunk projection."""
+        unit = cast(Any, self._transcript_catalog()).read_unit(unit_id)
+        return None if unit is None else project_unit(unit).to_dict()
 
     def get_chunk_source_locator(self, chunk_id: str) -> SourceLocator:
         return ReadService(self.read_storage).get_chunk_source_locator(chunk_id)

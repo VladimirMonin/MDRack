@@ -58,6 +58,102 @@ def test_read_chunk_returns_a_public_core_projection(tmp_path: Path) -> None:
     assert "source_locator" in chunk
 
 
+def test_read_unit_returns_the_public_unit_projection(tmp_path: Path) -> None:
+    root, runner, _, unit_id = _indexed_root(tmp_path)
+
+    data = _invoke(runner, root, "read", "unit", unit_id)
+    unit = data["unit"]
+    assert unit["unit_id"] == unit_id
+    assert unit["unit_kind"] == "text_chunk"
+    assert unit["text"]
+    assert unit["evidence_locator"]["kind"] == "document_span"
+    assert set(unit) == {
+        "unit_id",
+        "resource_id",
+        "representation_id",
+        "unit_kind",
+        "modality",
+        "text",
+        "evidence_locator",
+        "ordinal",
+    }
+
+
+def test_read_unit_unknown_is_private_safe(tmp_path: Path) -> None:
+    root, runner, _, _ = _indexed_root(tmp_path)
+    sentinel = "PRIVATE_UNIT_ID_SENTINEL_/home/v/secret-note.md"
+
+    result = runner.invoke(main, ["--root", str(root), "read", "unit", sentinel])
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["error"] == {"message": "Unit not found", "code": "NOT_FOUND"}
+    assert sentinel not in result.output
+
+
+def test_read_chunk_rejects_known_non_text_units(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    runner = CliRunner()
+    _invoke(runner, root, "init")
+    manifest = json.dumps({
+        "contract": "mdrack.prepared-resource",
+        "version": 1,
+        "resource": {
+            "resource_id": "resource-1",
+            "resource_kind": "video",
+            "media_type": "video/mp4",
+            "source_namespace": "fixture",
+            "locator": {"kind": "external_record", "payload": {"ref": "PRIVATE"}},
+            "metadata": {},
+        },
+        "representations": [{
+            "representation_id": "representation-1",
+            "resource_id": "resource-1",
+            "representation_kind": "frame_caption",
+            "modality": "text",
+            "text": "caption",
+            "metadata": {},
+        }],
+        "units": [{
+            "unit_id": "unit-frame-1",
+            "resource_id": "resource-1",
+            "representation_id": "representation-1",
+            "unit_kind": "frame",
+            "modality": "text",
+            "text": "caption",
+            "evidence_locator": {"kind": "video_frame", "payload": {"timestamp_ms": 1000}},
+            "ordinal": 0,
+            "metadata": {},
+        }],
+        "spaces": [],
+        "vectors": [],
+        "facets": [],
+    }, separators=(",", ":")).encode()
+    manifest_path = root / "resource.json"
+    manifest_path.write_bytes(manifest)
+    _invoke(runner, root, "resource", "import", str(manifest_path))
+
+    unit_result = runner.invoke(main, ["--root", str(root), "read", "unit", "unit-frame-1"])
+    assert unit_result.exit_code == 0, unit_result.output
+    unit_payload = json.loads(unit_result.output)
+    assert unit_payload["data"]["unit"]["evidence_locator"] == {
+        "kind": "video_frame",
+        "payload": {"timestamp_ms": 1000},
+    }
+
+    result = runner.invoke(
+        main,
+        ["--root", str(root), "read", "chunk", "unit-frame-1", "--context", "neighbors"],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["error"] == {
+        "message": "Only text chunks can be read with 'read chunk'; use 'read unit'",
+        "code": "VALIDATION_ERROR",
+    }
+    assert "unit-frame-1" not in result.output
+
+
 def test_read_chunk_neighbors_are_derived_from_the_same_representation(tmp_path: Path) -> None:
     root, runner, _, chunk_id = _indexed_root(tmp_path)
 

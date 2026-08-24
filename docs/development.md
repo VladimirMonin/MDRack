@@ -97,7 +97,24 @@ git diff --check
 The older `scripts/check_release_docs.py` command validates a historical v0.4
 packet and is not a current release gate.
 
-Release evidence is point-in-time evidence. Do not silently rewrite historical
-claims to look current. The MDRack 1.3 source-preparation commit was pushed to Git,
-but no Git tag, PyPI upload, deployment, Windows run, or live-provider evidence is
-implied by that push; see [1.3 release notes](release-1.3.md).
+## Candidate identity and publication boundary
+
+Release evidence is point-in-time evidence. The committed MDRack 1.3 base
+candidate checkpoint is
+`a796a1ab55bbf18ae8c62618502b2b0dda929431`; the packet binds it to the
+sorted SHA-256 manifest
+`c257c816df7bf3f65fefb709f987fcb5472915bda6f04aa436d9762e62e72868` over
+626 tracked paths, excluding only the packet itself to avoid self-reference.
+Do not use a branch name, a later dirty checkout, or a packet-only edit as a
+substitute for that identity. Any other tracked-byte change requires a fresh
+two-build comparison, packet refresh, and independent review before another
+commit can be called a release candidate.
+
+The base set is `mdrack==1.3.0`, `mdrack-core==1.0.0rc1`,
+`mdrack-media==1.0.0rc1`, and `mdrack-sqlite==1.0.0rc2`. Its local release
+matrix builds wheel and sdist artifacts and performs installed-package smoke;
+it does not prove an index install. The later external publication sequence is
+core, media, SQLite, then application. It needs separate authority for the
+hosted Linux/Windows matrix, TestPyPI, PyPI, Git tag, and GitHub Release. No
+Git tag, package upload, deployment, Windows run, or live-provider evidence is
+implied by the candidate checkpoint; see [1.3 release notes](release-1.3.md).

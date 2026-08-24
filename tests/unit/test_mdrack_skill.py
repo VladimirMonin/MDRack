@@ -81,3 +81,18 @@ def test_skill_documents_the_authorized_raw_media_boundaries() -> None:
     assert "--allow-external-stt" in text
     assert "ingest raw-video SOURCE_PATH" in text
     assert "--allow-external-video-extractor" in text
+
+
+def test_skill_documents_the_external_voiceover_stt_boundary() -> None:
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "Voiceover Pipeline" in text
+    assert "voiceover list asr-providers --json" in text
+    assert (
+        "voiceover doctor --with-asr --asr-provider nemotron-local "
+        "--asr-device cpu --asr-compute auto --json"
+    ) in text
+    assert "nvidia/nemotron-3.5-asr-streaming-0.6b" in text
+    assert "mdrack.timed-transcript.v1" in text
+    assert "shell-free stdin wrapper" in text
+    assert "local/offline" in text
+    assert "Qwen" in text

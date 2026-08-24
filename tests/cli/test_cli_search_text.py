@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 from click.testing import CliRunner
 
 from mdrack.cli import main
+from mdrack_core import SearchScope
 
 
 def _index_fixture(root: Path) -> None:
@@ -131,3 +134,97 @@ def test_text_search_no_catalog(tmp_path: Path) -> None:
     payload = json.loads(result.output)
     assert payload["ok"] is False
     assert "not found" in payload["error"]["message"].lower()
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--kind", "video"),
+        ("--media-type", "video/mp4"),
+        ("--namespace", "media"),
+        ("--representation", "transcript"),
+        ("--unit-kind", "frame"),
+    ],
+)
+def test_raw_resource_filters_require_resource_preset(
+    tmp_path: Path,
+    monkeypatch,
+    option: str,
+    value: str,
+) -> None:
+    def fail_storage(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise AssertionError("storage must not be opened")
+
+    monkeypatch.setattr("mdrack.cli.commands.search._open_storage", fail_storage)
+    result = CliRunner().invoke(
+        main,
+        ["--root", str(tmp_path), "search", "needle", "--mode", "text", option, value],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert json.loads(result.output) == {
+        "ok": False,
+        "error": {
+            "message": "Metadata search options are invalid",
+            "code": "VALIDATION_ERROR",
+        },
+        "meta": {"command": "search"},
+    }
+
+
+def test_resource_filters_are_forwarded_on_explicit_preset(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakePresetSearchService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        async def search(self, query: str, **kwargs: object) -> SimpleNamespace:
+            scope = kwargs["scope"]
+            assert isinstance(scope, SearchScope)
+            assert query == "needle"
+            assert scope.resource_kinds == ("video",)
+            assert scope.media_types == ("video/mp4",)
+            return SimpleNamespace(
+                to_dict=lambda: {
+                    "query": query,
+                    "mode": "text",
+                    "results": [],
+                    "total_count": 0,
+                    "degraded": False,
+                    "degraded_reason": None,
+                }
+            )
+
+    monkeypatch.setattr(
+        "mdrack.cli.commands.search._open_storage",
+        lambda *args, **kwargs: SimpleNamespace(resource_store=object(), close=lambda: None),
+    )
+    monkeypatch.setattr(
+        "mdrack.cli.commands.search.ResourcePresetSearchService",
+        FakePresetSearchService,
+    )
+    result = CliRunner().invoke(
+        main,
+        [
+            "--root",
+            str(tmp_path),
+            "search",
+            "needle",
+            "--mode",
+            "text",
+            "--preset",
+            "balanced",
+            "--target",
+            "resource",
+            "--kind",
+            "video",
+            "--media-type",
+            "video/mp4",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["ok"] is True

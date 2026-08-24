@@ -121,11 +121,36 @@ def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
     help="Embedding provider for semantic/hybrid search (default from config).",
 )
 
-@click.option("--kind", "resource_kinds", multiple=True)
-@click.option("--media-type", "media_types", multiple=True)
-@click.option("--namespace", "source_namespaces", multiple=True)
-@click.option("--representation", "representation_kinds", multiple=True)
-@click.option("--unit-kind", "unit_kinds", multiple=True)
+@click.option(
+    "--kind",
+    "resource_kinds",
+    multiple=True,
+    help="Resource kind; requires --preset with --target resource.",
+)
+@click.option(
+    "--media-type",
+    "media_types",
+    multiple=True,
+    help="Resource media type; requires --preset with --target resource.",
+)
+@click.option(
+    "--namespace",
+    "source_namespaces",
+    multiple=True,
+    help="Source namespace; requires --preset with --target resource.",
+)
+@click.option(
+    "--representation",
+    "representation_kinds",
+    multiple=True,
+    help="Representation kind; requires --preset with --target resource.",
+)
+@click.option(
+    "--unit-kind",
+    "unit_kinds",
+    multiple=True,
+    help="Unit kind; requires --preset with --target resource.",
+)
 @click.pass_context
 def cli_search(
     ctx: click.Context,
@@ -159,6 +184,28 @@ def cli_search(
 
     mode: str = search_mode or config.search.default_mode
     limit_value: int = limit or config.search.top_k
+    has_raw_resource_filters = bool(
+        resource_kinds
+        or media_types
+        or source_namespaces
+        or representation_kinds
+        or unit_kinds
+    )
+    if (
+        unified_scope is None
+        and has_raw_resource_filters
+        and not (search_preset is not None and target == "resource")
+    ):
+        _output(
+            ctx,
+            envelope_error(
+                "Metadata search options are invalid",
+                "VALIDATION_ERROR",
+                "search",
+            ),
+        )
+        ctx.exit(1)
+        return
     provider: EmbeddingProvider | None = None
     storage = None
     if unified_scope is None:

@@ -152,6 +152,88 @@ class ResourceSearchResult:
 
 
 @dataclass(frozen=True)
+class UnitReadProjection:
+    """Portable public projection for any persisted search unit."""
+
+    unit_id: str
+    resource_id: str
+    representation_id: str
+    unit_kind: str
+    modality: str
+    text: str
+    evidence_locator: dict[str, object]
+    ordinal: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "unit_id": self.unit_id,
+            "resource_id": self.resource_id,
+            "representation_id": self.representation_id,
+            "unit_kind": self.unit_kind,
+            "modality": self.modality,
+            "text": self.text,
+            "evidence_locator": {
+                "kind": self.evidence_locator["kind"],
+                "payload": dict(cast(Mapping[str, object], self.evidence_locator["payload"])),
+            },
+            "ordinal": self.ordinal,
+        }
+
+
+def _portable_unit_locator(locator: object) -> dict[str, object]:
+    """Keep unit coordinates portable without exposing adapter metadata."""
+    kind = getattr(locator, "kind", None)
+    payload = getattr(locator, "payload", None)
+    if not isinstance(kind, str) or not isinstance(payload, Mapping):
+        return {"kind": "opaque", "payload": {}}
+    safe_payload: dict[str, object] = {}
+    if kind == "time_segment":
+        for field_name in ("start_ms", "end_ms"):
+            value = payload.get(field_name)
+            if type(value) is int and value >= 0:
+                safe_payload[field_name] = value
+        track = payload.get("track")
+        if track in {"audio", "video"}:
+            safe_payload["track"] = track
+    elif kind == "video_frame":
+        timestamp = payload.get("timestamp_ms")
+        if type(timestamp) is int and timestamp >= 0:
+            safe_payload["timestamp_ms"] = timestamp
+    elif kind == "document_span":
+        relative_path = payload.get("relative_path")
+        if (
+            isinstance(relative_path, str)
+            and relative_path
+            and not relative_path.startswith(("/", "\\"))
+            and "\\" not in relative_path
+            and ":" not in relative_path
+            and all(part not in {"", ".", ".."} for part in relative_path.split("/"))
+        ):
+            safe_payload["relative_path"] = relative_path
+        for field_name in ("start_line", "end_line", "start_char", "end_char"):
+            value = payload.get(field_name)
+            if type(value) is int and value >= 0:
+                safe_payload[field_name] = value
+    elif kind not in {"whole_resource", "whole_image", "whole_media"}:
+        return {"kind": "opaque", "payload": {}}
+    return {"kind": kind, "payload": safe_payload}
+
+
+def project_unit(unit: SearchUnitRecord) -> UnitReadProjection:
+    """Project a domain unit without mapping it through the Markdown reader."""
+    return UnitReadProjection(
+        unit_id=unit.unit_id,
+        resource_id=unit.resource_id,
+        representation_id=unit.representation_id,
+        unit_kind=unit.unit_kind,
+        modality=unit.modality,
+        text=unit.text,
+        evidence_locator=_portable_unit_locator(unit.evidence_locator),
+        ordinal=unit.ordinal,
+    )
+
+
+@dataclass(frozen=True)
 class FacetValue:
     """One explicitly requested catalog facet value."""
 

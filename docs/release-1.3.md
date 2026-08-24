@@ -1,9 +1,11 @@
 # MDRack 1.3.0 release notes
 
-Status: release-preparation source is maintained in the checked-out candidate;
-the exact source identity and artifact hashes are recorded in the base release
-packet. No Git tag, PyPI upload, deployment, or package-index publication is
-claimed.
+Status: the committed base-candidate checkpoint is
+`a796a1ab55bbf18ae8c62618502b2b0dda929431`
+(`fix(release): close v1.3 source identity`). Its exact source identity and
+artifact hashes are recorded in the base release packet. This is a
+pre-publication checkpoint, not a Git tag or an index publication: no Git tag,
+PyPI upload, deployment, or package-index publication is claimed.
 
 The compact SQLite base was prepared independently of the optional experimental
 `mdrack-sqlite-vec` package. The authoritative machine-readable candidate record
@@ -30,6 +32,23 @@ surface is for direct library callers; it is not a runtime/store fallback. The
 MDRack application accepts only its fixed clean-v2 `catalog.sqlite3` contract and
 rejects v1 stores. The base application pins RC2; it has no `mdrack-sqlite-vec`
 dependency.
+
+## Candidate identity and package order
+
+The packet's `source_snapshot` identifies this checkpoint by the sorted SHA-256
+manifest `c257c816df7bf3f65fefb709f987fcb5472915bda6f04aa436d9762e62e72868`
+over 626 tracked paths. Only
+`docs/evidence/v1.3.0-base-release-packet.json` is excluded so the packet does
+not describe its own bytes. Every other tracked change, including a documentation
+change, creates a different candidate and needs a fresh packet plus two matching
+artifact builds before publication can be considered.
+
+The local application metadata pins core, media, and SQLite in that order. If
+the four distributions are ever authorized for upload, publish their exact
+wheel/sdist pairs in dependency order: `mdrack-core==1.0.0rc1`,
+`mdrack-media==1.0.0rc1`, `mdrack-sqlite==1.0.0rc2`, then
+`mdrack==1.3.0`. This is an upload order for a future release operation, not a
+claim that any package is currently available from an index.
 
 ## Included behavior
 
@@ -91,6 +110,39 @@ or destructive cleanup authorization.
 The current release-document gate is `scripts/check_v13_release_packet.py`.
 `scripts/check_release_docs.py` validates the historical v0.4 packet against its
 former candidate bytes and is not a current MDRack 1.3 readiness gate.
+
+## External publication sequence: not run
+
+The local packet and installed-package smoke are prerequisites, not publication
+evidence. The following sequence requires new explicit authority for each
+network or irreversible step and was not performed for this checkpoint:
+
+1. Rebuild the exact clean, reviewed candidate twice outside the checkout and
+   require the eight filename/byte/SHA-256 rows to match the packet. Dispatch the
+   hosted matrix for that exact pushed commit; all four cells (Linux and Windows,
+   Python 3.11 and 3.12) must report `passed`. A local Linux run does not fill a
+   Windows or Python 3.12 cell.
+2. Before TestPyPI, query the expected version for all four distributions. With a
+   separately supplied `UV_PUBLISH_TOKEN`, upload each exact wheel/sdist pair to
+   TestPyPI in the dependency order above using `uv publish` with
+   `https://test.pypi.org/legacy/` and
+   `https://test.pypi.org/simple/`. Read the returned index files back and match
+   every SHA-256 against the local build.
+3. From two fresh environments outside the checkout, install
+   `mdrack==1.3.0` from TestPyPI plus PyPI for third-party dependencies: once
+   normally and once with `--no-binary mdrack`. Run
+   `scripts/check_installed_package.py` with `PYTHONPATH=` for both. This is the
+   package-index installation evidence that the local smoke cannot provide.
+4. Only after all TestPyPI hash and install checks pass, repeat the same ordered
+   upload, hash read-back, and two install checks at PyPI. A duplicate version or
+   hash, partial upload, resolver/import error, or hash mismatch is an abort:
+   stop without delete, overwrite, retag, or GitHub Release.
+5. Only after PyPI passes and with a further explicit owner command, verify the
+   remote commit/tag state, create and push annotated `v1.3.0` at the accepted
+   commit, read it back, then create a GitHub Release targeting that same SHA.
+
+No later live model/provider-quality, real-source, optional accelerator, or
+destructive-cleanup work is silently promoted by this publication sequence.
 
 ## Optional sqlite-vec status: not promoted
 

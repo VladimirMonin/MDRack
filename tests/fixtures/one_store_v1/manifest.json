@@ -40,7 +40,7 @@
       "metadata", "metadata show", "metadata facets", "metadata projection-check",
       "cache", "cache status", "cache verify", "cache purge",
       "resources", "resources duplicates", "resources similar", "resources search", "resources facets",
-      "find-similar", "similar", "facets", "read", "read chunk", "read file", "read outline",
+      "find-similar", "similar", "facets", "read", "read chunk", "read unit", "read file", "read outline",
       "resource", "resource import", "resource export", "resource inspect", "resource delete",
       "eval", "eval retrieval", "files", "files list", "files info",
       "model", "model list", "model loaded", "model download", "model download-status",
@@ -53,19 +53,19 @@
     "retained_engine_methods": [
       "analyze_storage", "close", "delete_image", "delete_resource", "export_resource_manifest",
       "export_resource_manifest_file", "find_resource_duplicates", "find_similar_resource", "find_similar_resources", "find_textually_similar_resources",
-      "get_chunk", "get_chunk_source_locator", "get_file_by_path", "get_file_outline", "get_resource_metadata",
+      "get_chunk", "get_chunk_source_locator", "get_file_by_path", "get_file_outline", "get_resource_metadata", "read_unit",
       "import_resource_manifest", "inspect_resource", "ingest_image", "ingest_transcript", "ingest_video", "list_metadata_facets",
       "scan", "search_hybrid", "search_images_hybrid", "search_images_semantic", "search_images_text",
       "search_resource_content", "search_resources_text", "search_semantic", "search_text", "search_transcripts", "search_unified"
     ],
     "removed_engine_methods": [],
     "catalog_backed_cli_paths": [
-      "status", "doctor", "search", "files list", "files info", "read file", "read chunk", "read outline",
+      "status", "doctor", "search", "files list", "files info", "read file", "read chunk", "read unit", "read outline",
       "resource import", "resource export", "resource inspect", "resource delete", "eval retrieval", "metadata show", "metadata facets", "resources duplicates", "resources search", "resources facets",
       "find-similar", "image search", "rebuild fts", "benchmark", "storage-analyze"
     ],
     "catalog_backed_engine_methods": [
-      "search_text", "search_semantic", "search_hybrid", "search_unified", "get_file_by_path", "get_file_outline", "get_chunk",
+      "search_text", "search_semantic", "search_hybrid", "search_unified", "get_file_by_path", "get_file_outline", "get_chunk", "read_unit",
       "get_chunk_source_locator", "get_resource_metadata", "import_resource_manifest", "export_resource_manifest",
       "export_resource_manifest_file", "inspect_resource", "delete_resource", "list_metadata_facets", "search_resources_text",
       "find_resource_duplicates", "find_similar_resource", "analyze_storage"

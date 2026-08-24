@@ -57,10 +57,17 @@ legacy catalog selectors.
 
 MDRack indexes caller-supplied transcript and frame-caption text.
 It does not provide built-in transcription, decoding, pixel/visual, or acoustic
-search. The following are explicit, caller-authorized local adapters: WAVE audio
-is passed to a shell-free stdin transcription command, and ISO-BMFF video is
-passed to a shell-free stdin extractor. They do not establish provider quality,
-Windows, or real-source evidence.
+search. This guide only prints help: it does not select private data or create
+derived state. Before a real mutation, an agent needs an explicit root, one
+explicitly selected source, and authorization for the named operation. Text or
+Markdown, direct images with caller-supplied text, WAVE, and ISO-BMFF video are
+separate input boundaries.
+
+The following are explicit, caller-authorized local adapters: WAVE audio is passed
+to a shell-free stdin transcription command, and ISO-BMFF video is passed to a
+shell-free stdin extractor. They do not establish provider quality, Windows, or
+real-source evidence. Keep selected source values outside reports; source files are
+not modified.
 
   mdrack --root ./notes ingest transcript TRANSCRIPT_PATH --resource-id ID \\
     --kind audio --media-type audio/transcript --namespace local --no-embeddings
