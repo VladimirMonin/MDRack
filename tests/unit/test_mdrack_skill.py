@@ -83,6 +83,14 @@ def test_skill_documents_the_authorized_raw_media_boundaries() -> None:
     assert "--allow-external-video-extractor" in text
 
 
+def test_skill_pins_the_verified_uv_checkout_route() -> None:
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "uv 0.11.15" in text
+    assert "uv --version" in text
+    assert "uv sync --all-extras --frozen" in text
+    assert "do not refresh `uv.lock`" in text
+
+
 def test_skill_documents_the_external_voiceover_stt_boundary() -> None:
     text = SKILL_PATH.read_text(encoding="utf-8")
     assert "Voiceover Pipeline" in text

@@ -55,10 +55,14 @@ source files other than the material the user explicitly selected for indexing.
 
 ## Source checkout setup
 
-From the repository root:
+The committed lockfile and hosted release matrix are validated with
+`uv 0.11.15`. From the repository root, verify the executable before changing
+the environment. If another uv version is active, do not refresh `uv.lock` or
+claim release parity; use the project-pinned version first.
 
 ```text
-uv sync --all-extras
+uv --version
+uv sync --all-extras --frozen
 uv run mdrack --help
 uv run mdrack guide
 ```
