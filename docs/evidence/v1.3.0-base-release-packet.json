@@ -17,45 +17,27 @@
     "sha256": "81f977e3669f8111a66167a0a82e3f3ef38a07b4153c84ba9ae7bc2f7fa37cb0"
   },
   "source_snapshot": {
-    "head": "076af7bb0816d1ea9c5d32a297fb9decbd69c074",
-    "dirty_paths": [
-      ".github/workflows/offline-release-matrix.yml",
-      "docs/offline-release-verification.md",
-      "scripts/check_installed_package.py",
-      "scripts/check_v13_release_packet.py",
-      "scripts/offline_release_matrix.py",
-      "scripts/verify.ps1",
-      "scripts/verify.sh",
-      "tests/unit/test_offline_release_matrix.py",
-      "tests/unit/test_v13_release_contract.py"
-    ],
-    "dirty_diff_sha256": "9c2d7381ceef8698130c3b9eacca97c5562a903b350a8bae9f3447eb8f6f4d41",
-    "packet_excluded_from_identity": "docs/evidence/v1.3.0-base-release-packet.json"
+    "algorithm": "sha256",
+    "excluded_path": "docs/evidence/v1.3.0-base-release-packet.json",
+    "tracked_path_count": 626,
+    "aggregate_sha256": "c257c816df7bf3f65fefb709f987fcb5472915bda6f04aa436d9762e62e72868"
   },
   "package_artifacts": [
     {
       "distribution": "mdrack",
       "version": "1.3.0",
-      "kind": "sdist",
-      "filename": "mdrack-1.3.0.tar.gz",
-      "bytes": 850633,
-      "sha256": "e34b87e4064eef091f4492bbbcf7e00673c4b0f734a6b117c2c3dbb584249b2d"
+      "kind": "wheel",
+      "filename": "mdrack-1.3.0-py3-none-any.whl",
+      "bytes": 276207,
+      "sha256": "51ec1d6dfbf8d5e7f44827cf8e72cdf2a4068cb05d4c6924382e19838b552069"
     },
     {
       "distribution": "mdrack",
       "version": "1.3.0",
-      "kind": "wheel",
-      "filename": "mdrack-1.3.0-py3-none-any.whl",
-      "bytes": 254709,
-      "sha256": "c3f8b969f9cc9bce26c14ac0fff1458fa53abcd50b5c46783e069401ccea3789"
-    },
-    {
-      "distribution": "mdrack-core",
-      "version": "1.0.0rc1",
       "kind": "sdist",
-      "filename": "mdrack_core-1.0.0rc1.tar.gz",
-      "bytes": 20898,
-      "sha256": "d7f74d95c65b515c7e59c8cb99440b64a7fa20c5112a6c918bf630147778117e"
+      "filename": "mdrack-1.3.0.tar.gz",
+      "bytes": 886239,
+      "sha256": "2563198bf8e465bf1235562cea9c385edc2021f94a8fc86238f2f7fad937a2bc"
     },
     {
       "distribution": "mdrack-core",
@@ -66,12 +48,12 @@
       "sha256": "b8b8aa1517a97df60a283f0ecd8f60b3b408c200da4967a0232e2ecfc4d01847"
     },
     {
-      "distribution": "mdrack-media",
+      "distribution": "mdrack-core",
       "version": "1.0.0rc1",
       "kind": "sdist",
-      "filename": "mdrack_media-1.0.0rc1.tar.gz",
-      "bytes": 30145,
-      "sha256": "b704a7fd699b5d5de270a2cb80a9823f27d6fe59f00919a5c0e16c058bbfb9f6"
+      "filename": "mdrack_core-1.0.0rc1.tar.gz",
+      "bytes": 20898,
+      "sha256": "d7f74d95c65b515c7e59c8cb99440b64a7fa20c5112a6c918bf630147778117e"
     },
     {
       "distribution": "mdrack-media",
@@ -82,12 +64,12 @@
       "sha256": "9dc1fb832d136d74a16fce1bbba95c01b9cb5159abba808a086d28e7344be3e6"
     },
     {
-      "distribution": "mdrack-sqlite",
-      "version": "1.0.0rc2",
+      "distribution": "mdrack-media",
+      "version": "1.0.0rc1",
       "kind": "sdist",
-      "filename": "mdrack_sqlite-1.0.0rc2.tar.gz",
-      "bytes": 27840,
-      "sha256": "83e25b17dbfaa43d927bf1be0585cdad54c700934a91778be5e3841bbe9489fd"
+      "filename": "mdrack_media-1.0.0rc1.tar.gz",
+      "bytes": 30145,
+      "sha256": "b704a7fd699b5d5de270a2cb80a9823f27d6fe59f00919a5c0e16c058bbfb9f6"
     },
     {
       "distribution": "mdrack-sqlite",
@@ -96,9 +78,17 @@
       "filename": "mdrack_sqlite-1.0.0rc2-py3-none-any.whl",
       "bytes": 36377,
       "sha256": "6faa894d57edb0def23463565335e4d3e6b9989220fb49d3bc7d37fe147642c5"
+    },
+    {
+      "distribution": "mdrack-sqlite",
+      "version": "1.0.0rc2",
+      "kind": "sdist",
+      "filename": "mdrack_sqlite-1.0.0rc2.tar.gz",
+      "bytes": 27840,
+      "sha256": "83e25b17dbfaa43d927bf1be0585cdad54c700934a91778be5e3841bbe9489fd"
     }
   ],
-  "artifact_matrix_sha256": "933e1875feac7ea7d7d445745f2e1ba8304f3193987171a2c9c4e5ea46725902",
+  "artifact_matrix_sha256": "afe01b0c1571e1292c1c867202dc2fc2018c76790adf4d5df0497df7e4b9532a",
   "clean_v2_schema": {
     "schema_id": "mdrack_sqlite_catalog_v2",
     "schema_version": "0004",
@@ -139,7 +129,7 @@
       "status": "passed",
       "boundary": "full_offline_pytest",
       "command": "UV_OFFLINE=1 uv run pytest -q",
-      "pytest": "1645 passed, 5 skipped"
+      "pytest": "1712 passed, 5 skipped"
     },
     "privacy": {
       "status": "passed",

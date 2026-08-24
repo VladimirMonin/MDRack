@@ -39,7 +39,7 @@ LM Studio model-management commands. Host applications can use
 2. Markdown image syntax contributes only safe textual alt/alias prose; paths and
    referenced files are never inspected or indexed as assets.
 3. The app projects documents into typed core resources and writes a complete
-   graph atomically to a ready SQLite store generation.
+   graph atomically to the fixed SQLite catalog at `<store>/catalog.sqlite3`.
 4. Core retrieval accepts ready lexical/vector branches, applies scope filters
    before limits, groups resource evidence, and performs deterministic weighted RRF.
 5. Explicit image ingestion stores derived caption/OCR text and ready vectors,
@@ -98,12 +98,20 @@ never modified.
   `null`; non-null reranker injection fails closed.
 - MDRack indexes supplied transcripts and frame-caption text; it does not
   transcribe raw audio or perform pixel/visual or acoustic search.
+- The CLI also accepts explicitly authorized local raw-media adapters:
+  `ingest audio SOURCE_PATH --source-ref REF --allow-external-stt
+  --stt-command COMMAND` for RIFF/WAVE input and `ingest raw-video SOURCE_PATH
+  --source-ref REF --allow-external-video-extractor
+  --video-extractor-command COMMAND` for ISO-BMFF input. These shell-free
+  stdin adapters are caller-selected; they are not built-in transcription,
+  decoding, pixel/acoustic search, or provider quality evidence.
 - Provider-free and real-source checks prove retrieval behavior and source
   integrity, not universal semantic quality from a live embedding model.
 - Legacy `files` and `sections` inspection commands still expose internal record
   IDs; new resource/image/search contracts expose logical IDs only.
-- The resource-core schema lives in candidate store generations. Only a verified
-  `ready` generation may serve resource search/write; cleanup is never automatic.
+- The resource-core schema lives in one fixed `catalog.sqlite3`. There is no
+  candidate-generation cutover or runtime rollback; destructive recreation is
+  separately authorized.
 
 See the complete [limitations ledger](docs/current-architecture/limitations.md).
 
@@ -115,8 +123,8 @@ documented in [offline release verification](docs/offline-release-verification.m
 they cover `mdrack`, `mdrack-core`, `mdrack-media`, and `mdrack-sqlite` as wheel
 and sdist, Linux/Windows × Python 3.11/3.12 evidence, offline E2E/privacy lanes,
 and installed smoke. Provider calls, network fallback, and remote execution are
-not part of the default path. Migration, generation cutover, rollback, and
-retention procedures are documented in [recovery](docs/recovery.md).
+not part of the default path. Fixed-catalog recovery and destructive recreation
+boundaries are documented in [recovery](docs/recovery.md).
 
 For a reproducible Windows executable build, see
 [Windows EXE build](docs/windows-exe-build.md).

@@ -385,7 +385,11 @@ def main() -> None:
                 for artifact in manifest["artifacts"]
                 for dependency in artifact["dependencies"]
                 if not dependency.startswith("mdrack") or dependency.split(";", 1)[0].strip()
-                in {"mdrack-core==1.0.0rc1", "mdrack-media==1.0.0rc1", "mdrack-sqlite==1.0.0rc1"}
+                in {
+                    "mdrack-core==1.0.0rc1",
+                    "mdrack-media==1.0.0rc1",
+                    "mdrack-sqlite==1.0.0rc2",
+                }
             }
         ),
     }

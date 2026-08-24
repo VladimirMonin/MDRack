@@ -88,12 +88,14 @@ widening scope.
 For documentation changes, verify every relative link and heading anchor and run:
 
 ```bash
-uv run python scripts/check_release_docs.py
 uv run pytest tests/unit/test_release_publication.py tests/unit/test_v13_release_contract.py
 uv run python scripts/check_v13_release_packet.py
 uv run python scripts/check_v13_sqlite_vec_nonpromotion.py
 git diff --check
 ```
+
+The older `scripts/check_release_docs.py` command validates a historical v0.4
+packet and is not a current release gate.
 
 Release evidence is point-in-time evidence. Do not silently rewrite historical
 claims to look current. The MDRack 1.3 source-preparation commit was pushed to Git,

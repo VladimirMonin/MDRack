@@ -13,7 +13,7 @@ from mdrack.cli import main
 
 SKILL_PATH = Path(__file__).parents[2] / "skills" / "mdrack" / "SKILL.md"
 RECIPE = re.compile(r"^(?:uv run )?mdrack(?: .*)?$")
-FORBIDDEN = ("--catalog", "catalog.sqlite3", "sqlite3", "mcp", "ocr", "stt")
+FORBIDDEN = ("--catalog", "catalog.sqlite3", "sqlite3", "mcp", "ocr")
 
 
 def _recipe_lines(text: str) -> list[str]:
@@ -73,3 +73,11 @@ def test_every_literal_mdrack_recipe_resolves_through_click() -> None:
         args = [] if path == ("<root>",) else [*path, "--help"]
         result = runner.invoke(main, args)
         assert result.exit_code == 0, f"{' '.join(path)}: {result.output}"
+
+
+def test_skill_documents_the_authorized_raw_media_boundaries() -> None:
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "ingest audio SOURCE_PATH" in text
+    assert "--allow-external-stt" in text
+    assert "ingest raw-video SOURCE_PATH" in text
+    assert "--allow-external-video-extractor" in text

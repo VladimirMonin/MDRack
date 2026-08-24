@@ -83,10 +83,10 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
         ).hexdigest(),
     }
     snapshot = packet["source_snapshot"]
-    assert snapshot["head"] == "076af7bb0816d1ea9c5d32a297fb9decbd69c074"
-    assert snapshot["packet_excluded_from_identity"] == "docs/evidence/v1.3.0-base-release-packet.json"
-    assert snapshot["dirty_paths"]
-    assert len(snapshot["dirty_diff_sha256"]) == 64
+    assert snapshot["algorithm"] == "sha256"
+    assert snapshot["excluded_path"] == "docs/evidence/v1.3.0-base-release-packet.json"
+    assert snapshot["tracked_path_count"] > 0
+    assert len(snapshot["aggregate_sha256"]) == 64
 
     artifacts = packet["package_artifacts"]
     assert isinstance(artifacts, list)
@@ -140,13 +140,15 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
 
 def test_v13_packet_rejects_source_identity_from_another_revision() -> None:
     packet = json.loads(PACKET.read_text(encoding="utf-8"))
-    packet["source_snapshot"]["head"] = "0" * 40
+    baseline = packet["source_snapshot"].copy()
+    packet["source_snapshot"]["aggregate_sha256"] = "0" * 64
     validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
+    validator["_validate_packet"].__globals__["_source_snapshot"] = lambda: baseline
     with pytest.raises(ValueError, match="source_snapshot_mismatch"):
         validator["_validate_packet"](packet)
 
 
-def test_v13_source_identity_changes_for_distinct_staged_bytes(tmp_path: Path) -> None:
+def test_v13_source_identity_rejects_dirty_non_packet_bytes(tmp_path: Path) -> None:
     validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
     repo = tmp_path / "repo"
     (repo / "docs" / "evidence").mkdir(parents=True)
@@ -162,22 +164,44 @@ def test_v13_source_identity_changes_for_distinct_staged_bytes(tmp_path: Path) -
         check=True,
     )
     source.write_text("staged-a\n", encoding="utf-8")
-    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    validator["_source_snapshot"].__globals__["REPO_ROOT"] = repo
+    validator["_source_snapshot"].__globals__["PACKET_PATH"] = packet_path
+    with pytest.raises(ValueError, match="source_checkout_dirty"):
+        validator["_source_snapshot"]()
+
+
+def test_v13_source_identity_excludes_only_the_packet(tmp_path: Path) -> None:
+    validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
+    repo = tmp_path / "repo"
+    (repo / "docs" / "evidence").mkdir(parents=True)
+    (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
+    packet_path = repo / "docs" / "evidence" / "v1.3.0-base-release-packet.json"
+    packet_path.write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "base"],
+        cwd=repo,
+        check=True,
+    )
     validator["_source_snapshot"].__globals__["REPO_ROOT"] = repo
     validator["_source_snapshot"].__globals__["PACKET_PATH"] = packet_path
     first = validator["_source_snapshot"]()
-    source.write_text("staged-b\n", encoding="utf-8")
-    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    packet_path.write_text("two\n", encoding="utf-8")
     second = validator["_source_snapshot"]()
-    assert first["dirty_paths"] == second["dirty_paths"] == ["tracked.txt"]
-    assert first["dirty_diff_sha256"] != second["dirty_diff_sha256"]
+    assert first == second
 
 
 def test_v13_packet_rejects_stale_full_pytest_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
     packet = json.loads(PACKET.read_text(encoding="utf-8"))
     packet["evidence"]["quality"]["pytest"] = "1643 passed, 5 skipped"
     validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
-    packet["source_snapshot"] = validator["_source_snapshot"]()
+    packet["source_snapshot"] = packet["source_snapshot"]
+    monkeypatch.setitem(
+        validator["_validate_packet"].__globals__,
+        "_source_snapshot",
+        lambda: packet["source_snapshot"],
+    )
     monkeypatch.setitem(
         validator["_validate_packet"].__globals__,
         "_current_pytest_result",

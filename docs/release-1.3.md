@@ -1,8 +1,9 @@
 # MDRack 1.3.0 release notes
 
-Status: release-preparation source committed and pushed to `origin/master` as
-`b208f9832a2fc677ef0df3f5f3a2d92117964ad5`; no Git tag, PyPI upload,
-deployment, or package-index publication.
+Status: release-preparation source is maintained in the checked-out candidate;
+the exact source identity and artifact hashes are recorded in the base release
+packet. No Git tag, PyPI upload, deployment, or package-index publication is
+claimed.
 
 The compact SQLite base was prepared independently of the optional experimental
 `mdrack-sqlite-vec` package. The authoritative machine-readable candidate record
@@ -44,6 +45,18 @@ dependency.
 - `storage-analyze` reports aggregate catalog/vector payload and codec/backend
   information without exposing source content, paths, locators, vectors,
   endpoints, or private exception text.
+
+The direct local media commands are bounded caller-authorized adapters, not
+built-in media quality features:
+
+```text
+mdrack ingest audio SOURCE_PATH --source-ref REF --allow-external-stt --stt-command COMMAND
+mdrack ingest raw-video SOURCE_PATH --source-ref REF --allow-external-video-extractor --video-extractor-command COMMAND
+```
+
+They accept RIFF/WAVE and ISO-BMFF input through shell-free stdin protocols.
+They do not claim built-in transcription/decoding, pixel or acoustic search,
+live provider quality, Windows, Python 3.12, or real-source coverage.
 
 ## Fixed-store recovery boundary
 

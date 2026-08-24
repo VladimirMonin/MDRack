@@ -122,9 +122,18 @@ uv run mdrack model --help
 ```
 
 MDRack accepts caller-supplied transcript and frame-caption text. It does not
-turn raw audio, video, or image pixels into searchable text. Treat image and
-prepared-media commands as explicit state-changing operations and use their
-live `--help` output before proposing a recipe.
+provide built-in transcription, decoding, pixel/visual, or acoustic search.
+For an explicitly authorized local adapter, use the registered WAVE and ISO-BMFF
+paths (the commands invoke caller-selected shell-free stdin tools):
+
+```text
+uv run mdrack ingest audio SOURCE_PATH --source-ref REF --allow-external-stt --stt-command COMMAND
+uv run mdrack ingest raw-video SOURCE_PATH --source-ref REF --allow-external-video-extractor --video-extractor-command COMMAND
+```
+
+These commands are state-changing and do not claim provider quality, Windows,
+or real-source coverage. Use their live `--help` output before proposing a
+recipe; image and prepared-media commands remain separate boundaries.
 
 ## Failure handling
 

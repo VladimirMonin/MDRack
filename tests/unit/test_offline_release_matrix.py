@@ -45,7 +45,7 @@ def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     assert "hosted CI" in runbook
     assert "evidence upload are remote CI infrastructure" in runbook
     assert "workflow_dispatch" in runbook and "pull_request" in runbook
-    assert "does not provide process-wide network-attempt telemetry" in runbook
+    assert "not provide process-wide network-attempt telemetry" in runbook
 
 
 def test_current_verification_wrappers_use_the_v13_packet_gate() -> None:
@@ -69,6 +69,18 @@ def test_matrix_script_has_no_network_enabled_default() -> None:
     assert "_check_expected_hashes" in source
     assert "_materialize_candidate" in source
     assert "--candidate-packet" in source
+
+
+def test_matrix_install_graph_accepts_the_root_sqlite_rc2_edge() -> None:
+    module = runpy.run_path(str(REPO_ROOT / "scripts" / "offline_release_matrix.py"))
+    assert module["EXPECTED_LOCAL_DEPENDENCIES"]["mdrack-sqlite"] == (
+        "mdrack-core==1.0.0rc1",
+    )
+    assert "mdrack-sqlite==1.0.0rc2" in (
+        REPO_ROOT / "pyproject.toml"
+    ).read_text(encoding="utf-8")
+    source = (REPO_ROOT / "scripts" / "offline_release_matrix.py").read_text(encoding="utf-8")
+    assert "mdrack-sqlite==1.0.0rc2" in source
 
 
 def test_matrix_rejects_artifacts_inside_source_checkout() -> None:

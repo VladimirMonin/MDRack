@@ -68,7 +68,7 @@ def test_guide_validates_complete_nested_click_paths() -> None:
     assert isinstance(ingest, click.Group)
     commands["ingest"] = click.Group(
         name="ingest",
-        commands={name: command for name, command in ingest.commands.items() if name != "video"},
+        commands={name: command for name, command in ingest.commands.items() if name != "raw-video"},
     )
 
     with pytest.raises(RuntimeError, match="command path"):
@@ -79,5 +79,13 @@ def test_guide_topics_do_not_claim_raw_media_extraction() -> None:
     runner = CliRunner()
     media = runner.invoke(main, ["guide", "media"])
     assert media.exit_code == 0
-    assert "does not transcribe raw audio" in media.output
-    assert "pixel/visual or acoustic search" in media.output
+    assert "does not provide built-in transcription" in media.output
+    assert "pixel/visual" in media.output
+
+
+def test_media_guide_documents_authorized_raw_wave_and_iso_bmff_adapters() -> None:
+    media = CliRunner().invoke(main, ["guide", "media"])
+    assert "ingest audio SOURCE_PATH" in media.output
+    assert "--allow-external-stt" in media.output
+    assert "ingest raw-video SOURCE_PATH" in media.output
+    assert "--allow-external-video-extractor" in media.output

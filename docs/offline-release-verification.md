@@ -168,7 +168,7 @@ uv run python scripts/check_v13_release_packet.py \
 The harness builds and audits all four distributions as wheel and sdist, verifies
 metadata and package isolation, runs isolated smoke cells, and enforces the
 offline controls `UV_OFFLINE=1` plus the installed-smoke socket block. It does
-does not provide process-wide network-attempt telemetry. A build error, hash
+not provide process-wide network-attempt telemetry. A build error, hash
 mismatch, install error, source-tree
 import, missing artifact, or non-zero smoke command fails. The output directory
 must remain outside the source checkout; it is disposable evidence and must not

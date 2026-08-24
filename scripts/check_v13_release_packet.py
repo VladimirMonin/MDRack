@@ -40,26 +40,38 @@ def _fail(reason: str) -> None:
 
 
 def _source_snapshot() -> dict[str, Any]:
-    """Return reproducible source identity, excluding this packet itself."""
+    """Return a clean-checkout identity over every tracked non-packet byte."""
+    packet_relative = PACKET_PATH.relative_to(REPO_ROOT).as_posix()
     status = subprocess.run(
-        ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
         cwd=REPO_ROOT, check=True, capture_output=True, text=True,
     ).stdout.splitlines()
-    packet_relative = PACKET_PATH.relative_to(REPO_ROOT).as_posix()
-    dirty_paths = sorted(line[3:] for line in status if line[3:] != packet_relative)
-    diff = subprocess.run(
-        ["git", "diff", "HEAD", "--binary", "--", ".", f":!{packet_relative}"],
-        cwd=REPO_ROOT, check=True, capture_output=True,
-    ).stdout
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, check=True,
-        capture_output=True, text=True,
-    ).stdout.strip()
+    dirty_paths = [line[3:] for line in status if line[3:] != packet_relative]
+    if dirty_paths:
+        raise ValueError("source_checkout_dirty")
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=REPO_ROOT, check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    rows: list[str] = []
+    for raw_path in tracked:
+        if not raw_path:
+            continue
+        relative = raw_path.decode("utf-8")
+        if relative == packet_relative:
+            continue
+        path = REPO_ROOT / relative
+        if not path.is_file():
+            raise ValueError("tracked_source_missing")
+        rows.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {relative}\n")
+    rows.sort()
+    manifest = "".join(rows).encode("utf-8")
     return {
-        "head": head,
-        "dirty_paths": dirty_paths,
-        "dirty_diff_sha256": hashlib.sha256(diff).hexdigest(),
-        "packet_excluded_from_identity": packet_relative,
+        "algorithm": "sha256",
+        "excluded_path": packet_relative,
+        "tracked_path_count": len(rows),
+        "aggregate_sha256": hashlib.sha256(manifest).hexdigest(),
     }
 
 

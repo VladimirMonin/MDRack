@@ -56,13 +56,18 @@ legacy catalog selectors.
     "media": """Media boundaries
 
 MDRack indexes caller-supplied transcript and frame-caption text.
-It does not transcribe raw audio or perform pixel/visual or acoustic search.
-Video and transcript commands consume prepared source material; image ingestion is an
-explicit local-file operation with caller-provided caption or OCR text.
+It does not provide built-in transcription, decoding, pixel/visual, or acoustic
+search. The following are explicit, caller-authorized local adapters: WAVE audio
+is passed to a shell-free stdin transcription command, and ISO-BMFF video is
+passed to a shell-free stdin extractor. They do not establish provider quality,
+Windows, or real-source evidence.
 
   mdrack --root ./notes ingest transcript TRANSCRIPT_PATH --resource-id ID \\
     --kind audio --media-type audio/transcript --namespace local --no-embeddings
-  mdrack --root ./notes ingest video MANIFEST_PATH --dry-run
+  mdrack --root ./notes ingest audio SOURCE_PATH --source-ref REF \\
+    --allow-external-stt --stt-command COMMAND
+  mdrack --root ./notes ingest raw-video SOURCE_PATH --source-ref REF \\
+    --allow-external-video-extractor --video-extractor-command COMMAND
   mdrack --root ./notes image ingest IMAGE_PATH --resource-id ID \\
     --source-namespace local --source-ref images/example.png --caption "A caption"
 
