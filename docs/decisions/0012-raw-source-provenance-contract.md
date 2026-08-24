@@ -74,3 +74,16 @@ single existing transcript replacement, decorates the resulting resource with
 the raw digest and prepared-evidence digest, and leaves the previous graph
 untouched on failure. The path remains provider-free, stores no audio bytes,
 adds no engine API or migration, and does not claim live STT quality.
+
+## R4 direct local ISO-BMFF video adapter
+
+R4 adds the CLI-only `ingest raw-video` path. It accepts only ISO-BMFF `ftyp`
+input outside the root and requires an explicitly authorized, shell-free stdin
+extractor. The extractor must return exact `mdrack.raw-video-extraction.v1`
+JSON with `media_type=video/mp4`, one positive matching duration, strict timed
+transcript atoms, and 1..600 ordered selected captions. Existing transcript and
+frame readers plus `VideoCompositionService` are reused once with embeddings
+disabled; no decoder, provider, network, engine method, migration, or second
+store is added. Raw SHA-256 is the resource content hash and prepared evidence
+has its separate canonical digest. A bounded source recheck immediately before
+the single catalog replacement preserves the previous graph on source change.

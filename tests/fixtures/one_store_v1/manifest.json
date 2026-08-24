@@ -35,7 +35,7 @@
   },
   "public_surface_ledger": {
     "retained_cli_paths": [
-      "guide", "init", "scan", "search", "ingest", "ingest audio", "ingest text", "ingest transcript", "ingest video",
+      "guide", "init", "scan", "search", "ingest", "ingest audio", "ingest raw-video", "ingest text", "ingest transcript", "ingest video",
       "image", "image ingest", "image search", "image delete",
       "metadata", "metadata show", "metadata facets", "metadata projection-check",
       "cache", "cache status", "cache verify", "cache purge",

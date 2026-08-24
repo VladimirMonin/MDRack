@@ -121,6 +121,7 @@ Live command registration exposes:
 | `rebuild fts` | Rebuild the manually maintained FTS projection. |
 | `rebuild embeddings` | Recreate vectors for the active profile. |
 | `image ingest`, `search`, `delete` | Explicit direct-image lifecycle against the fixed catalog; never triggered by Markdown scan. |
+| `ingest raw-video SOURCE_PATH` | CLI-only ISO-BMFF raw-video adapter using an authorized stdin extractor; prepared `ingest video` and `MDRackEngine` remain unchanged. |
 | `resources duplicates`, `similar` | Provider-free exact hash and existing-vector discovery with typed/facet scope filters. |
 | `resources search` | Provider-free lexical search against the fixed catalog; target and scope filters are applied before limiting. |
 | `resources facets`, `facets` | Deterministic facet listing, optionally narrowed by namespace. |

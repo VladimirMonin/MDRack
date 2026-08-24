@@ -478,6 +478,45 @@ def _check_installed_raw_audio_cli() -> None:
         assert str(source) not in search.stdout and "installed audio needle" not in search.stdout
 
 
+def _check_installed_raw_video_cli() -> None:
+    with tempfile.TemporaryDirectory(prefix="mdrack-installed-raw-video-") as directory:
+        root = Path(directory) / "root"
+        root.mkdir()
+        source = Path(directory) / "outside-root.mp4"
+        source.write_bytes(b"0000ftypisompayload")
+        fake = Path(directory) / "fake-video-extractor.py"
+        fake.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, sys\n"
+            "sys.stdin.buffer.read()\n"
+            "print(json.dumps({'schema':'mdrack.raw-video-extraction.v1',"
+            "'media_type':'video/mp4','duration_ms':1000,"
+            "'transcript':{'schema':'mdrack.timed-transcript.v1','duration_ms':1000,"
+            "'atoms':[{'start_ms':0,'end_ms':100,'text':'installed video needle'}]},"
+            "'frames':[{'timestamp_ms':50,'caption':'installed frame'}]}))\n",
+            encoding="utf-8",
+        )
+        fake.chmod(0o755)
+        executable = str(Path(sys.executable).with_name("mdrack"))
+        ingest = subprocess.run(
+            [executable, "--root", str(root), "ingest", "raw-video", str(source),
+             "--source-ref", "videos/installed.mp4", "--allow-external-video-extractor",
+             "--video-extractor-command", str(fake)],
+            check=False, capture_output=True, text=True,
+        )
+        assert ingest.returncode == 0, ingest.stderr
+        payload = json.loads(ingest.stdout)
+        assert payload["data"]["resource_kind"] == "video"
+        assert str(source) not in ingest.stdout
+        search = subprocess.run(
+            [executable, "--root", str(root), "search", "needle", "--scope", "video", "--mode", "text"],
+            check=False, capture_output=True, text=True,
+        )
+        assert search.returncode == 0, search.stderr
+        assert json.loads(search.stdout)["data"]["results"]
+        assert str(source) not in search.stdout and "installed video needle" not in search.stdout
+
+
 def _check_catalog_retrieval_parity() -> int:
     from click.testing import CliRunner
 
@@ -553,6 +592,7 @@ def main() -> None:
         _check_installed_raw_text_cli()
         _check_installed_image_cli()
         _check_installed_raw_audio_cli()
+        _check_installed_raw_video_cli()
         parity_mode_count = _check_catalog_retrieval_parity()
 
     assert network_attempts == 0
@@ -572,6 +612,7 @@ def main() -> None:
                     "installed_raw_text_cli": "passed",
                     "installed_image_cli": "passed",
                     "installed_raw_audio_cli": "passed",
+                    "installed_raw_video_cli": "passed",
                     "legacy_retrieval_parity_modes": parity_mode_count,
                     "network_attempts": 0,
                 },

@@ -20,9 +20,12 @@ This page is a current-state boundary, not a roadmap promise.
 - Audio and video retrieval consumes supplied timed transcripts and frame-caption
   text. The CLI now has a narrow direct WAVE path for raw audio that delegates transcription
   to an explicitly supplied local stdin executable; MDRack does not provide an
-  STT model, provider, network fallback, or general media decoder. ISO-BMFF,
-  Matroska, acoustic similarity, pixel search, and visual similarity remain
-  unsupported.
+  STT model, provider, network fallback, or general media decoder. Matroska,
+  acoustic similarity, pixel search, and visual similarity remain unsupported.
+  Direct raw video is limited to ISO-BMFF `ftyp` input plus an
+  explicitly authorized local extractor returning strict timed transcript and
+  selected-caption JSON; MDRack does not decode video or provide FFmpeg/STT/VLM
+  quality guarantees.
 - Unified 1.2 retrieval is text-first: it searches Markdown text, supplied audio/
   video transcripts, frame-caption text, and explicit image caption/OCR text. Its
   `find-similar` command reuses stored textual whole-resource vectors only; it does

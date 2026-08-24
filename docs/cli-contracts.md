@@ -229,3 +229,17 @@ an embedding provider or a network fallback. The result replaces one `audio`
 resource through the existing atomic catalog path with `embeddings=False`.
 The success envelope contains only logical IDs, verified media type, counts,
 and `persisted`; failures use the payload-free `RAW_AUDIO_INGEST_ERROR`.
+
+## Explicit local ISO-BMFF video ingestion
+
+`mdrack --root ROOT ingest raw-video SOURCE_PATH --source-ref PORTABLE_REF
+--allow-external-video-extractor --video-extractor-command EXECUTABLE
+[--producer PRODUCER_ID]` accepts an ISO-BMFF file whose `ftyp` signature is
+validated and requires the authorized shell-free executable to return strict
+`mdrack.raw-video-extraction.v1` JSON with `media_type=video/mp4`, timed
+transcript atoms, and 1..600 selected captions. The bounded snapshot is sent
+only on stdin; no path, provider, network fallback, or embedding call is used.
+The prepared transcript and generated frame artifact are composed once through
+the existing video service and replace one `video` resource with
+`embeddings=False`. Failures use `RAW_VIDEO_INGEST_ERROR` and never expose
+source paths, extractor output, or private content.
