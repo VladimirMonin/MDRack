@@ -18,7 +18,9 @@ not part of this release path.
 The workflow runs on `workflow_dispatch` and `pull_request`. Its `ubuntu-latest`
 and `windows-latest` / Python 3.11 and 3.12 cells execute independently with
 `fail-fast: false`; the setup action's cache is used only to supply dependencies
-to those hosted cells.
+to those hosted cells. The workflow pins `uv==0.11.15`, the version used to
+validate the committed `uv.lock`; changing uv requires an explicit lock refresh
+and the same offline matrix rather than inheriting the setup action's latest uv.
 
 Use the repository root for all commands:
 

@@ -21,6 +21,7 @@ def test_offline_matrix_covers_four_distributions_and_both_artifact_kinds() -> N
 def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "offline-release-matrix.yml").read_text(encoding="utf-8")
     assert "UV_OFFLINE: '1'" in workflow
+    assert "version: '0.11.15'" in workflow
     assert "os: [ubuntu-latest, windows-latest]" in workflow
     assert "python-version: ['3.11', '3.12']" in workflow
     assert "uv sync --all-extras --frozen --offline" in workflow
@@ -46,6 +47,16 @@ def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     assert "evidence upload are remote CI infrastructure" in runbook
     assert "workflow_dispatch" in runbook and "pull_request" in runbook
     assert "not provide process-wide network-attempt telemetry" in runbook
+
+
+def test_release_uses_a_committable_uv_lockfile() -> None:
+    assert (REPO_ROOT / "uv.lock").is_file()
+    ignored_lines = {
+        line.strip()
+        for line in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert "uv.lock" not in ignored_lines
 
 
 def test_current_verification_wrappers_use_the_v13_packet_gate() -> None:
