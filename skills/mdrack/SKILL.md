@@ -62,6 +62,7 @@ claim release parity; use the project-pinned version first.
 
 ```text
 uv --version
+uv lock --check
 uv sync --all-extras --frozen
 uv run mdrack --help
 uv run mdrack guide

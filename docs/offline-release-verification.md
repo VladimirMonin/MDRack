@@ -26,6 +26,7 @@ Use the repository root for all commands:
 
 ```bash
 export UV_OFFLINE=1
+uv lock --check
 uv sync --all-extras --frozen --offline
 ```
 

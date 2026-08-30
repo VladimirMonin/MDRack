@@ -28,7 +28,9 @@ jobs:
           enable-cache: true
       - name: Install development environment from lock
         shell: bash
-        run: uv sync --all-extras --frozen --offline
+        run: |
+          uv lock --check
+          uv sync --all-extras --frozen --offline
       - name: Ruff gate
         shell: bash
         run: uv run ruff check src/ tests/ packages/mdrack-core/src/ packages/mdrack-media/src/ packages/mdrack-sqlite/src/
