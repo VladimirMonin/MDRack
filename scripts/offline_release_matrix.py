@@ -422,11 +422,17 @@ def _installed_smoke(
                     "".join(f"{name}=={version}\n" for name, version in runtime.items()),
                     encoding="utf-8",
                 )
-                _run(
+                install_command = ["uv", "pip", "install"]
+                if not allow_index_provisioning:
+                    install_command.append("--offline")
+                install_command.extend(
                     [
-                        "uv", "pip", "install", "--offline", "--python", str(python),
-                        "--find-links", str(output_dir), "--constraint", str(constraints), str(artifact),
-                    ],
+                        "--python", str(python), "--find-links", str(output_dir),
+                        "--constraint", str(constraints), str(artifact),
+                    ]
+                )
+                _run(
+                    install_command,
                     cwd=REPO_ROOT,
                     offline=not allow_index_provisioning,
                 )
