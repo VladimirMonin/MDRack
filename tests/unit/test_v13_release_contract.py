@@ -235,3 +235,56 @@ def test_v13_release_history_and_current_docs_preserve_their_store_boundaries() 
     assert "Semantic retrieval linearly scans canonical binary vectors" in limitations
     assert "mdrack_sqlite_catalog_v2" in data_instruction
     assert "mdrack-sqlite-vec" not in (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_commercial_license_docs_link_to_the_canonical_policy_and_locked_ledger() -> None:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    policy = (REPO_ROOT / "docs" / "licensing.md").read_text(encoding="utf-8")
+    notices = (REPO_ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+
+    assert "docs/licensing.md" in readme
+    assert "THIRD_PARTY_NOTICES.md" in readme
+    assert "Copyright (c) 2026 VladimirMonin" in policy
+    assert "Внешние программы вне поставки" in policy
+    assert "Windows onedir EXE" in policy
+    assert "certifi` 2026.6.17" in notices
+    assert "MPL-2.0" in notices
+    assert "colorama` 0.4.6" in notices
+    assert "Windows only" in notices
+    assert "typing-extensions` 4.16.0" in notices
+    assert notices.count("| `resolver-only`") == 19
+    expected_locked_packages = (
+        "`annotated-types` 0.7.0",
+        "`anyio` 4.14.2",
+        "`certifi` 2026.6.17",
+        "`click` 8.4.2",
+        "`colorama` 0.4.6",
+        "`h11` 0.16.0",
+        "`httpcore` 1.0.9",
+        "`httpx` 0.28.1",
+        "`idna` 3.18",
+        "`markdown-it-py` 4.2.0",
+        "`mdurl` 0.1.2",
+        "`pydantic` 2.13.4",
+        "`pydantic-core` 2.46.4",
+        "`pygments` 2.20.0",
+        "`pyyaml` 6.0.3",
+        "`rich` 15.0.0",
+        "`toml` 0.10.2",
+        "`typing-extensions` 4.16.0",
+        "`typing-inspection` 0.4.2",
+    )
+    assert all(package in notices for package in expected_locked_packages)
+
+
+def test_release_runbooks_and_skill_keep_the_python_and_exe_license_boundaries_distinct() -> None:
+    offline_runbook = (REPO_ROOT / "docs" / "offline-release-verification.md").read_text(encoding="utf-8")
+    windows_runbook = (REPO_ROOT / "docs" / "windows-exe-build.md").read_text(encoding="utf-8")
+    skill = (REPO_ROOT / "skills" / "mdrack" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "THIRD_PARTY_NOTICES.md" in offline_runbook
+    assert "exact bundle manifest" in offline_runbook
+    assert "not release-ready" in windows_runbook
+    assert "exact manifest" in windows_runbook
+    assert "THIRD_PARTY_NOTICES.md" in skill
+    assert "exact bundle" in skill

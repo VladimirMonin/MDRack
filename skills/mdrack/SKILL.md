@@ -22,6 +22,16 @@ This skill does not add commands, change output formats, publish packages, or
 claim transcription, pixel analysis, or acoustic search. It does not inspect
 source files other than the material the user explicitly selected for indexing.
 
+## License boundary
+
+MDRack is standard MIT software; its exact commercial-use and notice-retention
+policy is in [`docs/licensing.md`](../../docs/licensing.md). The locked Python
+runtime inventory is [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md).
+Resolver-installed dependencies are not relicensed by MDRack and are not bundled
+by the four base Python wheel/sdist distributions. A self-contained Windows EXE
+needs a separate exact bundle manifest and upstream notices before it is called
+release-ready.
+
 ## Safety contract
 
 - Ask for, or require, an explicit project root. Do not infer a private vault,

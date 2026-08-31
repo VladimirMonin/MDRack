@@ -22,11 +22,13 @@ dependencies = ["mdrack-core==1.0.0rc1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mdrack_media"]
+license-files = ["LICENSE"]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/API.md",
     "/CHANGELOG.md",
+    "/LICENSE",
     "/README.md",
     "/examples",
     "/pyproject.toml",

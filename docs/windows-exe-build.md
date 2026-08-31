@@ -58,3 +58,9 @@ dist\mdrack\mdrack.exe --root . doctor
 - Run `scripts/verify.ps1` before packaging. It intentionally excludes the live
   LM Studio evaluation entrypoint. See [offline release verification](offline-release-verification.md)
   for the four distribution cells, matrix evidence rules, and fail-closed gates.
+- This onedir EXE is not release-ready merely because the four Python wheel/sdist
+  cells pass. Before commercial distribution, build it on Windows and preserve an
+  exact manifest of every embedded file, its license/notice text, and the MDRack
+  `LICENSE`. See [licensing and commercial use](licensing.md) and
+  [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md); the latter covers only
+  the resolver graph and is not an EXE manifest.

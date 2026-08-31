@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import venv
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,9 @@ PACKAGE_IMPORTS = {
     "mdrack-media": ("mdrack_media",),
     "mdrack-sqlite": ("mdrack_sqlite",),
 }
+CANONICAL_LICENSE = (REPO_ROOT / "LICENSE").read_bytes()
+LOCK_PATH = REPO_ROOT / "uv.lock"
+THIRD_PARTY_LEDGER = REPO_ROOT / "THIRD_PARTY_NOTICES.md"
 REQUIRED_PUBLICATION_OUTPUTS = {
     "docs/evidence/w5-offline-release-matrix.json",
     "docs/evidence/v0.4-release-packet.json",
@@ -177,7 +181,7 @@ def _materialize_candidate(packet_path: Path, destination: Path) -> None:
         raise RuntimeError("v1.1 plan entered the v0.4 candidate")
 
 
-def _metadata(artifact: Path) -> tuple[str, str, list[str], list[str]]:
+def _metadata_text(artifact: Path) -> tuple[str, list[str]]:
     if artifact.suffix == ".whl":
         with ZipFile(artifact) as archive:
             metadata_path = next(name for name in archive.namelist() if name.endswith("/METADATA"))
@@ -192,6 +196,11 @@ def _metadata(artifact: Path) -> tuple[str, str, list[str], list[str]]:
             assert payload is not None
             text = payload.read().decode("utf-8")
             members = [member.name for member in archive.getmembers()]
+    return text, members
+
+
+def _metadata(artifact: Path) -> tuple[str, str, list[str], list[str]]:
+    text, members = _metadata_text(artifact)
     name = NAME_RE.search(text)
     version = VERSION_RE.search(text)
     if name is None or version is None:
@@ -202,6 +211,102 @@ def _metadata(artifact: Path) -> tuple[str, str, list[str], list[str]]:
         if line.startswith("Requires-Dist: ")
     ]
     return name.group("name"), version.group("version"), dependencies, members
+
+
+def _locked_runtime() -> tuple[dict[str, str], dict[str, str]]:
+    """Return the locked non-dev runtime closure and its conditional markers."""
+    lock = tomllib.loads(LOCK_PATH.read_text(encoding="utf-8"))
+    packages = {item["name"]: item for item in lock["package"]}
+    root = packages["mdrack"]["metadata"]["requires-dist"]
+    pending = [(item["name"], item.get("marker", "")) for item in root]
+    versions: dict[str, str] = {}
+    markers: dict[str, str] = {}
+    while pending:
+        name, marker = pending.pop()
+        if "extra == 'dev'" in marker:
+            continue
+        if name.startswith("mdrack"):
+            # The four local distributions are audited separately from the
+            # third-party licensing ledger.
+            continue
+        if name in versions:
+            if marker:
+                markers[name] = marker
+            continue
+        package = packages.get(name)
+        if package is None or "version" not in package:
+            raise RuntimeError(f"locked runtime dependency is missing: {name}")
+        versions[name] = package["version"]
+        if marker:
+            markers[name] = marker
+        for dependency in package.get("dependencies", []):
+            pending.append((dependency["name"], dependency.get("marker", "")))
+    return dict(sorted(versions.items())), dict(sorted(markers.items()))
+
+
+def _runtime_ledger() -> dict[str, str]:
+    """Read the exact resolver rows from the committed licensing ledger."""
+    pattern = re.compile(r"^\| `([^`]+)` ([^ ]+) —")
+    rows = {
+        match.group(1): match.group(2)
+        for line in THIRD_PARTY_LEDGER.read_text(encoding="utf-8").splitlines()
+        if (match := pattern.match(line))
+    }
+    return rows
+
+
+def _validate_runtime_ledger(runtime: dict[str, str]) -> None:
+    ledger = _runtime_ledger()
+    missing = sorted(set(runtime) - set(ledger))
+    mismatched = sorted(name for name in runtime if ledger.get(name) != runtime[name])
+    if missing or mismatched:
+        raise RuntimeError(
+            f"runtime ledger mismatch: missing={missing}, version_mismatch={mismatched}"
+        )
+
+
+def _install_graph(artifacts: list[dict[str, Any]]) -> dict[str, list[str]]:
+    production_edges: set[str] = set()
+    dev_extra_edges: set[str] = set()
+    for artifact in artifacts:
+        for dependency in artifact["dependencies"]:
+            requirement = dependency.split(";", 1)[0].strip()
+            dependency_name = re.split(r"[<>=!~]", requirement, maxsplit=1)[0].strip()
+            edge = f"{artifact['distribution']} -> {dependency_name}"
+            if "extra == 'dev'" in dependency:
+                dev_extra_edges.add(edge)
+            else:
+                production_edges.add(edge)
+    return {
+        "production_edges": sorted(production_edges),
+        "dev_extra_edges": sorted(dev_extra_edges),
+    }
+
+
+def _validate_installed_runtime(expected: dict[str, str], installed: dict[str, str]) -> None:
+    """Reject drift or missing packages in the installed smoke environment."""
+    if installed != expected:
+        raise RuntimeError(
+            f"installed runtime closure mismatch: expected={expected}, installed={installed}"
+        )
+
+
+def _license_payload(artifact: Path) -> bytes:
+    """Return the sole packaged LICENSE file, failing closed when absent."""
+    if artifact.suffix == ".whl":
+        with ZipFile(artifact) as archive:
+            candidates = [name for name in archive.namelist() if Path(name).name == "LICENSE"]
+            if len(candidates) != 1:
+                raise RuntimeError(f"expected one LICENSE in {artifact.name}, found {candidates}")
+            return archive.read(candidates[0])
+    with tarfile.open(artifact) as archive:
+        candidates = [member for member in archive.getmembers() if Path(member.name).name == "LICENSE"]
+        if len(candidates) != 1:
+            raise RuntimeError(f"expected one LICENSE in {artifact.name}, found {len(candidates)}")
+        payload = archive.extractfile(candidates[0])
+        if payload is None:
+            raise RuntimeError(f"LICENSE in {artifact.name} is not a regular file")
+        return payload.read()
 
 
 def _audit_artifacts(output_dir: Path) -> dict[str, Any]:
@@ -216,6 +321,11 @@ def _audit_artifacts(output_dir: Path) -> dict[str, Any]:
             package_names.add(name)
             if name != package:
                 raise RuntimeError(f"artifact {artifact.name} declares {name}, expected {package}")
+            metadata_text, _ = _metadata_text(artifact)
+            if "License-Expression: MIT" not in metadata_text:
+                raise RuntimeError(f"artifact {artifact.name} does not declare MIT")
+            if _license_payload(artifact) != CANONICAL_LICENSE:
+                raise RuntimeError(f"artifact {artifact.name} contains a non-canonical LICENSE")
             if package in {"mdrack-core", "mdrack-media", "mdrack-sqlite"} and any(
                 member.startswith("mdrack/") for member in members
             ):
@@ -277,9 +387,17 @@ def _check_expected_hashes(manifest: dict[str, Any], expected_path: Path) -> Non
 
 
 def _installed_smoke(output_dir: Path) -> dict[str, Any]:
+    runtime, markers = _locked_runtime()
+    _validate_runtime_ledger(runtime)
+    expected_runtime = {
+        name: version
+        for name, version in runtime.items()
+        if not markers.get(name) or "sys_platform == 'win32'" not in markers[name] or os.name == "nt"
+    }
     cells: list[dict[str, Any]] = []
     for package, _ in PACKAGE_SPECS:
         for kind in ("wheel", "sdist"):
+            cell_expected_runtime = expected_runtime if package == "mdrack" else {}
             with tempfile.TemporaryDirectory(prefix="mdrack-release-smoke-") as temp:
                 environment = Path(temp) / "venv"
                 venv.EnvBuilder(with_pip=False).create(environment)
@@ -292,24 +410,34 @@ def _installed_smoke(output_dir: Path) -> dict[str, Any]:
                     if path.name.startswith(artifact_prefix)
                     and (path.suffix == ".whl" if kind == "wheel" else path.suffix == ".gz")
                 )
+                constraints = Path(temp) / "runtime-constraints.txt"
+                constraints.write_text(
+                    "".join(f"{name}=={version}\n" for name, version in runtime.items()),
+                    encoding="utf-8",
+                )
                 _run(
                     [
                         "uv", "pip", "install", "--offline", "--python", str(python),
-                        "--find-links", str(output_dir), str(artifact),
+                        "--find-links", str(output_dir), "--constraint", str(constraints), str(artifact),
                     ],
                     cwd=REPO_ROOT,
                 )
                 expected_version = _metadata(artifact)[1]
                 repo_root_literal = repr(str(REPO_ROOT))
                 smoke_code = (
-                    "import importlib, importlib.metadata as m, json, pathlib; "
+                    "import importlib, importlib.metadata as m, json, pathlib, re; "
                     f"dist={package!r}; expected={expected_version!r}; mods={PACKAGE_IMPORTS[package]!r}; "
+                    f"runtime_expected={cell_expected_runtime!r}; "
                     "loaded=[importlib.import_module(name) for name in mods]; "
+                    "installed_runtime={re.sub(r'[-_.]+', '-', dist.metadata['Name']).lower(): dist.version "
+                    "for dist in m.distributions() if not dist.metadata['Name'].lower().startswith('mdrack')}; "
                     "assert m.version(dist) == expected; "
+                    "assert {name: m.version(name) for name in runtime_expected} == runtime_expected; "
                     "assert all(not str(pathlib.Path(mod.__file__).resolve()).startswith("
                     f"{repo_root_literal}) for mod in loaded); "
                     "print(json.dumps({'version': m.version(dist), 'modules': mods, "
-                    "'files': sorted(str(pathlib.Path(mod.__file__).resolve()) for mod in loaded)}))"
+                    "'files': sorted(str(pathlib.Path(mod.__file__).resolve()) for mod in loaded), "
+                    "'installed_runtime': installed_runtime}))"
                 )
                 result = subprocess.run(
                     [str(python), "-c", smoke_code],
@@ -319,6 +447,8 @@ def _installed_smoke(output_dir: Path) -> dict[str, Any]:
                 )
                 if result.returncode:
                     raise RuntimeError(f"installed smoke failed for {artifact.name}: {result.stderr[-2_000:]}")
+                installed = json.loads(result.stdout)
+                _validate_installed_runtime(cell_expected_runtime, installed["installed_runtime"])
                 if package == "mdrack" and kind == "wheel":
                     result = subprocess.run(
                         [str(python), str(REPO_ROOT / "scripts" / "check_installed_package.py")],
@@ -328,10 +458,15 @@ def _installed_smoke(output_dir: Path) -> dict[str, Any]:
                     )
                     if result.returncode:
                         raise RuntimeError(f"installed package smoke failed: {result.stderr[-2_000:]}")
-                cells.append({
-                    "distribution": package, "kind": kind, "artifact": artifact.name,
-                    "status": "ok", "stdout_sha256": f"sha256:{hashlib.sha256(result.stdout.encode()).hexdigest()}",
-                })
+                cells.append(
+                    {
+                        "distribution": package,
+                        "kind": kind,
+                        "artifact": artifact.name,
+                        "status": "ok",
+                        "stdout_sha256": f"sha256:{hashlib.sha256(result.stdout.encode()).hexdigest()}",
+                    }
+                )
     return {"status": "ok", "cells": cells, "cell_count": len(cells)}
 
 
@@ -377,21 +512,12 @@ def main() -> None:
     manifest = _audit_artifacts(output_dir)
     if args.expected_manifest:
         _check_expected_hashes(manifest, args.expected_manifest.resolve())
+    runtime, _ = _locked_runtime()
+    _validate_runtime_ledger(runtime)
+    manifest["locked_runtime"] = runtime
     manifest["install_graph"] = {
         "nodes": sorted({artifact["distribution"] for artifact in manifest["artifacts"]}),
-        "edges": sorted(
-            {
-                f"{artifact['distribution']} -> {dependency.split(';', 1)[0].split('==', 1)[0]}"
-                for artifact in manifest["artifacts"]
-                for dependency in artifact["dependencies"]
-                if not dependency.startswith("mdrack") or dependency.split(";", 1)[0].strip()
-                in {
-                    "mdrack-core==1.0.0rc1",
-                    "mdrack-media==1.0.0rc1",
-                    "mdrack-sqlite==1.0.0rc2",
-                }
-            }
-        ),
+        **_install_graph(manifest["artifacts"]),
     }
     if args.smoke:
         manifest["installed_smoke"] = _installed_smoke(output_dir)

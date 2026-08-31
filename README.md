@@ -97,6 +97,8 @@ LM Studio model-management commands. Host applications can use
 - [ADR-0002: provider/storage-neutral core](docs/decisions/0002-provider-storage-neutral-core.md)
 - [ADR-0004: SQLite operating envelope](docs/decisions/0004-sqlite-operating-envelope.md)
 - [Offline release verification](docs/offline-release-verification.md) — supported distribution cells, matrix evidence, and strict no-live gates
+- [Licensing and commercial use](docs/licensing.md) — MIT policy, commercial-use boundary, and Windows bundle gate
+- [Third-party runtime notices](THIRD_PARTY_NOTICES.md) — exact locked resolver graph and upstream-license obligations
 - [v0.4 W5-CI contract](docs/contracts/v0.4-w5-ci-contract.md)
 - [v0.4 offline release-candidate packet](docs/evidence/v0.4-release-packet.md) — exact stage/release/DoD evidence and non-claims
 - [v0.4 public-surface compatibility ledger](docs/compatibility/v0.4-public-surface-ledger.json)
@@ -157,6 +159,18 @@ boundaries are documented in [recovery](docs/recovery.md).
 For a reproducible Windows executable build, see
 [Windows EXE build](docs/windows-exe-build.md).
 
-## License
+## License and commercial use
 
-MIT
+MDRack is standard MIT software. Commercial use, modification, redistribution,
+sublicensing, and sale are allowed, provided that the exact copyright and
+permission notice — `Copyright (c) 2026 VladimirMonin` — stays with copies or
+substantial portions. MDRack is provided without warranty. This is a project
+license summary, not legal advice or clearance for a particular distribution.
+
+The policy for the four Python distributions and future Windows bundle is in
+[licensing and commercial use](docs/licensing.md).
+The exact locked resolver dependency graph, including the Windows-only
+`colorama` branch and `certifi`/MPL-2.0, is recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Resolver-installed
+dependencies are not relicensed by MDRack and are not bundled in the four base
+Python wheel/sdist artifacts.

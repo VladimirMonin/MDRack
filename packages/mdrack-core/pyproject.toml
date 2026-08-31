@@ -22,11 +22,13 @@ dependencies = []
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mdrack_core"]
+license-files = ["LICENSE"]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/API.md",
     "/CHANGELOG.md",
+    "/LICENSE",
     "/README.md",
     "/pyproject.toml",
     "/src/mdrack_core",

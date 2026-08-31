@@ -54,6 +54,21 @@ The application metadata pins `mdrack-core==1.0.0rc1`,
 `install_graph` must include all three root edges. This local smoke is not an
 index-download installation check.
 
+## Licensing and third-party boundaries
+
+The four Python distributions use the canonical MDRack MIT license. Each exact
+wheel and sdist must declare MIT metadata and contain the complete canonical
+`LICENSE`; the archive audit is the evidence, not a metadata label alone. See
+[licensing and commercial use](licensing.md) for the project-owned policy.
+
+The locked third-party runtime graph is documented in
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md). These dependencies are
+resolver-only for the four Python artifacts, including Windows-only `colorama`;
+their upstream licenses are not relicensed by MDRack. A self-contained bundle
+has a different obligation: before release it needs an exact bundle manifest
+and the applicable upstream license/notice texts. This runbook does not treat a
+wheel/sdist result as evidence for a PyInstaller EXE.
+
 ## Execution coverage and evidence
 
 The declared execution matrix is Linux (`ubuntu-latest`) and Windows
