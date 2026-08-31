@@ -1,20 +1,21 @@
 # MDRack 1.3.0 release notes
 
-Status: the committed base-candidate checkpoint is
-`a796a1ab55bbf18ae8c62618502b2b0dda929431`
-(`fix(release): close v1.3 source identity`). Its exact source identity and
-artifact hashes are recorded in the base release packet. This is a
-pre-publication checkpoint, not a Git tag or an index publication: no Git tag,
-PyPI upload, deployment, or package-index publication is claimed.
+Status: the committed licensing-ready checkpoint before the final publication
+rebuild is `40029cc63d753747aed2290a4a95cb49e83d6884`
+(`feat(licensing): publish verified distribution policy`). The final clean
+candidate's exact source identity and artifact hashes are recorded in the base
+release packet before any index upload. A checkpoint is not itself a Git tag or
+an index publication: no Git tag, PyPI upload, deployment, or package-index
+publication is claimed by this document alone.
 
 The compact SQLite base was prepared independently of the optional experimental
 `mdrack-sqlite-vec` package. The authoritative machine-readable candidate record
 is the [base release packet](evidence/v1.3.0-base-release-packet.json); its
 analyzer and benchmark reports are linked from that packet. The packet is a
-point-in-time pre-publication snapshot, so its `published: false` classification
-and no-push non-claim describe packet generation, not the later ordinary source
-push. No package upload, Git tag, deployment, or package-index publication is
-claimed here.
+point-in-time pre-publication snapshot. Its `published: false` classification
+describes candidate verification before the irreversible package-index
+operation. Publication is claimed only after
+index read-back confirms the uploaded files and hashes.
 
 ## Version set
 
@@ -35,9 +36,8 @@ dependency.
 
 ## Candidate identity and package order
 
-The packet's `source_snapshot` identifies this checkpoint by the sorted SHA-256
-manifest `c257c816df7bf3f65fefb709f987fcb5472915bda6f04aa436d9762e62e72868`
-over 626 tracked paths. Only
+The packet's `source_snapshot` identifies the candidate by a sorted SHA-256
+manifest over all tracked paths. Only
 `docs/evidence/v1.3.0-base-release-packet.json` is excluded so the packet does
 not describe its own bytes. Every other tracked change, including a documentation
 change, creates a different candidate and needs a fresh packet plus two matching
