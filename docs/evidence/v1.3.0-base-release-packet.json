@@ -17,7 +17,7 @@
     "sha256": "81f977e3669f8111a66167a0a82e3f3ef38a07b4153c84ba9ae7bc2f7fa37cb0"
   },
   "source_snapshot": {
-    "aggregate_sha256": "08bbafc8d57d5f1e04070cffa0f1cf03a4446ce5493ecaf4666d9af838665880",
+    "aggregate_sha256": "9707ec9be684ab8bb81a3f5e6d71d42cd18e224ad89ee80d7dcaf358dd39a7c5",
     "algorithm": "sha256",
     "excluded_path": "docs/evidence/v1.3.0-base-release-packet.json",
     "tracked_path_count": 634
@@ -36,8 +36,8 @@
       "version": "1.3.0",
       "kind": "sdist",
       "filename": "mdrack-1.3.0.tar.gz",
-      "bytes": 948995,
-      "sha256": "d4d8d09c34b1c7dd41aaff18d183cd9ca2ee344e333710a4669f24b6b6a73c95"
+      "bytes": 949181,
+      "sha256": "c807bf30949fdb9700f8c2b17115835c00daa8303c837d03e2d218a96573b2e6"
     },
     {
       "distribution": "mdrack-core",
@@ -88,7 +88,7 @@
       "sha256": "b572115222f47e2cf9e8aa7e9bf1b8e38e7bba548cc524ba326e726da4299185"
     }
   ],
-  "artifact_matrix_sha256": "48cd7acf30ce2e312092c60ad88c59ed2abf5b1ee741ed2dd4c5a813cde356e7",
+  "artifact_matrix_sha256": "5f304bc44f1917de53628774b9d8e2a3726c95b42072f31c092b8b19394c92f7",
   "clean_v2_schema": {
     "schema_id": "mdrack_sqlite_catalog_v2",
     "schema_version": "0004",
