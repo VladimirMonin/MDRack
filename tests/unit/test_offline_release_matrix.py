@@ -49,7 +49,8 @@ def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     assert "v0.4-release-packet" not in workflow
     runbook = (REPO_ROOT / "docs" / "offline-release-verification.md").read_text(encoding="utf-8")
     assert "hosted CI" in runbook
-    assert "evidence upload are remote CI infrastructure" in runbook
+    assert "dependency provisioning" in runbook
+    assert "evidence upload are remote infrastructure" in runbook
     assert "workflow_dispatch" in runbook and "pull_request" in runbook
     assert "not provide process-wide network-attempt telemetry" in runbook
 
