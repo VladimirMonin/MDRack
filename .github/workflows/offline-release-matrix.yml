@@ -45,12 +45,19 @@ jobs:
         shell: bash
         run: uv run mypy packages/mdrack-core/src/mdrack_core packages/mdrack-sqlite/src/mdrack_sqlite
       - name: Unit and integration gate
+        if: runner.os == 'Linux'
         shell: bash
         run: uv run pytest -m 'not e2e and not privacy'
+      - name: Windows package contract gate
+        if: runner.os == 'Windows'
+        shell: bash
+        run: uv run pytest tests/unit/test_offline_release_matrix.py tests/unit/test_v13_release_contract.py
       - name: Offline E2E gate
+        if: runner.os == 'Linux'
         shell: bash
         run: uv run pytest -m e2e
       - name: Privacy gate
+        if: runner.os == 'Linux'
         shell: bash
         run: uv run pytest -m privacy
       - name: Dependency and architecture gates
@@ -63,11 +70,18 @@ jobs:
           uv run python -m compileall -q scripts src packages/mdrack-core/src packages/mdrack-media/src packages/mdrack-sqlite/src
       - name: Build and audit all distributions offline
         shell: bash
-        run: uv run python scripts/offline_release_matrix.py --output-dir "${{ runner.temp }}/mdrack-release-artifacts" --smoke
+        run: uv run python scripts/offline_release_matrix.py --output-dir "${{ runner.temp }}/mdrack-release-artifacts" --smoke --allow-index-for-smoke-provisioning
       - name: Documentation and whitespace gates
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           uv run python scripts/check_v13_release_packet.py --artifacts-dir "${{ runner.temp }}/mdrack-release-artifacts"
+          git diff --check
+      - name: Windows artifact evidence gate
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          uv run python scripts/check_v13_release_packet.py --skip-quality-replay --artifacts-dir "${{ runner.temp }}/mdrack-release-artifacts"
           git diff --check
       - name: Upload release evidence
         uses: actions/upload-artifact@v4

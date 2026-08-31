@@ -25,6 +25,13 @@ workflow pins `uv==0.11.15`, the version used to
 validate the committed `uv.lock`; changing uv requires an explicit lock refresh
 and the same offline matrix rather than inheriting the setup action's latest uv.
 
+The hosted artifact smoke may provision the exact constrained runtime versions
+from the package index because a fresh runner has no warm wheel cache. The
+installed program checks, artifact audit, and evidence validation run after
+that provisioning step. Linux replays the full test lanes; Windows runs the
+package/release contract and all eight installed artifact cells. The broader
+Windows behavioral suite remains outside this release claim.
+
 Use the repository root for all commands:
 
 ```bash

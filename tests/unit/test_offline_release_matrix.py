@@ -30,6 +30,10 @@ def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     assert "GIT_CONFIG_KEY_0: core.autocrlf" in workflow
     assert "GIT_CONFIG_VALUE_0: 'false'" in workflow
     assert "fetch-depth: 0" in workflow
+    assert "Windows package contract gate" in workflow
+    assert "runner.os == 'Windows'" in workflow
+    assert "--allow-index-for-smoke-provisioning" in workflow
+    assert "--skip-quality-replay" in workflow
     assert "uv lock --check" in workflow
     assert "uv sync --all-extras --frozen" in workflow
     assert "uv sync --all-extras --frozen --offline" not in workflow

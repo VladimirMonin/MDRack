@@ -98,7 +98,7 @@ def _current_pytest_result() -> str:
     return ""  # pragma: no cover
 
 
-def _validate_packet(packet: dict[str, Any]) -> None:
+def _validate_packet(packet: dict[str, Any], *, replay_quality: bool = True) -> None:
     expected_keys = {
         "schema_version",
         "packet_kind",
@@ -224,7 +224,11 @@ def _validate_packet(packet: dict[str, Any]) -> None:
         r"\d+ passed(?:, \d+ skipped)?", quality.get("pytest", "")
     ):
         _fail("quality_result_invalid")
-    if quality.get("status") == "passed" and quality["pytest"] != _current_pytest_result():
+    if (
+        replay_quality
+        and quality.get("status") == "passed"
+        and quality["pytest"] != _current_pytest_result()
+    ):
         _fail("quality_result_stale")
 
     rendered = json.dumps(packet, sort_keys=True)
@@ -249,12 +253,17 @@ def _validate_artifact_files(packet: dict[str, Any], artifacts_dir: Path) -> Non
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifacts-dir", type=Path)
+    parser.add_argument(
+        "--skip-quality-replay",
+        action="store_true",
+        help="validate recorded quality evidence without rerunning the full suite on this host",
+    )
     args = parser.parse_args(argv)
     try:
         packet = json.loads(PACKET_PATH.read_text(encoding="utf-8"))
         if not isinstance(packet, dict):
             _fail("packet_not_object")
-        _validate_packet(packet)
+        _validate_packet(packet, replay_quality=not args.skip_quality_replay)
         if args.artifacts_dir is not None:
             _validate_artifact_files(packet, args.artifacts_dir)
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError):

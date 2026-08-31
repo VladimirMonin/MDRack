@@ -56,9 +56,12 @@ REQUIRED_PUBLICATION_OUTPUTS = {
 }
 
 
-def _run(command: list[str], *, cwd: Path) -> None:
+def _run(command: list[str], *, cwd: Path, offline: bool = True) -> None:
     env = os.environ.copy()
-    env["UV_OFFLINE"] = "1"
+    if offline:
+        env["UV_OFFLINE"] = "1"
+    else:
+        env.pop("UV_OFFLINE", None)
     env.setdefault("SOURCE_DATE_EPOCH", "0")
     subprocess.run(command, cwd=cwd, env=env, check=True)
 
@@ -386,7 +389,11 @@ def _check_expected_hashes(manifest: dict[str, Any], expected_path: Path) -> Non
         )
 
 
-def _installed_smoke(output_dir: Path) -> dict[str, Any]:
+def _installed_smoke(
+    output_dir: Path,
+    *,
+    allow_index_provisioning: bool = False,
+) -> dict[str, Any]:
     runtime, markers = _locked_runtime()
     _validate_runtime_ledger(runtime)
     expected_runtime = {
@@ -421,6 +428,7 @@ def _installed_smoke(output_dir: Path) -> dict[str, Any]:
                         "--find-links", str(output_dir), "--constraint", str(constraints), str(artifact),
                     ],
                     cwd=REPO_ROOT,
+                    offline=not allow_index_provisioning,
                 )
                 expected_version = _metadata(artifact)[1]
                 repo_root_literal = repr(str(REPO_ROOT))
@@ -480,6 +488,11 @@ def main() -> None:
     )
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--allow-index-for-smoke-provisioning",
+        action="store_true",
+        help="allow only the constrained dependency-install step to use the package index",
+    )
     parser.add_argument("--expected-manifest", type=Path)
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
@@ -499,6 +512,8 @@ def main() -> None:
                 command.append("--skip-build")
             if args.smoke:
                 command.append("--smoke")
+            if args.allow_index_for_smoke_provisioning:
+                command.append("--allow-index-for-smoke-provisioning")
             if args.expected_manifest:
                 command.extend(
                     ["--expected-manifest", str(args.expected_manifest.resolve())]
@@ -520,13 +535,21 @@ def main() -> None:
         **_install_graph(manifest["artifacts"]),
     }
     if args.smoke:
-        manifest["installed_smoke"] = _installed_smoke(output_dir)
+        manifest["installed_smoke"] = _installed_smoke(
+            output_dir,
+            allow_index_provisioning=args.allow_index_for_smoke_provisioning,
+        )
     manifest.update(
         {
             "schema_version": 1,
             "generated_for": "offline-release-matrix",
             "network": {
-                "allowed": False,
+                "allowed": args.allow_index_for_smoke_provisioning,
+                "dependency_provisioning": (
+                    "constrained_package_index"
+                    if args.allow_index_for_smoke_provisioning
+                    else "offline_cache_or_find_links"
+                ),
                 "telemetry": "not_measured",
                 "controls": ["UV_OFFLINE=1", "installed-smoke-socket-block"],
             },
