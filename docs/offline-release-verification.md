@@ -6,28 +6,31 @@ is retained for audit history and is not a current release gate.
 
 ## Non-negotiable default
 
-The release commands are local and offline. Set `UV_OFFLINE=1` for the commands
-and their subprocesses, install only from the lockfile/cache, and do not contact
-a provider, HTTP endpoint, source corpus, or package index. Provider calls,
-online-index fallback, and application network access are hard failures. The
-GitHub workflow is nevertheless hosted CI: checkout, tool setup/cache, matrix
-scheduling, and evidence upload are remote CI infrastructure, not local offline
-execution evidence. The live evaluator is opt-in and confirmation-guarded; it is
-not part of this release path.
+The release verification commands are local and offline after the environment
+has been provisioned. Set `UV_OFFLINE=1` for verification commands and their
+subprocesses, and do not contact a provider, HTTP endpoint, source corpus, or
+package index inside that boundary. Provider calls, online-index fallback, and
+application network access are hard failures. The GitHub workflow is hosted CI:
+checkout, tool setup, dependency provisioning from the committed lockfile,
+matrix scheduling, and evidence upload are remote infrastructure, not local
+offline execution evidence. The live evaluator is opt-in and
+confirmation-guarded; it is not part of this release path.
 
 The workflow runs on `workflow_dispatch` and `pull_request`. Its `ubuntu-latest`
 and `windows-latest` / Python 3.11 and 3.12 cells execute independently with
-`fail-fast: false`; the setup action's cache is used only to supply dependencies
-to those hosted cells. The workflow pins `uv==0.11.15`, the version used to
+`fail-fast: false`. A fresh hosted runner may populate its dependency cache from
+the package index during the lock-frozen provisioning step; the workflow then
+sets `UV_OFFLINE=1` before every quality, build, smoke, and evidence gate. The
+workflow pins `uv==0.11.15`, the version used to
 validate the committed `uv.lock`; changing uv requires an explicit lock refresh
 and the same offline matrix rather than inheriting the setup action's latest uv.
 
 Use the repository root for all commands:
 
 ```bash
-export UV_OFFLINE=1
 uv lock --check
-uv sync --all-extras --frozen --offline
+uv sync --all-extras --frozen
+export UV_OFFLINE=1
 ```
 
 On Windows, use the equivalent environment-variable syntax for the selected

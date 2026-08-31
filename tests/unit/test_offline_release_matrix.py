@@ -23,12 +23,13 @@ def test_offline_matrix_covers_four_distributions_and_both_artifact_kinds() -> N
 
 def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "offline-release-matrix.yml").read_text(encoding="utf-8")
-    assert "UV_OFFLINE: '1'" in workflow
+    assert 'echo "UV_OFFLINE=1" >> "$GITHUB_ENV"' in workflow
     assert "version: '0.11.15'" in workflow
     assert "os: [ubuntu-latest, windows-latest]" in workflow
     assert "python-version: ['3.11', '3.12']" in workflow
     assert "uv lock --check" in workflow
-    assert "uv sync --all-extras --frozen --offline" in workflow
+    assert "uv sync --all-extras --frozen" in workflow
+    assert "uv sync --all-extras --frozen --offline" not in workflow
     assert "offline_release_matrix.py --output-dir \"${{ runner.temp }}/mdrack-release-artifacts\"" in workflow
     assert "check_v13_release_packet.py --artifacts-dir" in workflow
     for gate in (
