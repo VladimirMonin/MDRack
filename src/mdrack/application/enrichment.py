@@ -7,15 +7,16 @@ Legacy representations without this block are independent and preserved exactly.
 from __future__ import annotations
 
 import json
+import struct
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 
 from mdrack_core.application.validation import validate_prepared_batch
 from mdrack_core.domain.batches import PreparedResourceBatch
 from mdrack_core.domain.common import JSONValue
 from mdrack_core.domain.publication import ExpectedPublication, ResourceSnapshot
-from mdrack_core.domain.resources import Locator, RepresentationRecord, SearchUnitRecord
+from mdrack_core.domain.resources import Locator, RepresentationRecord, ResourceRecord, SearchUnitRecord
 from mdrack_core.ports.publication import PublicationPort
 
 Slot = tuple[str, str]
@@ -80,17 +81,22 @@ def publish(port: PublicationPort, prepared: PreparedEnrichment, *, max_retries:
     if type(max_retries) is not int or not 0 <= max_retries <= 3:
         raise ValueError('max_retries must be an integer between zero and three')
     captured = prepared.captured
+    if captured.snapshot.batch is None or prepared.addition.resource != captured.snapshot.batch.resource:
+        raise ValueError('prepared resource differs from its original capture')
     current = captured.snapshot
     attempts = 0
     while True:
         _fresh(captured, current)
-        result = merge(current, prepared.addition)
+        assert current.batch is not None
+        addition = replace(prepared.addition,resource=current.batch.resource)
+        result = merge(current, addition)
         assert current.batch is not None
         if result.batch == current.batch:
             # Captured postconditions are not proof that they are still published.
             latest = port.read_snapshot(captured.snapshot.state.resource_id)
             _fresh(captured, latest)
-            latest_result = merge(latest, prepared.addition)
+            assert latest.batch is not None
+            latest_result = merge(latest,replace(prepared.addition,resource=latest.batch.resource))
             if latest_result.batch == latest.batch:
                 return EnrichmentPublication('already_published', attempts, latest_result)
             current = latest
@@ -113,10 +119,34 @@ def _fresh(captured: CapturedInputs, current: ResourceSnapshot) -> None:
     if _source(current) != captured.source_revision:
         raise StaleEnrichment('source revision changed')
     assert captured.snapshot.batch is not None and current.batch is not None
+    old_resource, new_resource = captured.snapshot.batch.resource,current.batch.resource
+    def source_material(resource: ResourceRecord) -> tuple[object,...]:
+        provenance = resource.metadata.get('provenance')
+        raw = provenance.get('raw_source_sha256') if isinstance(provenance,Mapping) else None
+        return resource.resource_kind,resource.media_type,raw
+    if source_material(old_resource) != source_material(new_resource):
+        raise StaleEnrichment('source material changed without a new generation')
     before, after = _outputs(captured.snapshot.batch), _outputs(current.batch)
     for key in captured.inputs:
-        if key not in after or before[key][1].artifact_revision != after[key][1].artifact_revision:
-            raise StaleEnrichment('immediate input revision changed')
+        if (key not in after or before[key][1].artifact_revision != after[key][1].artifact_revision
+                or _input_material(captured.snapshot.batch,key) != _input_material(current.batch,key)):
+            raise StaleEnrichment('immediate input revision or material changed')
+
+
+def _input_material(batch: PreparedResourceBatch, slot: Slot) -> tuple[object,...]:
+    rep,output = _outputs(batch)[slot]
+    info = rep.metadata['enrichment_v1']
+    assert isinstance(info,Mapping)
+    body = info.get('component_sha256',info.get('text_sha256',info.get('artifact_sha256')))
+    units = tuple(u for u in batch.units if u.representation_id == rep.representation_id)
+    ids = {u.unit_id for u in units}
+    vectors = tuple((v.unit_id,v.space_id,struct.pack('<' + 'd' * len(v.vector),*v.vector))
+                    for v in batch.vectors if v.unit_id in ids)
+    spaces = tuple(s for s in batch.spaces if any(v[1] == s.space_id for v in vectors))
+    shapes = tuple((u.unit_id,u.unit_kind,u.modality,u.evidence_locator,u.ordinal,
+                    u.token_count,u.token_count_kind,u.metadata) for u in units)
+    return (output.artifact_revision,body,info.get('material_fingerprint'),rep.representation_kind,
+            rep.modality,rep.producer_fingerprint,rep.language,shapes,vectors,spaces)
 
 
 def _targets_unchanged(captured: CapturedInputs, current: ResourceSnapshot) -> None:
@@ -248,6 +278,7 @@ class Output:
     source_revision: str
     artifact_revision: str
     dependencies: tuple[tuple[Slot, str], ...]
+    source_independent: bool = False
 
 
 def _output(rep: RepresentationRecord) -> Output | None:
@@ -270,7 +301,11 @@ def _output(rep: RepresentationRecord) -> Output | None:
         if key == slot or key in dict(parsed):
             raise ValueError('self or duplicate dependency')
         parsed.append((key, _text(dep.get('revision'))))
-    return Output(slot, _text(info.get('source_revision')), _text(info.get('artifact_revision')), tuple(parsed))
+    independent = info.get('source_independent', False)
+    if type(independent) is not bool or independent and parsed:
+        raise ValueError('source-independent output cannot have source/artifact dependencies')
+    return Output(slot, _text(info.get('source_revision')), _text(info.get('artifact_revision')),
+                  tuple(parsed), independent)
 
 
 def _required_output(rep: RepresentationRecord) -> Output:
@@ -301,6 +336,53 @@ def _acyclic(outputs: dict[Slot, tuple[RepresentationRecord, Output]]) -> None:
         pending = {key: deps - roots for key, deps in pending.items() if key not in roots}
 
 
+def invalid_dependencies(
+    active: dict[Slot, tuple[RepresentationRecord, Output]], protected: frozenset[Slot] = frozenset(),
+) -> set[Slot]:
+    """One app dependency owner shared by enrichment and source reconciliation."""
+    _acyclic(active)
+    invalid: set[Slot] = set()
+    while True:
+        stale = {key for key, (_, output) in active.items() if key not in invalid and any(
+            dependency in invalid or dependency not in active
+            or active[dependency][1].artifact_revision != revision for dependency, revision in output.dependencies)}
+        if not stale:
+            return invalid
+        if stale & protected:
+            raise StaleEnrichment('immediate artifact revision changed')
+        invalid.update(stale)
+
+
+def independent_output(rep: RepresentationRecord) -> bool:
+    output = _output(rep)
+    independent = rep.metadata.get('source_independent', False)
+    if type(independent) is not bool:
+        raise ValueError('explicit source independence must be boolean')
+    if independent and output is not None and output.dependencies:
+        raise ValueError('independent output has immediate dependencies')
+    return independent or output is not None and output.source_independent
+
+
+def prune_graph(batch: PreparedResourceBatch) -> PreparedResourceBatch | None:
+    """Drop stale derived outputs, then validate the actual remaining graph."""
+    outputs = _outputs(batch)
+    generation = batch.resource.metadata.get('source_revision')
+    stale_source = {key for key, (rep, output) in outputs.items()
+                    if not independent_output(rep) and output.source_revision != generation}
+    active = {key: value for key, value in outputs.items() if key not in stale_source}
+    stale = stale_source | invalid_dependencies(active)
+    removed = {outputs[key][0].representation_id for key in stale}
+    reps = tuple(r for r in batch.representations if r.representation_id not in removed)
+    if not reps:
+        return None
+    units = tuple(u for u in batch.units if u.representation_id not in removed)
+    ids = {u.unit_id for u in units}
+    result = PreparedResourceBatch(batch.resource, reps, units, batch.spaces,
+                                  tuple(v for v in batch.vectors if v.unit_id in ids), batch.facets)
+    validate_prepared_batch(result)
+    return result
+
+
 def _source(snapshot: ResourceSnapshot) -> str:
     if not snapshot.state.live or snapshot.batch is None:
         raise StaleEnrichment('published source required')
@@ -311,7 +393,8 @@ def _source(snapshot: ResourceSnapshot) -> str:
         raise StaleEnrichment('source binding differs from graph')
     # content_hash may identify prepared evidence, NOT the raw source.
     source = _text(resource.metadata.get('source_revision'))
-    if any(output.source_revision != source for _, output in _outputs(snapshot.batch).values()):
+    if any(output.source_revision != source and not independent_output(rep)
+           for rep, output in _outputs(snapshot.batch).values()):
         raise StaleEnrichment('existing output belongs to an old source revision')
     return source
 
@@ -358,17 +441,7 @@ def merge(current: ResourceSnapshot, addition: PreparedResourceBatch) -> MergeRe
     active = dict(before)
     active.update(incoming)
     _acyclic(active)
-    invalid_slots: set[Slot] = set()
-    while True:
-        newly_invalid = {slot for slot, (_, out) in active.items()
-                         if slot not in invalid_slots and any(
-                             key in invalid_slots or key not in active or active[key][1].artifact_revision != revision
-                             for key, revision in out.dependencies)}
-        if not newly_invalid:
-            break
-        if newly_invalid & incoming.keys():
-            raise StaleEnrichment('immediate artifact revision changed')
-        invalid_slots.update(newly_invalid)
+    invalid_slots = invalid_dependencies(active, frozenset(incoming))
     removed = {before[s][0].representation_id for s in changed | invalid_slots if s in before}
     kept_reps = tuple(r for r in old.representations if r.representation_id not in removed)
     new_reps = tuple(r for r in addition.representations if _required_output(r).slot in changed)

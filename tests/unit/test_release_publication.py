@@ -41,6 +41,7 @@ EXPECTED_PUBLIC_API_EXPORTS = (
     "SourceLocator",
     "StaticImageExtractor",
     "VisualEmbeddingProvider",
+    "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
 )
 FORBIDDEN_RELEASE_KEYS = {
     "id",

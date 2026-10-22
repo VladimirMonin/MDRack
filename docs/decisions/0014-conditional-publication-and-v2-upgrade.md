@@ -1,6 +1,6 @@
 # ADR-0014: conditional publication and explicit recognized app-v2 upgrade
 
-- Status: implementation decision; independent W3 qualification pending
+- Status: implemented; independently accepted in the W3 Windows/CPython 3.14.2 source/offline, actual Root and fresh installed synthetic scope; not live-runtime or release acceptance
 - Date: 2026-10-22
 - Supersedes only the no-upgrade rule for exact completed clean v2/0004
 - Core contract: `1.0.0-rc.2`; distributions core/media `1.0.0rc2`, SQLite `1.0.0rc3`, app `1.4.0rc2`

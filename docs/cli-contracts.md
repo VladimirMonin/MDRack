@@ -35,6 +35,22 @@ publishes FTS; unavailable requested host durability refuses. Full grammar, API,
 options, source-validation boundary, compatibility and remaining limits:
 [ready OCR v1](contracts/ready-ocr-v1.md).
 
+## Prepared enrichment/reindex v1 (1.4.0rc2)
+
+This prepared component is independently qualified on Windows/CPython 3.14.2 in
+source/local and non-editable installed boundaries, not live-runtime or release scope.
+
+Registered `resource enrichment-binding`, `enrich-prepared`, `read-artifact`,
+`publication-binding`, `reindex` and `withdraw` mirror the corresponding engine
+operations. `enrich-prepared ID FILE --kind transcript --purpose PURPOSE` accepts
+explicit lexical/dense flags, ready vector/artifact provenance, `--inputs`, bounded
+`--max-retries` and optional `--artifact-store` / `--require-durable`. It never calls
+models. Read-only does not index text; host durability requires actual retained
+bytes outside cache/store. Reindex uses a separate local expected-state envelope
+around unchanged manifest v1; explicit `resource import` remains whole-graph import.
+Full fields, outcomes, source/lifecycle and archive boundaries:
+[prepared enrichment v1](contracts/prepared-enrichment-v1.md).
+
 ## Scope
 
 This document is the current S2 contract for the normal local MDRack CLI. All

@@ -19,6 +19,14 @@
     "instructions/DOCS.instruction-style-guide.instructions.md",
     "instructions/TEST.quality-gates.instructions.md",
     "instructions/OBS.logging.instructions.md",
-    "instructions/WORKFLOW.build-orchestration.instructions.md"
+    "instructions/WORKFLOW.build-orchestration.instructions.md",
+    "docs/cli-contracts.md",
+    "docs/current-architecture/public-interfaces.md",
+    "docs/compatibility/v0.3-compatibility-registry.md",
+    "docs/contracts/ready-ocr-v1.md",
+    "docs/contracts/prepared-enrichment-v1.md",
+    "docs/contracts/prepared-resource-manifest-v1.md",
+    "docs/decisions/0015-ready-ocr-publication.md",
+    "docs/decisions/0016-prepared-enrichment-and-artifact-custody.md"
   ]
 }

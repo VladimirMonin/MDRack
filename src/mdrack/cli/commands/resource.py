@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
@@ -50,6 +51,10 @@ def _failure(ctx: click.Context, *, command: str, operation: str, error: Excepti
             code, message = "RESOURCE_NOT_FOUND", "Resource was not found"
         else:
             code, message = "RESOURCE_CATALOG_UNAVAILABLE", "Resource catalog is unavailable"
+    elif operation in {
+        "enrichment_binding", "enrich_prepared", "read_artifact", "publication_binding", "reindex", "withdraw",
+    }:
+        message = "Prepared resource operation failed"
     else:
         code, message = "RESOURCE_CATALOG_UNAVAILABLE", "Resource catalog is unavailable"
     logger.error("cli.resource.%s.failed", operation, extra={"reason": reason})
@@ -142,6 +147,82 @@ def enrich_ocr(
     finally:
         if engine is not None:
             engine.close()
+
+
+@resource.command(name="enrichment-binding")
+@click.argument("resource_id")
+@click.pass_context
+def enrichment_binding(ctx: click.Context, resource_id: str) -> None:
+    """Return the live prepared-artifact binding, without creation authority."""
+    _run(ctx,command="resource enrichment-binding",operation="enrichment_binding",
+         action=lambda engine: engine.prepared_enrichment_binding(resource_id))
+
+
+@resource.command(name="enrich-prepared")
+@click.argument("resource_id")
+@click.argument("artifact_path",type=click.Path(path_type=Path))
+@click.option("--kind",type=click.Choice(["ocr","text","transcript","frames","video"]),required=True)
+@click.option("--purpose",required=True)
+@click.option("--variant",default="default",show_default=True)
+@click.option("--lexical/--no-lexical",default=True,show_default=True)
+@click.option("--dense/--no-dense",default=False,show_default=True)
+@click.option("--artifact-store",type=click.Path(path_type=Path),default=None)
+@click.option("--require-durable",is_flag=True)
+@click.option("--inputs",default="[]",help='JSON list of [purpose, variant] immediate input slots.')
+@click.option("--max-retries",type=click.IntRange(0,3),default=1,show_default=True)
+@click.pass_context
+def enrich_prepared(ctx: click.Context, resource_id: str, artifact_path: Path, *, kind: str, purpose: str,
+                    variant: str, lexical: bool, dense: bool, artifact_store: Path | None,
+                    require_durable: bool, inputs: str, max_retries: int) -> None:
+    """Publish prepared artifacts/vectors without extraction or embedding calls."""
+    def action(engine: MDRackEngine) -> dict[str, object]:
+        selected = json.loads(inputs)
+        if (type(selected) is not list or any(type(item) is not list or len(item) != 2
+                or any(not isinstance(value,str) or not value.strip() for value in item) for item in selected)):
+            raise ValueError("invalid_input_slots")
+        return engine.enrich_prepared(resource_id,artifact_path,kind=kind,purpose=purpose,variant=variant,
+            lexical=lexical,dense=dense,artifact_store=artifact_store,require_durable=require_durable,
+            inputs=tuple(tuple(item) for item in selected),max_retries=max_retries)
+    _run(ctx,command="resource enrich-prepared",operation="enrich_prepared",action=action)
+
+
+@resource.command(name="read-artifact")
+@click.argument("reference")
+@click.option("--artifact-store",type=click.Path(path_type=Path),required=True)
+@click.pass_context
+def read_artifact(ctx: click.Context, reference: str, artifact_store: Path) -> None:
+    """Read an explicitly selected historical host-owned artifact; never index it."""
+    _run(ctx,command="resource read-artifact",operation="read_artifact",
+         action=lambda engine: engine.read_enrichment_artifact(reference,artifact_store=artifact_store))
+
+
+@resource.command(name="publication-binding")
+@click.argument("resource_id")
+@click.pass_context
+def publication_binding(ctx: click.Context, resource_id: str) -> None:
+    """Return the local CAS envelope for a new, explicit reindex operation."""
+    _run(ctx,command="resource publication-binding",operation="publication_binding",
+         action=lambda engine: engine.publication_binding(resource_id))
+
+
+@resource.command(name="reindex")
+@click.argument("resource_id")
+@click.argument("artifact_path",type=click.Path(path_type=Path))
+@click.option("--max-retries",type=click.IntRange(0,3),default=1,show_default=True)
+@click.pass_context
+def reindex(ctx: click.Context, resource_id: str, artifact_path: Path, max_retries: int) -> None:
+    """Reconcile an explicitly bound prepared base; keep unrelated projections."""
+    _run(ctx,command="resource reindex",operation="reindex",
+         action=lambda engine: engine.reindex_resource_file(resource_id,artifact_path,max_retries=max_retries))
+
+
+@resource.command(name="withdraw")
+@click.argument("resource_id")
+@click.pass_context
+def withdraw(ctx: click.Context, resource_id: str) -> None:
+    """Remove searchable projections while keeping the live logical lifecycle."""
+    _run(ctx,command="resource withdraw",operation="withdraw",
+         action=lambda engine: engine.withdraw_resource(resource_id))
 
 
 @resource.command(name="import")

@@ -51,6 +51,7 @@ REGISTRY_IMPORTS = {
         "SourceLocator",
         "StaticImageExtractor",
         "VisualEmbeddingProvider",
+        "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
     ),
     "mdrack.public_api.models": (
         "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput",

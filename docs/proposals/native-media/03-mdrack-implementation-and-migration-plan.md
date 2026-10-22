@@ -234,14 +234,27 @@ Windows/CPython 3.14.2 в source/local-component и non-editable installed гр�
 W4-R1 CLOSED. Проверены публичные engine/CLI, caller-owned файл, actual FTS,
 сохранение native/independent графа и vector bytes, repeat/correction, bounded CAS,
 stale-result refusal, reopen/new process и нормальный source-validated image rescan.
-Это не приёмка всей M03-06: остальные артефакты/projectors, dense-only transitions,
-source-transition rebuilding/withdrawal, host-durable хранение и применимые сквозные
-критерии остаются открыты. Live runtime, качество/стоимость и полная квалификация
-выпуска из этого результата не следуют.
+Готовый контур M03-06 — [prepared enrichment v1](../../contracts/prepared-enrichment-v1.md)
+и [ADR-0016](../../decisions/0016-prepared-enrichment-and-artifact-custody.md) — также
+независимо принят в Windows/CPython 3.14.2 actual Root/local-component и свежей
+non-editable installed границах; W4-R2 CLOSED. Проверены готовые OCR/text/transcript/
+frame/video projectors, четыре lexical/dense intent, зависимости и ручные коррекции,
+bounded CAS, source-transition/reindex/withdrawal, отдельный реальный host archive
+и reopen после удаления caller/cache копий. Affected strict gate проходит; прежние
+103 whole-repository diagnostics остаются отдельным долгом. Документированный Core
+publication inventory синхронизирован без изменения Core. Live runtime,
+качество/стоимость, W5/W6 и полная квалификация выпуска из этого результата не следуют.
 
-Новый прикладной use case, например `application/enrichment.py` TARGET, координирует source resolver, готовые артефакты, projectors и условную публикацию. Он использует существующий `ArtifactCache`, но не превращает его в каталог жизненных циклов или обязательный job store.
+Реализованные `application/enrichment.py`, `PreparedArtifactService` и `ReindexService`
+владеют объединением готовых артефактов и условной публикацией. Caller file либо
+отдельный host archive подтверждает фактическую доступность. `ArtifactCache` остаётся
+очищаемым средством повторного использования, не каталогом жизненных циклов,
+обязательным job store или единственным владельцем ручного текста.
 
-Извлечение отделяется от окончательного ingest. В `TranscriptIngestionService.prepare()` уже есть подготовка lexical batch без provider; `VideoCompositionService.prepare()` также выделена отдельно. Их можно переиспользовать. Вызов целого прежнего `ingest()` ради получения дополнения был бы ошибкой: такой путь способен выполнить финальную полную замену до прикладного объединения. [21], [22]
+Извлечение отделено от окончательного ingest. Готовые projectors переиспользуют
+provider-free `TranscriptIngestionService.prepare()` и `VideoCompositionService.prepare()`,
+не вызывая целый `ingest()` ради дополнения. Управляемые обычные producers используют
+условное сохранение; низкоуровневый явный replacement сохраняет прежний смысл. [21], [22]
 
 До вычисления и внешнего I/O читается исходный snapshot: фиксируются lifecycle, token, source binding и непосредственные входные ревизии. Затем определяется, пригоден ли готовый артефакт для этих входов и recipe, либо требуется разрешённое вычисление. Строятся только запрошенные поисковые проекции по четырём сочетаниям lexical/dense из №02. Настоящий transcript остаётся текстовым артефактом; nullable становится поисковая проекция, когда FTS запрещён. Вариант только для чтения не требует нового core batch.
 

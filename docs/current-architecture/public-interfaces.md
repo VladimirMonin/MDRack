@@ -33,6 +33,19 @@ exports, file grammar, result keys and remaining limitations are in
 [ready OCR v1](../contracts/ready-ocr-v1.md) and
 [ADR-0015](../decisions/0015-ready-ocr-publication.md).
 
+## Prepared enrichment and preserving reindex
+
+The broader [prepared enrichment v1](../contracts/prepared-enrichment-v1.md) adds
+`prepare_enrichment` / `publish_enrichment` / `enrich_prepared`, real host archive
+reads, and explicitly bound conditional reindex/withdraw operations. It consumes
+ready OCR/text, transcript, frame captions and supplied vectors across all four intents;
+it does not invoke extraction or inference. `DurableArtifactStore`,
+`PreparedEnrichmentOperation` and `PreparedReindex` are additive exports after the
+37 previously accepted names. See [ADR-0016](../decisions/0016-prepared-enrichment-and-artifact-custody.md).
+This prepared component is independently accepted on Windows/CPython 3.14.2 at
+actual Root/local-component and non-editable installed-package boundaries; W4-R2
+is closed. Native inference, real-corpus quality/cost and release remain unqualified.
+
 ## Explicit catalog maintenance
 
 Fresh `MDRackEngine.upgrade_catalog(backup_path, maintenance=True)` and CLI
@@ -153,6 +166,8 @@ Live command registration exposes:
 | `read file` | Read file metadata by public logical file ID. |
 | `read outline` | Read deterministic heading records by public file logical ID; no raw section IDs are exposed. |
 | `resource import`, `resource export`, `resource inspect`, `resource delete` | Prepared-resource lifecycle through the configured fixed catalog; no alternate `--catalog` path is registered. |
+| `resource enrichment-binding`, `enrich-prepared`, `read-artifact` | Explicit ready-artifact binding, four lexical/dense intents and historical host-archive reads without inference or hidden catalog creation. |
+| `resource publication-binding`, `reindex`, `withdraw` | Explicit conditional preserving reindex and projection withdrawal, distinct from unconditional whole-graph import. |
 | `eval retrieval` | Privacy-safe ordinal retrieval-quality metrics against the configured fixed catalog. |
 | `files list`, `files info` | List and inspect documents by public logical identity. |
 | `status` | Counts, active profile details, and schema version. |
@@ -206,6 +221,7 @@ built-in STT, a general media decoder, FFmpeg, or VLM capability.
 - exact duplicate and whole-resource vector similarity discovery;
 - provider-free unified textual whole-resource similarity by logical resource ID;
 - active-catalog manifest-v1 import, atomic export to a caller-supplied destination, redacted inspection, and logical-resource deletion;
+- prepared-artifact enrichment, explicit conditional preserving reindex/withdrawal, and historical host-owned artifact reads;
 - read-only aggregate analysis of the fixed catalog;
 - explicit or context-managed close.
 

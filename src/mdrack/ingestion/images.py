@@ -6,7 +6,7 @@ import logging
 import math
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 from uuid import uuid4
@@ -417,10 +417,28 @@ class ImageIngestionService:
                             raise ValueError("image_rescan_stale")
                     raise ValueError("image_rescan_conflict")
             if (publication_before is not None and publication_before.batch is not None
-                    and any("enrichment_v1" in r.metadata for r in publication_before.batch.representations)):
-                # New source/processing needs explicit new ready outputs; never run
-                # the old destructive replacement over independently enriched data.
-                raise ValueError("enriched_image_requires_explicit_repreparation")
+                    and self._visual_provider is None and self._extractor is None and not self._prepared_texts):
+                from mdrack.application.reindexing import PreparedReindex, publish_reindex, source_revision
+                old = publication_before.batch
+                previous_provenance = old.resource.metadata.get("provenance")
+                if (not isinstance(previous_provenance, Mapping)
+                        or previous_provenance.get("raw_source_sha256") == content_hash):
+                    raise ValueError("image_rescan_requires_explicit_repreparation")
+                source_revision(old.resource)  # never manufacture authority for an unknown legacy generation
+                changed_resource = replace(old.resource, media_type=resolved_media_type, content_hash=content_hash,
+                    source_namespace=source_namespace, locator=Locator("local_image", {"source_ref": source_ref}),
+                    title=old.resource.title if title is None else title,
+                    metadata={**old.resource.metadata, **resource_metadata(snapshot.provenance),
+                              "source_revision":str(uuid4()), "byte_size":len(content)})
+                guarded = _GuardedWritePort(self._catalog, snapshot, path, budget)
+                reindex_outcome = publish_reindex(
+                    guarded, PreparedReindex(publication_before,None,changed_resource,"source"))
+                if reindex_outcome["publication_status"] not in {
+                    "published", "withdrawn", "already_published", "already_withdrawn",
+                }:
+                    raise ValueError("image_rescan_conflict")
+                return ImageIngestionResult(resource_id,content_hash,resolved_media_type,len(content),
+                    tuple(reindex_outcome["representation_ids"]),tuple(reindex_outcome["unit_ids"]),None,None)
             extracted = (
                 self._prepared_texts if self._prepared_texts is not None
                 else await self._extract(content, resolved_media_type)
@@ -713,9 +731,14 @@ class ImageIngestionService:
                 if publication_before is None:
                     indexing.index(batch)
                 else:
-                    outcome = indexing.index_if_current(batch, ExpectedPublication(
-                        publication_before.state, create=not publication_before.state.live))
-                    if not outcome.applied:
+                    from mdrack.application.reindexing import producer_job, publish_reindex, source_revision
+                    job = producer_job(publication_before,batch,owner="source",
+                                       generation=source_revision(batch.resource))
+                    reindex_outcome = publish_reindex(guarded_port,job,allow_noop=False)
+                    if job.incoming is not None:
+                        representations = list(job.incoming.representations)
+                        units = list(job.incoming.units)
+                    if reindex_outcome["publication_status"] not in {"published","already_published"}:
                         raise ValueError("image_publication_conflict")
                 published = True
             except Exception:

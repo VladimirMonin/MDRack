@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from mdrack.adapters.sqlite.canonical_catalog import ApplicationSearchReadSessions
 from mdrack.application.compatibility import create_application_storage
+from mdrack.application.durable_artifacts import DurableArtifactStore
 from mdrack.application.indexing import IndexingService
 from mdrack.application.manifest import PreparedResourceFacade
 from mdrack.application.media_search import (
@@ -18,8 +19,10 @@ from mdrack.application.media_search import (
     ingest_native_image,
 )
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
+from mdrack.application.prepared_enrichment import PreparedArtifactService, PreparedEnrichmentOperation
 from mdrack.application.query import ReadService
 from mdrack.application.ready_ocr import ReadyOCROperation, ReadyOCRService
+from mdrack.application.reindexing import PreparedReindex, ReindexService, publish_reindex
 from mdrack.application.resource_catalog import (
     MetadataCatalogService,
     MetadataFacetValue,
@@ -395,6 +398,76 @@ class MDRackEngine:
             metadata_weight=metadata_weight,
             limit=limit,
         )
+
+    def _artifact_archive(self, path: Path) -> DurableArtifactStore:
+        try:
+            selected = Path(path).resolve()
+            store = (self.root / self.config.paths.store).resolve()
+            cache = (self.root / self.config.cache.directory).resolve()
+        except (OSError,ValueError,RuntimeError):
+            raise ValueError('artifact_owner_unavailable') from None
+        if any(selected.is_relative_to(owner) or owner.is_relative_to(selected) for owner in (store,cache)):
+            raise ValueError("artifact_owner_must_be_outside_store_and_cache")
+        return DurableArtifactStore(path)
+
+    def _prepared_artifacts(self, artifact_store: Path | None = None) -> PreparedArtifactService:
+        from mdrack_core.ports.publication import PublicationPort
+        archive = None if artifact_store is None else self._artifact_archive(artifact_store)
+        return PreparedArtifactService(cast(PublicationPort, self._transcript_catalog()), archive)
+
+    def prepared_enrichment_binding(self, resource_id: str) -> dict[str, object]:
+        return self._prepared_artifacts().binding(resource_id)
+
+    def prepare_enrichment(
+        self, resource_id: str, artifact_path: Path, *, kind: str, purpose: str, variant: str = "default",
+        lexical: bool = True, dense: bool = False, artifact_store: Path | None = None,
+        require_durable: bool = False, inputs: tuple[tuple[str, str], ...] = (),
+    ) -> PreparedEnrichmentOperation:
+        return self._prepared_artifacts(artifact_store).prepare(
+            resource_id, artifact_path, kind=kind, purpose=purpose, variant=variant, lexical=lexical,
+            dense=dense, require_durable=require_durable, inputs=inputs,
+        )
+
+    def publish_enrichment(self, operation: PreparedEnrichmentOperation, *, max_retries: int = 1) -> dict[str, object]:
+        return self._prepared_artifacts().publish(operation, max_retries=max_retries)
+
+    def enrich_prepared(
+        self, resource_id: str, artifact_path: Path, *, kind: str, purpose: str, variant: str = "default",
+        lexical: bool = True, dense: bool = False, artifact_store: Path | None = None,
+        require_durable: bool = False, inputs: tuple[tuple[str, str], ...] = (), max_retries: int = 1,
+    ) -> dict[str, object]:
+        return self._prepared_artifacts(artifact_store).enrich(
+            resource_id, artifact_path, kind=kind, purpose=purpose, variant=variant, lexical=lexical,
+            dense=dense, require_durable=require_durable, inputs=inputs, max_retries=max_retries,
+        )
+
+    def read_enrichment_artifact(self, reference: str, *, artifact_store: Path) -> dict[str, object]:
+        return self._artifact_archive(artifact_store).read(reference)
+
+    def publication_binding(self, resource_id: str) -> dict[str, object]:
+        return ReindexService(self._prepared_artifacts().port).binding(resource_id)
+
+    def prepare_reindex_file(self, resource_id: str, path: Path,
+                            *, inputs: tuple[tuple[str, str], ...] = ()) -> PreparedReindex:
+        return ReindexService(self._prepared_artifacts().port).prepare_file(resource_id,path,inputs=inputs)
+
+    def publish_reindex(self, operation: PreparedReindex, *, max_retries: int = 1) -> dict[str, object]:
+        port = self._prepared_artifacts().port
+        if operation.publication_owner is not port:
+            raise ValueError('prepared_operation_belongs_to_other_context')
+        return dict(publish_reindex(port,operation,max_retries=max_retries))
+
+    def reindex_resource_file(self, resource_id: str, path: Path, *, max_retries: int = 1) -> dict[str, object]:
+        return ReindexService(self._prepared_artifacts().port).reindex_file(resource_id,path,max_retries=max_retries)
+
+    def withdraw_resource(self, resource_id: str) -> dict[str, object]:
+        from mdrack_core import ExpectedPublication
+        port = self._prepared_artifacts().port
+        snapshot = port.read_snapshot(resource_id)
+        if not snapshot.state.live:
+            raise ValueError("withdraw_requires_live_resource")
+        outcome = port.withdraw_if_current(resource_id,ExpectedPublication(snapshot.state))
+        return {"resource_id":resource_id,"publication_status":"withdrawn" if outcome.applied else "conflict"}
 
     def ready_ocr_binding(self, resource_id: str) -> dict[str, object]:
         """Return the current local source/lifecycle binding for a ready OCR file."""
@@ -817,6 +890,7 @@ class MDRackEngine:
     def _transcript_ingestion_service(self) -> TranscriptIngestionService:
         return TranscriptIngestionService(
             self._transcript_catalog(),
+            conditional_publication=isinstance(self._search_read_sessions, ApplicationSearchReadSessions),
             embedding_provider=self.embedding_provider,
             embedding_profile=self._active_embedding_profile(),
             profile=self.profile,
@@ -838,6 +912,7 @@ class MDRackEngine:
     def _video_composition_service(self) -> VideoCompositionService:
         return VideoCompositionService(
             self._transcript_catalog(),
+            conditional_publication=isinstance(self._search_read_sessions, ApplicationSearchReadSessions),
             embedding_provider=self.embedding_provider,
             embedding_profile=self._active_embedding_profile(),
             profile=self.profile,

@@ -29,8 +29,10 @@ mdrack --root ./collection resource enrich-ocr image-id ./ready.json --source-im
 ```
 
 `--variant` is explicit; `--lexical/--no-lexical`, `--dense/--no-dense`,
-`--require-durable`, and `--max-retries 0..3` mirror the API. Dense OCR is currently
-refused: no ready dense projector or model call is silently substituted.
+`--require-durable`, and `--max-retries 0..3` mirror this specialized API. Dense OCR
+is refused here: no ready dense projector or model call is silently substituted.
+The broader [prepared enrichment API](prepared-enrichment-v1.md) accepts explicit
+ready vectors and a real host-owned archive with its own closed envelope.
 
 For staged work, `prepare_ready_ocr` accepts the same preparation options and returns
 `ReadyOCROperation`; `publish_ready_ocr(operation, max_retries=1)` publishes it without
@@ -72,9 +74,10 @@ binding and text bytes, not an external producer signature or OCR quality.
 The file is checked before preparation and again before publication; changed or
 missing bytes refuse. The original file is not copied into ArtifactCache, removed,
 or rewritten by this use case. `caller_owned_verified` means actual available bytes
-with retained caller custody, not an archival promise. Host-durable storage is not
-implemented; `require_durable=True` / `--require-durable` explicitly refuses rather
-than trusting a metadata pledge. No retention field is accepted in the file.
+with retained caller custody, not an archival promise. This specialized API has no
+host archive option; `require_durable=True` / `--require-durable` explicitly refuses
+rather than trusting a metadata pledge. No retention field is accepted in this file.
+Use the separate prepared-enrichment contract for host-owned custody.
 
 Snapshot/lifecycle/token/source binding and immediate input slots are captured
 **before artifact or selected-source I/O**. `source_path` / `--source-image` supplies
@@ -135,15 +138,21 @@ gets another generation. Missing legacy generation is never reconstructed.
 provider is a genuine source-validated ready-projection rescan: it reads/signature-
 checks the selected image, checks raw provenance and source binding, and republishes
 the complete current graph through bounded guarded CAS. It retains OCR and native
-and independent vectors exactly. Changed source/processing over enriched data
-requires explicit new ready outputs and currently refuses instead of silently
-running the old destructive replacement. Explicit provider-driven native ingestion
-continues to execute that provider, including its failure/cancellation checks; a
+and independent vectors exactly. The broader prepared M03-06 contract reconciles
+explicitly prepared producer outputs rather than destructively replacing independent
+projections. Observed changed source without new outputs removes stale source-bound
+projections (withdrawal if none remain); unknown legacy independence is not guessed.
+Explicit provider-driven native ingestion continues to execute that provider,
+including its failure/cancellation checks; a
 rescan optimization does not suppress explicitly requested model work. Markdown
 `scan` remains Markdown-only and is not used as image-rescan evidence.
 
 No old public exports, envelopes or text policies are removed, and no Core/SQLite
-schema/API version, package pin or transport changes are required. Remaining
-M03-06 work includes other artifact/projector families, full source-transition
-rebuilding and host-durable artifact storage. See
-[ADR-0015](../decisions/0015-ready-ocr-publication.md).
+schema/API version, package pin or transport changes are required. The broader
+[prepared enrichment contract](prepared-enrichment-v1.md) is independently qualified
+for the other ready families, preserving reindex and real host custody, in the same
+Windows/CPython 3.14.2 source/local and non-editable installed component boundaries.
+That broader qualification does not widen this specialized API or imply live/runtime,
+quality/cost or release acceptance. See
+[ADR-0015](../decisions/0015-ready-ocr-publication.md) and
+[ADR-0016](../decisions/0016-prepared-enrichment-and-artifact-custody.md).

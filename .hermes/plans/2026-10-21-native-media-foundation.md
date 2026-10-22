@@ -78,9 +78,18 @@ This entry tracks execution, not another roadmap or evidence registry.
   calls, preserving native/independent graphs and vector bytes through repeat,
   correction, bounded CAS, stale-result refusal, reopen and normal image rescan.
   The additive export/import snapshots are synchronized and closed negative controls
-  remain strict. This is the first family, not whole W4/M03-06: other artifacts/
-  projectors, dense-only transitions, changed-source rebuilding/withdrawal and
-  host archival remain OPEN. Caller custody does not claim host durability.
+  remain strict. The connected W4/M03-06 prepared enrichment/reindex/durable-custody
+  component is now also independently ACCEPTED in actual Root/local and fresh
+  non-editable installed Windows/CPython3.14.2 boundaries; W4-R2 CLOSED. Ready
+  OCR/text/transcript/frame/video projectors, all four intents, dependency/manual
+  correction, preserving producers, changed-source invalidation, withdrawal/reentry,
+  import/delete/tombstones, bounded real-connection CAS and actual host retention/
+  cache deletion/reopen are qualified. Affected11 strict is GREEN; all103 inherited
+  whole-static diagnostics remain exact and are not waived. Core publication docs/
+  inventory are synchronized without neutral code changes. This prepared component
+  does not close native builders, live inference, real corpus/quality-cost, global
+  full/expanded-installed or release obligations. Caller custody alone still does
+  not claim host durability; the separate archive supplies the qualified retention.
 - W5: common mechanisms + evaluator → native temporal/media builders and app preparation;
   frames/audio/direct video separately; real versioned RU/EN/cross-language corpus,
   held-out source groups, A–D/optional E, paired enrichment and quality/cost policy.

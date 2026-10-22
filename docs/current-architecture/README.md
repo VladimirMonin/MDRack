@@ -31,6 +31,8 @@ When sources disagree, use this order:
 
 - [Ready OCR publication v1](../contracts/ready-ocr-v1.md) — app-owned merge, caller custody, source binding, normal image rescan and explicit limits.
 - [ADR-0015: ready OCR publication](../decisions/0015-ready-ocr-publication.md)
+- [Prepared enrichment and source reconciliation v1](../contracts/prepared-enrichment-v1.md) — qualified prepared component: four intents, ready media projectors, preserving reindex and real host archive.
+- [ADR-0016: prepared enrichment and custody](../decisions/0016-prepared-enrichment-and-artifact-custody.md)
 
 - [Getting started](../getting-started.md)
 - [Operations and troubleshooting](../operations.md)
@@ -95,14 +97,18 @@ never migrates. See [recovery](../recovery.md) and [SQLite API](../../packages/m
 The first [ready-OCR family](../contracts/ready-ocr-v1.md), including purpose-aware
 merge and normal image rescan, is independently accepted on Windows/CPython 3.14.2
 source/local components and non-editable installed packages. Caller-owned retention
-is verified; host archival and the remaining W4 families are still open, not storage proof.
+is verified. The broader prepared-enrichment component is independently accepted
+in those source/local and installed boundaries, including other ready families,
+conditional reindex/source transitions and separate host archival; W4-R2 is closed.
+Affected strict typing is qualified, while inherited whole-static debt, full-suite,
+live-runtime, quality/cost and release obligations remain separate and open.
 
 ## Future / proposed
 
 [Native media and late enrichment](../proposals/native-media/README.md) is the full
-proposed 01–04 design bundle and implementation programme. The search-snapshot
-foundation above is implemented in unreleased source; it does not make native-media
-full native-media or late enrichment current implemented contracts.
+proposed 01–04 design bundle and implementation programme. The qualified search
+snapshots and prepared enrichment above do not implement the remaining native-media
+builders, live routes, real-corpus quality/cost evaluation or release programme.
 
 ## Historical material
 

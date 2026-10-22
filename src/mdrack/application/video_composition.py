@@ -28,6 +28,7 @@ from mdrack_core import (
     ResourceRecord,
 )
 from mdrack_core.application.indexing import CoreIndexingService
+from mdrack_core.ports.publication import PublicationPort
 from mdrack_media import (
     REPRESENTATION_TIMED_PASSAGE,
     EmbeddingFingerprint,
@@ -81,6 +82,7 @@ class VideoCompositionService:
         embedding_profile: EmbeddingProfile | None = None,
         profile: str = "default",
         vector_value_policy: str | None = None,
+        conditional_publication: bool = False,
     ) -> None:
         if not callable(getattr(catalog, "replace_resource", None)):
             raise TypeError("catalog must support complete resource replacement")
@@ -91,6 +93,7 @@ class VideoCompositionService:
         if embedding_profile is not None and embedding_provider is None:
             raise ValueError("embedding_provider and embedding_profile must be supplied together")
         self._catalog = catalog
+        self._conditional_publication = conditional_publication
         self._provider = embedding_provider
         self._text_space = (
             None if embedding_profile is None else CanonicalTextEmbeddingSpace(embedding_profile)
@@ -291,6 +294,16 @@ class VideoCompositionService:
         chunking_policy: TimedChunkingPolicy | None = None,
         embeddings: bool = True,
     ) -> VideoCompositionResult:
+        publication_port: PublicationPort | None = None
+        if self._conditional_publication:
+            if not isinstance(self._catalog, PublicationPort):
+                raise TypeError("publication capability required")
+            publication_port = self._catalog
+        snapshot = publication_port.read_snapshot(transcript.resource_id) if publication_port is not None else None
+        if snapshot is not None:
+            from mdrack.application.reindexing import require_prepared_binding
+            require_prepared_binding(snapshot,transcript.metadata)
+            require_prepared_binding(snapshot,frames.metadata)
         lexical = self.prepare(
             transcript,
             frames,
@@ -358,7 +371,14 @@ class VideoCompositionService:
                 "vector_count": len(batch.vectors),
             },
         )
-        self._indexing.index(batch)
+        if snapshot is None:
+            self._indexing.index(batch)
+        else:
+            from mdrack.application.reindexing import producer_job, publish_reindex
+            assert publication_port is not None
+            result = publish_reindex(publication_port, producer_job(snapshot, batch, owner="video"))
+            if result["publication_status"] not in {"published", "already_published"}:
+                raise ValueError("publication_conflict")
         logger.info(
             "video.compose.completed",
             extra={

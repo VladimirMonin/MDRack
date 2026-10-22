@@ -115,11 +115,16 @@ def test_normal_image_ingest_rescan_reads_source_and_preserves_enrichment_withou
         assert result.resource_id == 'image'
         assert found(engine, 'cobaltmanual')
         image.write_bytes(b'\x89PNG\r\n\x1a\nchanged-source')
-        import pytest
+        asyncio.run(engine.ingest_image(image, resource_id='image', source_namespace='fixture',
+                                        source_ref='image.png'))
+        changed = engine.storage.resource_store.read_snapshot('image')
+        assert changed.state.status == 'live_without_projections'
+        assert changed.state.lifecycle_id == after.state.lifecycle_id
+        assert changed.state.state_token != after.state.state_token
+        assert changed.batch is None
+        assert not found(engine, 'cobaltmanual')
         with pytest.raises(ValueError):
-            asyncio.run(engine.ingest_image(image, resource_id='image', source_namespace='fixture',
-                                            source_ref='image.png'))
-        assert engine.storage.resource_store.read_snapshot('image') == after
+            engine.enrich_ready_ocr('image', path)
     finally:
         engine.close()
 

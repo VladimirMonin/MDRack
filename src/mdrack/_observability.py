@@ -56,7 +56,9 @@ _schema("index.file.failed", "run_id file_ref status reason")
 _schema("index.file.delete_failed", "run_id file_ref reason")
 _schema("markdown.parse.finished", "run_id file_ref block_count parser status")
 _schema("chunk.build.finished", "run_id file_ref block_count chunk_count chunk_strategy status")
-for _operation in ("import", "export", "inspect", "delete"):
+_RESOURCE_OPERATIONS = ("import", "export", "inspect", "delete", "enrichment_binding", "enrich_prepared",
+                        "read_artifact", "publication_binding", "reindex", "withdraw")
+for _operation in _RESOURCE_OPERATIONS:
     _schema(f"cli.resource.{_operation}.failed", "reason")
     _schema(f"cli.resource.{_operation}.completed", "")
 
@@ -83,7 +85,8 @@ _LABELS = {
     "query_modality": frozenset(("text", "image", "stored_unit")),
     "encoding_role": frozenset(("document", "query", "similarity")),
     "target": frozenset(("unit", "resource")),
-    "publication_status": frozenset(("not_requested", "published", "already_published", "conflict", "failed")),
+    "publication_status": frozenset(("not_requested", "published", "already_published", "conflict", "failed",
+                                     "withdrawn", "already_withdrawn")),
     "artifact_status": frozenset(("not_requested", "caller_prepared")),
     "reason": frozenset("""
         cancelled validation_failed unsupported_embedding_route
@@ -176,7 +179,7 @@ class AppEventLogger:
                 name not in ("cli.resource.%s.failed", "cli.resource.%s.completed")
                 or len(args) != 1
                 or type(args[0]) is not str
-                or args[0] not in ("import", "export", "inspect", "delete")
+                or args[0] not in _RESOURCE_OPERATIONS
             ):
                 raise ValueError("unknown app event template")
             name = name % args
