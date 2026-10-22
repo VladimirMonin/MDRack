@@ -1,5 +1,24 @@
 # MDRack CLI Contracts
 
+## Native temporal/media v1 (1.4.0rc3 candidate)
+
+`native ingest PATH --kind frames|audio|video --source-namespace NS --source-ref REF`
+performs bounded actual CPU preparation and the same conditional native engine
+publication. Range/window/hop/frame-step/unit/prepared-byte budgets are explicit;
+canonical media resource ID is generated unless supplied. `native search PATH`
+requires kind/start/end and one prepared query unit; candidate modality and target
+are independent. `native query --text TEXT|--unit-id ID` reuses the existing planner;
+`native capabilities` reports selected adapter declarations without probing a model.
+Existing `read unit ID` preserves null native text and temporal locators.
+
+Default production LM Studio embedding capability remains textual and rejects
+native inputs before source/decoder/HTTP work. Explicit `--provider synthetic`
+uses deterministic byte-hash vectors for real local-component/installed orchestration,
+not native inference or relevance. Source and CLI use one standard JSON envelope;
+errors are fixed payload-free codes/messages. Full parameters, coverage/precision,
+source/recipe/CAS semantics, four pure media records and three builders:
+[native temporal v1](contracts/native-temporal-v1.md).
+
 ## Explicit recognized app-v2 maintenance (1.4.0rc2)
 
 `mdrack --root ./notes rebuild upgrade --backup ../catalog-backup.sqlite3 --maintenance`

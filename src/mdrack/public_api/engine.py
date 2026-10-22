@@ -19,6 +19,12 @@ from mdrack.application.media_search import (
     ingest_native_image,
 )
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
+from mdrack.application.native_media import (
+    NativeMediaResult,
+    ingest_native_media,
+    native_media_capabilities,
+    search_native_media,
+)
 from mdrack.application.prepared_enrichment import PreparedArtifactService, PreparedEnrichmentOperation
 from mdrack.application.query import ReadService
 from mdrack.application.ready_ocr import ReadyOCROperation, ReadyOCRService
@@ -72,6 +78,7 @@ from mdrack.application.video_composition import (
 )
 from mdrack.diagnostics.storage import StorageAnalysis, analyze_application_storage
 from mdrack.domain.indexing import IndexingResult, SourceLocator
+from mdrack.domain.native_media import NativeMediaKind, NativeMediaPolicy
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.domain.retrieval import RetrievalResult
 from mdrack.embeddings.prepared import LegacyTextEmbeddingAdapter
@@ -85,6 +92,7 @@ from mdrack.ingestion.images import (
     ImageSearchResult,
     VisualEmbeddingProvider,
 )
+from mdrack.ingestion.native_decoding import NativeMediaDecoder
 from mdrack.ports.embeddings import EmbeddingProvider, PreparedEmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
 from mdrack.public_api.models import UnifiedTextSimilarityResult
@@ -580,6 +588,37 @@ class MDRackEngine:
             expected_revision=expected_revision, resolver=resolver,
             derived_text=derived_text, derived_lexical=derived_lexical, derived_dense=derived_dense,
         )
+
+    def native_media_capabilities(self) -> dict[str, object]:
+        """Return adapter declarations without opening sources/catalogs or calling a model."""
+        return native_media_capabilities(self._prepared_provider())
+
+    async def ingest_native_media(
+        self, path: Path | None, *, kind: NativeMediaKind, resource_id: str,
+        source_namespace: str, source_ref: str, policy: NativeMediaPolicy = NativeMediaPolicy(),
+        expected_revision: str | None = None, resolver: SourceResolver | None = None,
+        decoder: NativeMediaDecoder | None = None, max_retries: int = 1,
+    ) -> NativeMediaResult:
+        """Decode native frames/audio/direct-video separately and publish through existing CAS."""
+        return await ingest_native_media(self._prepared_provider(),
+            lambda: getattr(self._application_storage(create=True), "resource_store"), path,
+            kind=kind, resource_id=resource_id, source_namespace=source_namespace, source_ref=source_ref,
+            policy=policy, expected_revision=expected_revision, resolver=resolver,
+            decoder=decoder, max_retries=max_retries)
+
+    async def search_native_media(
+        self, path: Path | None, *, kind: NativeMediaKind, policy: NativeMediaPolicy = NativeMediaPolicy(),
+        scope: SearchScope = SearchScope(), target: str = "resource", mode: str = "hybrid",
+        allow_partial: bool = False, limit: int = 20, candidate_budget: int = 100,
+        source_ref: str = "query-media", expected_revision: str | None = None,
+        resolver: SourceResolver | None = None, decoder: NativeMediaDecoder | None = None,
+    ) -> MediaSearchResult:
+        provider = self._prepared_provider()
+        service = MediaSearchService(provider, read_sessions=self._search_read_sessions,
+            catalog=None if self._search_read_sessions is not None else self._transcript_catalog())
+        return await search_native_media(service, provider, path, kind=kind, policy=policy, scope=scope,
+            target=target, mode=mode, allow_partial=allow_partial, limit=limit, candidate_budget=candidate_budget,
+            source_ref=source_ref, expected_revision=expected_revision, resolver=resolver, decoder=decoder)
 
     async def search_media(self, request: MediaSearchRequest) -> MediaSearchResult:
         return await MediaSearchService(

@@ -5,7 +5,7 @@ import logging
 import math
 from collections.abc import Callable, Mapping
 from contextlib import nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,7 @@ from mdrack._observability import AppEventLogger
 from mdrack.application._native_observation import NativeObservation, ObservedProvider
 from mdrack.application.source_resolution import SourceResolver
 from mdrack.application.vector_values import canonicalize_for_space
-from mdrack.domain.embedding_inputs import EmbeddingResult, EncodingRole, ImageInput, TextInput
+from mdrack.domain.embedding_inputs import AudioInput, EmbeddingResult, EncodingRole, ImageInput, TextInput, VideoInput
 from mdrack.ingestion.images import (
     ExtractedImageText,
     ImageEmbeddingSpace,
@@ -50,7 +50,7 @@ class StoredUnitInput:
 
 @dataclass(frozen=True)
 class MediaSearchRequest:
-    query: TextInput | ImageInput | StoredUnitInput
+    query: TextInput | ImageInput | AudioInput | VideoInput | StoredUnitInput
     scope: SearchScope = field(default_factory=SearchScope)
     target: str = "resource"
     mode: str = "hybrid"
@@ -62,7 +62,7 @@ class MediaSearchRequest:
     evidence_limit: int = 3
 
     def __post_init__(self) -> None:
-        if not isinstance(self.query, (TextInput, ImageInput, StoredUnitInput)):
+        if not isinstance(self.query, (TextInput, ImageInput, AudioInput, VideoInput, StoredUnitInput)):
             raise ValueError("invalid_media_query")
         if not isinstance(self.scope, SearchScope) or self.target not in {"unit", "resource"}:
             raise ValueError("invalid_media_scope")
@@ -133,9 +133,12 @@ class MediaSearchService:
         self.read_sessions = read_sessions
         self.catalog = catalog
 
-    def _candidates(self, request: MediaSearchRequest) -> tuple[str, ...]:
-        # No implicit query-modality filter. Empty scope means every declared route target.
-        return request.scope.modalities or ("text", "image")
+    def _candidates(self, request: MediaSearchRequest, modality: str) -> tuple[str, ...]:
+        # Compatibility belongs to this role/input pair, not to the whole space
+        # or unrelated capability rows. Cross-modal targets remain explicit.
+        role = EncodingRole.SIMILARITY if isinstance(request.query, StoredUnitInput) else EncodingRole.QUERY
+        capability = self.provider.capabilities.require(role, modality, request.scope.modalities)
+        return request.scope.modalities or capability.candidate_modalities
 
     async def search(self, request: MediaSearchRequest) -> MediaSearchResult:
         observation = NativeObservation(
@@ -162,6 +165,10 @@ class MediaSearchService:
         prepared: EmbeddingResult | None = None
         preparation_failure = False
         query = request.query
+        # Pure lexical search needs no embedding route. Stored similarity resolves
+        # its input modality inside the same read session as its vector and results.
+        candidates = (() if request.mode == 'text' or isinstance(query, StoredUnitInput)
+                      else self._candidates(request, query.modality))
         if isinstance(query, ImageInput):
             signature = _image_signature_probe(query.content)
             if signature.verified_media_type != query.media_type:
@@ -172,7 +179,7 @@ class MediaSearchService:
             raise ValueError("similarity_role_unsupported")
         if request.mode != "text" and not isinstance(query, StoredUnitInput):
             # Unsupported policy is a refusal, not a partial provider failure.
-            provider.capabilities.validate(query, EncodingRole.QUERY, self._candidates(request))
+            provider.capabilities.validate(query, EncodingRole.QUERY, candidates)
             observation.plan_branches(*(
                 ('lexical', 'vector') if isinstance(query, TextInput) and request.mode == 'hybrid' else ('vector',)
             ))
@@ -194,7 +201,8 @@ class MediaSearchService:
                 unit = catalog.read_unit(query.unit_id)
                 if unit is None:
                     raise ValueError("similarity_basis_unavailable")
-                provider.capabilities.require(EncodingRole.SIMILARITY, unit.modality, self._candidates(request))
+                candidates = self._candidates(request, unit.modality)
+                provider.capabilities.require(EncodingRole.SIMILARITY, unit.modality, candidates)
                 observation.plan_branches('vector')
                 vector = catalog.read_vector(query.unit_id, provider.space.space_id)
                 if vector is None:
@@ -219,7 +227,11 @@ class MediaSearchService:
                                             request.candidate_budget, prepared.space.fingerprint),)
             if not lexical and not vectors:
                 raise ValueError("no_applicable_search_branch")
-            plan = SearchRequest(lexical, vectors, request.scope, request.target, request.limit,
+            # Enforce the admitted route in Core/SQLite before candidate limits,
+            # retaining every other caller filter. Lexical-only policy is unchanged.
+            scope = (replace(request.scope, modalities=candidates)
+                     if request.mode != 'text' and not request.scope.modalities else request.scope)
+            plan = SearchRequest(lexical, vectors, scope, request.target, request.limit,
                                  evidence_limit_per_resource=request.evidence_limit,
                                  allow_partial=request.allow_partial, request_id=request_id)
             result = _ObservedRetrievalService(catalog, observation).search(plan)

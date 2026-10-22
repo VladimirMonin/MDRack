@@ -90,8 +90,16 @@ This entry tracks execution, not another roadmap or evidence registry.
   does not close native builders, live inference, real corpus/quality-cost, global
   full/expanded-installed or release obligations. Caller custody alone still does
   not claim host durability; the separate archive supplies the qualified retention.
-- W5: common mechanisms + evaluator → native temporal/media builders and app preparation;
-  frames/audio/direct video separately; real versioned RU/EN/cross-language corpus,
+- W5: original M03-07 native temporal/media component independently ACCEPTED on
+  Windows/CPython3.14.2 actual Root and fresh noneditable installed packages;
+  W5-R1 CLOSED. App1.4.0rc3/media1.0.0rc3 pure ready-vector builders, bounded CPU
+  frames/audio/visual-only direct video, async engine/registered CLI, current-role/input
+  candidate resolution and effective pre-limit filtering, shared W4 CAS/lifecycle,
+  nullable graph, repeat and caller-removal/reopen are qualified. Affected31 strict is
+  GREEN; exact103 inherited whole-static diagnostics remain RED, new0/missing0.
+  This is source/local and installed-synthetic acceptance, not live inference, whole
+  W5/W6 or release acceptance. See [native contract](../../docs/contracts/native-temporal-v1.md).
+  Original M03-04 obligations remain: real versioned RU/EN/cross-language corpus,
   held-out source groups, A–D/optional E, paired enrichment and quality/cost policy.
 - W6: all declared release-scope families → exact candidate, installed CLI/engine,
   actual OS/Python cells, migration/reopen, G01/R01–R04/T01–T02 and three separate

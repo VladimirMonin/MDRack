@@ -42,6 +42,7 @@ EXPECTED_PUBLIC_API_EXPORTS = (
     "StaticImageExtractor",
     "VisualEmbeddingProvider",
     "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
+    "AudioInput", "VideoInput", "NativeMediaPolicy", "NativeMediaResult", "NativeMediaDecoder",
 )
 FORBIDDEN_RELEASE_KEYS = {
     "id",

@@ -1,7 +1,7 @@
 # MDRack
 
-> 1.4.0rc2 source candidate: [conditional publication and explicit v2 maintenance](docs/decisions/0014-conditional-publication-and-v2-upgrade.md).
-> Core/media pin 1.0.0rc2, SQLite 1.0.0rc3 and app-v2 schema 0005.
+> 1.4.0rc3 source candidate: [native temporal/media preparation](docs/decisions/0017-native-temporal-preparation.md); [conditional publication and explicit v2 maintenance](docs/decisions/0014-conditional-publication-and-v2-upgrade.md).
+> Core pin 1.0.0rc2, media pin 1.0.0rc3, SQLite 1.0.0rc3 and app-v2 schema 0005.
 > Existing [prepared/native image API](docs/contracts/native-image-v1.md)
 > and [ADR-0013](docs/decisions/0013-native-image-contract.md). Native CLI/engine
 > orchestration is available for explicit offline providers; selected production
@@ -49,9 +49,10 @@ named and authorized before the agent runs them.
 
 An authorized workflow can scan Markdown in the chosen root or ingest one selected
 raw text/Markdown file, image with caller-supplied text, WAVE file, or ISO-BMFF
-video. The WAVE and ISO-BMFF paths require the caller to opt in to a selected local
-adapter executable; MDRack does not provide built-in transcription, decoding, or
-visual analysis. Search by text and optional scope, retain only returned logical
+video. Legacy textual WAVE/ISO-BMFF ingestion requires an explicitly selected local
+adapter executable. The separate [native temporal path](docs/contracts/native-temporal-v1.md)
+uses existing local CPU FFmpeg/ffprobe for bounded frame/audio/visual-video preparation;
+it provides no built-in transcription, model inference or semantic-quality guarantee. Search by text and optional scope, retain only returned logical
 IDs and portable locators or time/line evidence, then use a new CLI process with
 the same root to run `status` against the same derived store. Source files remain
 unchanged. The complete safe sequence and its evidence boundary are in
@@ -78,8 +79,9 @@ LM Studio model-management commands. Host applications can use
    graph atomically to the fixed SQLite catalog at `<store>/catalog.sqlite3`.
 4. Core retrieval accepts ready lexical/vector branches, applies scope filters
    before limits, groups resource evidence, and performs deterministic weighted RRF.
-5. Explicit image ingestion stores derived caption/OCR text and ready vectors,
-   never source bytes; duplicate and whole-resource similarity use logical IDs.
+5. Explicit media ingestion keeps native vectors separate from optional textual
+   projections, never stores original media bytes in the catalog, and uses logical
+   IDs for reads and similarity.
 
 ## Documentation
 
@@ -88,7 +90,7 @@ LM Studio model-management commands. Host applications can use
 - [Operations, diagnostics, privacy, and troubleshooting](docs/operations.md)
 - [Development guide for humans and coding agents](docs/development.md)
 - [Current architecture index](docs/current-architecture/README.md)
-- [Proposed native-media / late-enrichment programme](docs/proposals/native-media/README.md) — full design, not implemented media capabilities
+- [Proposed native-media / late-enrichment programme](docs/proposals/native-media/README.md) — full programme; scoped native components are implemented, while live/quality/release obligations remain open
 - [System overview](docs/current-architecture/system-overview.md)
 - [Indexing and structural chunking](docs/current-architecture/indexing-and-chunking.md)
 - [SQLite persistence and current schema](docs/current-architecture/sqlite-persistence.md)

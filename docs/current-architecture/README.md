@@ -1,6 +1,6 @@
 # MDRack current architecture
 
-This package describes the checked-out MDRack 1.4.0rc2 source candidate.
+This package describes the checked-out MDRack 1.4.0rc3 source candidate.
 The app-owned [native image contract](../contracts/native-image-v1.md) adds typed
 routes; production pixels remain unsupported, with runtime/quality acceptance
 separate from deterministic offline contract evidence. It is the
@@ -28,6 +28,9 @@ When sources disagree, use this order:
 - [Limitations](limitations.md) — explicit unsupported or asymmetric behavior, including raw-adapter and external-process limits.
 
 ## Supporting current contracts
+
+- [Native temporal/media v1](../contracts/native-temporal-v1.md) — actual bounded CPU preparation and pure frames/audio/direct-video builders, async engine, conditional publication and explicit synthetic-only component boundary.
+- [ADR-0017: native temporal preparation](../decisions/0017-native-temporal-preparation.md)
 
 - [Ready OCR publication v1](../contracts/ready-ocr-v1.md) — app-owned merge, caller custody, source binding, normal image rescan and explicit limits.
 - [ADR-0015: ready OCR publication](../decisions/0015-ready-ocr-publication.md)
@@ -103,12 +106,27 @@ conditional reindex/source transitions and separate host archival; W4-R2 is clos
 Affected strict typing is qualified, while inherited whole-static debt, full-suite,
 live-runtime, quality/cost and release obligations remain separate and open.
 
+## Native temporal/media component
+
+The [native temporal contract](../contracts/native-temporal-v1.md) and
+[ADR-0017](../decisions/0017-native-temporal-preparation.md) describe the independently
+accepted Windows/CPython3.14.2 source/local and fresh noneditable installed component.
+Pure media builders consume ready vectors; app-owned CPU codecs prepare actual PTS
+frames, sample-exact audio and separate visual-only direct-video clips. Async engine
+and registered CLI share the existing publication/lifecycle and read-session owners.
+Default candidate targets come from the current role/input capability and constrain
+Core retrieval before limits without dropping caller filters; W5-R1 is closed.
+Nullable text, zero-encode repeat and caller-removal/reopen are qualified. Affected31
+strict is green; exact103 inherited whole-static diagnostics remain red. Scripted
+vectors do not establish model transport, relevance or durable original-media custody.
+
 ## Future / proposed
 
-[Native media and late enrichment](../proposals/native-media/README.md) is the full
-proposed 01–04 design bundle and implementation programme. The qualified search
-snapshots and prepared enrichment above do not implement the remaining native-media
-builders, live routes, real-corpus quality/cost evaluation or release programme.
+[Native media and late enrichment](../proposals/native-media/README.md) remains the
+full proposed 01–04 programme. The accepted components do not close live native
+routes, real RU/EN/cross-language/source-group corpora, A–D/optional-E and paired
+enrichment quality/cost, global full/expanded-installed or W6/operational/release
+qualification.
 
 ## Historical material
 

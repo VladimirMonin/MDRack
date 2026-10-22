@@ -12,7 +12,7 @@ import pytest
 from mdrack.application.media_search import MediaSearchRequest
 from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.config.models import MDRackConfig
-from mdrack.domain.embedding_inputs import ImageInput, TextInput
+from mdrack.domain.embedding_inputs import EncodingRole, ImageInput, TextInput
 from mdrack.embeddings.fake import FakeEmbeddingProvider
 from mdrack.embeddings.runtime import embedding_profile_from_config
 from mdrack.public_api import MDRackEngine
@@ -97,7 +97,8 @@ async def test_scope_before_limit_family_budgets_and_unit_target(tmp_path: Path,
         assert len(found.results) == 1 and found.results[0]['resource_id'] == 'allowed'
         assert found.results[0]['unit_id']
         assert len(seen) == 1 and seen[0][0].candidate_limit == 7 and seen[0][0].weight == 0.25
-        assert seen[0][1] == request.scope
+        admitted = provider.capabilities.require(EncodingRole.QUERY, 'image').candidate_modalities
+        assert seen[0][1] == replace(request.scope, modalities=admitted)
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,26 @@
 The package root exposes the complete supported API. `__all__` is frozen by the
 repository packaging tests.
 
+## Native vector-only builders
+
+Media API `1.0.0-rc.2` / distribution `1.0.0rc3` adds `NativeBatchInput`,
+`NativeFrameObservation`, `NativeAudioObservation`, `NativeVideoObservation` and
+`build_native_frame_batch`, `build_native_audio_batch`, `build_native_video_batch`.
+Inputs contain a typed resource descriptor, raw SHA-256 revision, recipe fingerprint,
+complete canonical space, total duration and explicit selected `[start_ms,end_ms)`.
+Observations carry actual input fingerprints and ready vectors with absolute source
+coordinates. Frames are image-modality frame units; acoustic and direct-video windows
+are separate audio/video time-segment units. All representation/unit text is None.
+
+Empty observations, wrong kinds, out-of-range or unordered/duplicate coordinates,
+invalid dimensions/NaN/Infinity/cosine-zero and invalid ownership fail before a graph
+can be published. The existing Core validator remains authoritative. IDs include
+source, recipe, input coordinates/fingerprints and embedding profile. Builders never
+decode, open files, call an encoder, aggregate frames into a fake direct-video vector,
+or write SQL. Application orchestration/capabilities/CPU codecs/CAS and precision
+limits belong to [native temporal v1](../../docs/contracts/native-temporal-v1.md),
+not this pure package. Existing textual builders, grouping and IDs remain unchanged.
+
 ## Records
 
 - `TokenCount`: non-negative count, `exact|estimated`, and mandatory

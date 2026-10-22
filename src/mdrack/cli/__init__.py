@@ -17,6 +17,7 @@ from mdrack.cli.commands.files import files as files_group
 from mdrack.cli.commands.images import image as image_group
 from mdrack.cli.commands.metadata import metadata as metadata_group
 from mdrack.cli.commands.model import model as model_group
+from mdrack.cli.commands.native import native as native_group
 from mdrack.cli.commands.raw_audio import ingest_audio
 from mdrack.cli.commands.raw_text import ingest_text
 from mdrack.cli.commands.raw_video import ingest_raw_video
@@ -232,6 +233,7 @@ ingest_group.add_command(ingest_video)
 
 # Explicit direct-image lifecycle is separate from Markdown scan.
 main.add_command(image_group)
+main.add_command(native_group)
 main.add_command(metadata_group)
 main.add_command(cache_group)
 

@@ -251,7 +251,7 @@ wheels = [
 
 [[package]]
 name = "mdrack"
-version = "1.4.0rc2"
+version = "1.4.0rc3"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -302,7 +302,7 @@ source = { editable = "packages/mdrack-core" }
 
 [[package]]
 name = "mdrack-media"
-version = "1.0.0rc2"
+version = "1.0.0rc3"
 source = { editable = "packages/mdrack-media" }
 dependencies = [
     { name = "mdrack-core" },

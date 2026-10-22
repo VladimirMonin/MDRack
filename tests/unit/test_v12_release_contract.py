@@ -8,7 +8,7 @@ from pathlib import Path
 import mdrack
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-EXPECTED_VERSION = "1.4.0rc2"
+EXPECTED_VERSION = "1.4.0rc3"
 
 
 def test_current_runtime_and_build_metadata_are_synchronized() -> None:

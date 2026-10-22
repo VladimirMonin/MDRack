@@ -29,6 +29,16 @@ class SourceResolver:
                 raise ValueError("invalid_source_authority")
             validate_source_ref(ref)
 
+    def selected_path(self, *, namespace: str, source_ref: str, selected: Path | None = None) -> Path:
+        """Resolve only caller/host authority, never a catalog locator."""
+        validate_source_ref(source_ref)
+        if not namespace:
+            raise ValueError("invalid_source_authority")
+        path = selected if selected is not None else self._mappings.get((namespace, source_ref))
+        if not isinstance(path, Path):
+            raise ValueError("source_authority_missing")
+        return path
+
     @contextmanager
     def image(
         self, *, namespace: str, source_ref: str, selected: Path | None = None,
@@ -41,9 +51,7 @@ class SourceResolver:
         # Image range/crop preparation is not declared. Refuse, never silently truncate.
         if byte_range is not None:
             raise ValueError("unsupported_source_range")
-        path = selected if selected is not None else self._mappings.get((namespace, source_ref))
-        if not isinstance(path, Path):
-            raise ValueError("source_authority_missing")
+        path = self.selected_path(namespace=namespace, source_ref=source_ref, selected=selected)
         snapshot = capture_source(path, source_ref, RawMediaKind.IMAGE, budget=budget,
                                   signature_probe=_image_signature_probe)
         try:

@@ -272,6 +272,22 @@ Read-only текст в очищаемом кеше получает честн�
 
 ### M03-07. Расширить временные и дополнительные медиамаршруты 🎞️
 
+Native temporal/media component — app `1.4.0rc3`, media `1.0.0rc3` /
+контракт `1.0.0-rc.2`: [native temporal v1](../../contracts/native-temporal-v1.md),
+[ADR-0017](../../decisions/0017-native-temporal-preparation.md). Чистые observations /
+builders отдельно принимают настоящие frame/audio/direct-video ready vectors;
+app выполняет CPU decoding, явный диапазон/sampling/budget, async provider orchestration,
+retained-vector reuse и принятые W4 source/CAS/read-session механизмы. Engine и
+registered `native` CLI связаны одним use case; null text не подменяется captions.
+Компонент независимо принят на Windows/CPython3.14.2 в actual Root/local и fresh
+noneditable installed-synthetic границах; W5-R1 CLOSED. Разрешённые QUERY/SIMILARITY
+кандидаты определяются текущими ролью и входом и ограничивают actual Core retrieval
+до candidate limit; unrelated capabilities не расширяют маршрут. Affected31 strict
+GREEN, exact103 inherited whole-static diagnostics RED, new0/missing0. Это не
+live-native, real-corpus/quality-cost, whole W5 или W6/release PASS. Исходные M03-04
+RU/EN/cross-language, source-group dev/held-out, public A–D/optional-E runner,
+paired enrichment и policy расходов остаются следующими обязательствами без сокращения.
+
 Следующие срезы используют те же provider, planner и publication service. Практический порядок начинается с доступного повторного использования: кадры видео могут кодироваться уже работающим image adapter; audio segments требуют собственной подтверждённой audio capability. Прямой video input является отдельной возможностью и не следует из поддержки кадров.
 
 В `mdrack_media` добавляются чистые подготовленные native observations/builders. Нынешние `TimedTextAtom`, transcript и frame-caption records сохраняют требование настоящего текста. Acoustic vector не помещается в transcript builder, а пустая подпись не превращает frame-caption в нативный кадр. [26]

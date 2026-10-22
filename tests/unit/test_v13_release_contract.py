@@ -39,8 +39,8 @@ def test_v13_runtime_and_distribution_metadata_are_synchronized() -> None:
     )
 
     # The immutable packet below remains 1.3.0; current app continues independently.
-    assert app_project["project"]["version"] == "1.4.0rc2"
-    assert mdrack.__version__ == "1.4.0rc2"
+    assert app_project["project"]["version"] == "1.4.0rc3"
+    assert mdrack.__version__ == "1.4.0rc3"
     assert app_project["project"]["dependencies"].count("mdrack-sqlite==1.0.0rc3") == 1
     assert sqlite_project["project"]["version"] == "1.0.0rc3"
     assert "mdrack-sqlite==1.0.0rc3" in future_host_project["project"]["dependencies"]
@@ -146,9 +146,9 @@ def _historical_metadata_root(tmp_path: Path, packet: dict) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         payload = (REPO_ROOT / name).read_bytes()
         if name == 'pyproject.toml':
-            payload = payload.replace(b'version = "1.4.0rc2"', b'version = "1.3.0"', 1)
+            payload = payload.replace(b'version = "1.4.0rc3"', b'version = "1.3.0"', 1)
             payload = payload.replace(b'mdrack-core==1.0.0rc2', b'mdrack-core==1.0.0rc1')
-            payload = payload.replace(b'mdrack-media==1.0.0rc2', b'mdrack-media==1.0.0rc1')
+            payload = payload.replace(b'mdrack-media==1.0.0rc3', b'mdrack-media==1.0.0rc1')
             payload = payload.replace(b'mdrack-sqlite==1.0.0rc3', b'mdrack-sqlite==1.0.0rc2')
         elif name == 'packages/mdrack-sqlite/pyproject.toml':
             payload = payload.replace(b'version = "1.0.0rc3"', b'version = "1.0.0rc2"', 1)

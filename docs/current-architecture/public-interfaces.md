@@ -4,7 +4,20 @@ MDRack has two public entry points: the Click CLI and the embedded
 `MDRackEngine`. Both compose the same canonical indexing and retrieval services,
 but their total capability sets are not identical.
 
-## Prepared/native API (1.4.0rc2 source candidate)
+## Native temporal/media API (1.4.0rc3 candidate)
+
+`await MDRackEngine.ingest_native_media(...)` / `search_native_media(...)` share
+bounded actual CPU decoding and separate frames/image, audio and direct visual
+video capabilities. Pure native builders keep canonical vector-only units with
+nullable text and explicit temporal locators; app orchestration uses existing
+source/CAS/read-session mechanisms. Registered `native ingest/search/query/capabilities` expose the same
+family. Existing `read unit` handles its frame/segment IDs. Exact scope, precision,
+policy budgets, public45/former40 prefix and explicit synthetic-only provider limits:
+[native temporal v1](../contracts/native-temporal-v1.md),
+[ADR-0017](../decisions/0017-native-temporal-preparation.md).
+This is not live native inference, real-corpus/quality-cost or whole W5/W6 acceptance.
+
+## Prepared/native image API (accepted 1.4.0rc2 slice)
 
 `MDRackEngine.ingest_native_image` and `search_media(MediaSearchRequest)` are
 versioned app routes with typed inputs, independent candidate scope, requested/

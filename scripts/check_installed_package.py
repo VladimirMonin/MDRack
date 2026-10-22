@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-EXPECTED_VERSION = "1.4.0rc2"
+EXPECTED_VERSION = "1.4.0rc3"
 REGISTRY_IMPORTS = {
     "mdrack_core": (
         "ExpectedPublication", "PublicationResult", "PublicationState", "ResourceSnapshot", "PublicationPort",
@@ -52,6 +52,11 @@ REGISTRY_IMPORTS = {
         "StaticImageExtractor",
         "VisualEmbeddingProvider",
         "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
+        "AudioInput", "VideoInput", "NativeMediaPolicy", "NativeMediaResult", "NativeMediaDecoder",
+    ),
+    "mdrack_media": (
+        "NativeAudioObservation", "NativeBatchInput", "NativeFrameObservation", "NativeVideoObservation",
+        "build_native_audio_batch", "build_native_frame_batch", "build_native_video_batch",
     ),
     "mdrack.public_api.models": (
         "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput",

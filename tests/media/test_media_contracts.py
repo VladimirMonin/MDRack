@@ -127,7 +127,7 @@ def _frame() -> FrameCaptionObservation:
 
 
 def test_contract_identity_fingerprints_and_ids_are_frozen() -> None:
-    assert MEDIA_CONTRACT_VERSION == "1.0.0-rc.1"
+    assert MEDIA_CONTRACT_VERSION == "1.0.0-rc.2"
     assert PRODUCER.value == "sha256:5647ad5a23b9c1310dfeb6119e2abbb13f35f43d3c18fba5299e038cc380330e"
     assert NORMALIZATION.value == "sha256:8c9972d05a3e7e42f18b7af0ada27216371962f94e4a68e2c38bf371c6650832"
     assert GROUPER.value == "sha256:47f53915977ac263640f75b84e7e5a13df2dcf9069f0445df4dbb882a8d79099"

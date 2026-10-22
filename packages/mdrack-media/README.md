@@ -3,9 +3,14 @@
 `mdrack-media` publishes immutable timed-text, transcript, frame-caption, locator,
 policy, identifier, fingerprint, event and future-builder input contracts for MDRack.
 
-Distribution version `1.0.0rc1` publishes media contract version `1.0.0-rc.1`.
+Distribution version `1.0.0rc3` publishes media contract version `1.0.0-rc.2`.
 Python 3.11 or newer is required. The only runtime dependency is
-`mdrack-core==1.0.0rc1`.
+`mdrack-core==1.0.0rc2`.
+
+Native frame/audio/direct-video observations and three pure vector-only builders
+are additive; existing transcript/frame-caption records still require real text.
+See [API](API.md#native-vector-only-builders) and the app-owned
+[native preparation contract](../../docs/contracts/native-temporal-v1.md).
 
 ## Boundary
 

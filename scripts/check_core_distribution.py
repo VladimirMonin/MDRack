@@ -181,12 +181,12 @@ def _verify_co_install(python: Path, workdir: Path) -> None:
             "-c",
             (
                 "import importlib.metadata as m, mdrack, mdrack_core; "
-                "assert m.version('mdrack')=='1.4.0rc2'; "
+                "assert m.version('mdrack')=='1.4.0rc3'; "
                 "assert m.version('mdrack-core')=='1.0.0rc2'; "
                 "owners=m.packages_distributions(); "
                 "assert owners['mdrack']==['mdrack']; "
                 "assert owners['mdrack_core']==['mdrack-core']; "
-                "assert mdrack.__version__=='1.4.0rc2'; "
+                "assert mdrack.__version__=='1.4.0rc3'; "
                 "assert mdrack_core.CORE_CONTRACT_VERSION=='1.0.0-rc.2'"
             ),
         ],

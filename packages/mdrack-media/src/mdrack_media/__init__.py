@@ -70,6 +70,15 @@ from .locators import (
     VideoFrameLocator,
     WholeMediaLocator,
 )
+from .native import (
+    NativeAudioObservation,
+    NativeBatchInput,
+    NativeFrameObservation,
+    NativeVideoObservation,
+    build_native_audio_batch,
+    build_native_frame_batch,
+    build_native_video_batch,
+)
 from .policies import (
     OVERFLOW_CALLER_SPLIT,
     OVERFLOW_REJECT,
@@ -135,6 +144,10 @@ __all__ = [
     "MediaRetrievalEvidence",
     "MediaRetrievalItem",
     "MediaRetrievalResult",
+    "NativeAudioObservation",
+    "NativeBatchInput",
+    "NativeFrameObservation",
+    "NativeVideoObservation",
     "NormalizationFingerprint",
     "OVERFLOW_CALLER_SPLIT",
     "OVERFLOW_REJECT",
@@ -168,6 +181,9 @@ __all__ = [
     "WholeResourceTextPolicy",
     "atom_id",
     "build_audio_transcript_batch",
+    "build_native_audio_batch",
+    "build_native_frame_batch",
+    "build_native_video_batch",
     "build_video_frame_caption_batch",
     "build_video_transcript_batch",
     "canonical_json",

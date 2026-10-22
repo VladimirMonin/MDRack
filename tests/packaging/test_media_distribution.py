@@ -29,13 +29,13 @@ def test_media_distribution_metadata_and_app_workspace_dependency() -> None:
     root = _load_pyproject(REPO_ROOT / "pyproject.toml")
 
     assert package["project"]["name"] == "mdrack-media"
-    assert package["project"]["version"] == "1.0.0rc2"
+    assert package["project"]["version"] == "1.0.0rc3"
     assert package["project"]["requires-python"] == ">=3.11"
     assert package["project"]["dependencies"] == ["mdrack-core==1.0.0rc2"]
     assert package["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         "src/mdrack_media"
     ]
-    assert "mdrack-media==1.0.0rc2" in root["project"]["dependencies"]
+    assert "mdrack-media==1.0.0rc3" in root["project"]["dependencies"]
     assert root["tool"]["uv"]["sources"]["mdrack-media"] == {"workspace": True}
     assert "packages/mdrack-media" in root["tool"]["uv"]["workspace"]["members"]
 
@@ -52,7 +52,7 @@ def test_media_distribution_carries_docs_typing_and_frozen_exports() -> None:
         assert (MEDIA_PROJECT / relative_path).exists()
     assert mdrack_media.__all__ == sorted(mdrack_media.__all__)
     assert all(hasattr(mdrack_media, name) for name in mdrack_media.__all__)
-    assert mdrack_media.MEDIA_CONTRACT_VERSION == "1.0.0-rc.1"
+    assert mdrack_media.MEDIA_CONTRACT_VERSION == "1.0.0-rc.2"
     readme = (MEDIA_PROJECT / "README.md").read_text(encoding="utf-8")
     api = (MEDIA_PROJECT / "API.md").read_text(encoding="utf-8")
     for example in ("frame_builder_serialization.py", "transcript_serialization.py"):

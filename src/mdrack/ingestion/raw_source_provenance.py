@@ -356,6 +356,41 @@ def validate_budget(provenance: RawSourceProvenance, budget: RawInputBudget = Ra
         raise RawSourceError(RawSourceErrorCode.PREPARED_EVIDENCE_INVALID)
 
 
+def _read_source_bytes(source_path: Path, max_source_bytes: int) -> bytes:
+    """Shared bounded local read, also used by native temporal preparation."""
+    try:
+        if not source_path.is_file():
+            raise RawSourceError(RawSourceErrorCode.SOURCE_NOT_REGULAR)
+        with source_path.open("rb") as source_file:
+            source_bytes = source_file.read(max_source_bytes + 1)
+    except RawSourceError:
+        raise
+    except OSError:
+        raise RawSourceError(RawSourceErrorCode.SOURCE_UNAVAILABLE) from None
+    if not source_bytes:
+        raise RawSourceError(RawSourceErrorCode.SOURCE_EMPTY)
+    if len(source_bytes) > max_source_bytes:
+        raise RawSourceError(RawSourceErrorCode.SOURCE_TOO_LARGE)
+    return source_bytes
+
+
+def _snapshot_file(source_bytes: bytes) -> Path:
+    path: Path | None = None
+    try:
+        handle = tempfile.NamedTemporaryFile(prefix="mdrack-raw-", suffix=".snapshot", delete=False)
+        path = Path(handle.name)
+        with handle:
+            handle.write(source_bytes)
+    except OSError:
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass  # Best effort only; preserve the original safe source-unavailable outcome.
+        raise RawSourceError(RawSourceErrorCode.SOURCE_UNAVAILABLE) from None
+    return path
+
+
 def capture_source(
     source_path: Path,
     source_ref: str,
@@ -370,19 +405,7 @@ def capture_source(
     validate_source_ref(source_ref)
     if (signature is None) == (signature_probe is None):
         raise RawSourceError(RawSourceErrorCode.SIGNATURE_UNSUPPORTED)
-    try:
-        if not source_path.is_file():
-            raise RawSourceError(RawSourceErrorCode.SOURCE_NOT_REGULAR)
-        with source_path.open("rb") as source_file:
-            source_bytes = source_file.read(budget.max_source_bytes + 1)
-    except RawSourceError:
-        raise
-    except OSError:
-        raise RawSourceError(RawSourceErrorCode.SOURCE_UNAVAILABLE) from None
-    if not source_bytes:
-        raise RawSourceError(RawSourceErrorCode.SOURCE_EMPTY)
-    if len(source_bytes) > budget.max_source_bytes:
-        raise RawSourceError(RawSourceErrorCode.SOURCE_TOO_LARGE)
+    source_bytes = _read_source_bytes(source_path, budget.max_source_bytes)
     if signature_probe is not None:
         try:
             signature = signature_probe(source_bytes)
@@ -397,14 +420,8 @@ def capture_source(
         duration_ms, selected_frame_count, None, budget.fingerprint,
     )
     validate_budget(provenance, budget)
-    try:
-        handle = tempfile.NamedTemporaryFile(prefix="mdrack-raw-", suffix=".snapshot", delete=False)
-        with handle:
-            handle.write(source_bytes)
-    except OSError:
-        raise RawSourceError(RawSourceErrorCode.SOURCE_UNAVAILABLE) from None
     return RawSourceSnapshot(
-        provenance, Path(handle.name), source_bytes, budget.max_source_bytes
+        provenance, _snapshot_file(source_bytes), source_bytes, budget.max_source_bytes
     )
 
 

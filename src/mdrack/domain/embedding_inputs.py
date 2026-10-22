@@ -54,7 +54,58 @@ class ImageInput:
         return len(self.content)
 
 
-PreparedInput = TextInput | ImageInput
+@dataclass(frozen=True)
+class AudioInput:
+    content: bytes = field(repr=False)
+    identity: str
+    duration_ms: int
+
+    def __post_init__(self) -> None:
+        if (type(self.content) is not bytes or len(self.content) < 12
+                or self.content[:4] != b"RIFF" or self.content[8:12] != b"WAVE"
+                or not isinstance(self.identity, str) or not self.identity
+                or type(self.duration_ms) is not int or self.duration_ms <= 0):
+            raise ValueError("invalid_prepared_audio_input")
+
+    @property
+    def modality(self) -> str:
+        return "audio"
+
+    @property
+    def media_type(self) -> str:
+        return "audio/wav"
+
+    @property
+    def byte_size(self) -> int:
+        return len(self.content)
+
+
+@dataclass(frozen=True)
+class VideoInput:
+    content: bytes = field(repr=False)
+    identity: str
+    duration_ms: int
+
+    def __post_init__(self) -> None:
+        if (type(self.content) is not bytes or len(self.content) < 12 or self.content[4:8] != b"ftyp"
+                or not isinstance(self.identity, str) or not self.identity
+                or type(self.duration_ms) is not int or self.duration_ms <= 0):
+            raise ValueError("invalid_prepared_video_input")
+
+    @property
+    def modality(self) -> str:
+        return "video"
+
+    @property
+    def media_type(self) -> str:
+        return "video/mp4"
+
+    @property
+    def byte_size(self) -> int:
+        return len(self.content)
+
+
+PreparedInput = TextInput | ImageInput | AudioInput | VideoInput
 
 
 @dataclass(frozen=True)
@@ -63,14 +114,17 @@ class InputCapability:
     input_modality: str
     candidate_modalities: tuple[str, ...]
     max_input_bytes: int
+    max_duration_ms: int | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.role, EncodingRole) or self.input_modality not in {"text", "image"}:
+        if not isinstance(self.role, EncodingRole) or self.input_modality not in {"text", "image", "audio", "video"}:
             raise ValueError("invalid_capability")
         if (type(self.candidate_modalities) is not tuple or not self.candidate_modalities
-                or set(self.candidate_modalities) - {"text", "image"}):
+                or set(self.candidate_modalities) - {"text", "image", "audio", "video"}):
             raise ValueError("invalid_capability")
         if type(self.max_input_bytes) is not int or self.max_input_bytes < 1:
+            raise ValueError("invalid_capability")
+        if self.max_duration_ms is not None and (type(self.max_duration_ms) is not int or self.max_duration_ms < 1):
             raise ValueError("invalid_capability")
 
 
@@ -99,6 +153,9 @@ class RouteCapabilities:
         capability = self.require(role, value.modality, candidates)
         if value.byte_size > capability.max_input_bytes:
             raise ValueError("embedding_input_too_large")
+        if (isinstance(value, (AudioInput, VideoInput)) and capability.max_duration_ms is not None
+                and value.duration_ms > capability.max_duration_ms):
+            raise ValueError("embedding_duration_too_large")
 
 
 @dataclass(frozen=True)

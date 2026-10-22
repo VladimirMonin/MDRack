@@ -2,6 +2,7 @@
 
 from mdrack.application.durable_artifacts import DurableArtifactStore
 from mdrack.application.media_search import MediaSearchRequest, MediaSearchResult, StoredUnitInput
+from mdrack.application.native_media import NativeMediaResult
 from mdrack.application.prepared_enrichment import PreparedEnrichmentOperation
 from mdrack.application.ready_ocr import ReadyOCRError, ReadyOCROperation
 from mdrack.application.reindexing import PreparedReindex
@@ -16,13 +17,16 @@ from mdrack.application.resources import (
 from mdrack.application.retrieval import HybridRetrievalService
 from mdrack.application.source_resolution import SourceResolver
 from mdrack.domain.embedding_inputs import (
+    AudioInput,
     EmbeddingResult,
     EncodingRole,
     ImageInput,
     InputCapability,
     RouteCapabilities,
     TextInput,
+    VideoInput,
 )
+from mdrack.domain.native_media import NativeMediaPolicy
 from mdrack.embeddings.prepared import LegacyTextEmbeddingAdapter
 from mdrack.ingestion.images import (
     ExtractedImageText,
@@ -34,6 +38,7 @@ from mdrack.ingestion.images import (
     StaticImageExtractor,
     VisualEmbeddingProvider,
 )
+from mdrack.ingestion.native_decoding import NativeMediaDecoder
 from mdrack.ports.embeddings import PreparedEmbeddingProvider
 from mdrack.public_api.engine import MDRackEngine
 from mdrack.public_api.models import (
@@ -75,4 +80,5 @@ __all__ = [
     "StaticImageExtractor",
     "VisualEmbeddingProvider",
     "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
+    "AudioInput", "VideoInput", "NativeMediaPolicy", "NativeMediaResult", "NativeMediaDecoder",
 ]

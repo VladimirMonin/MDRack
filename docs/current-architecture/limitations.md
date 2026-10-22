@@ -17,21 +17,22 @@ This page is a current-state boundary, not a roadmap promise.
   production backend, or partial-write fallback.
 - Production embeddings require a reachable LM Studio HTTP endpoint. The Python
   package does not load embedding model weights itself.
-- Audio and video retrieval consumes supplied timed transcripts and frame-caption
-  text. The CLI now has a narrow direct WAVE path for raw audio that delegates transcription
-  to an explicitly supplied local stdin executable; MDRack does not provide an
-  STT model, provider, network fallback, or general media decoder. Matroska,
-  acoustic similarity, pixel search, and visual similarity remain unsupported.
-  Direct raw video is limited to ISO-BMFF `ftyp` input plus an
-  explicitly authorized local extractor returning strict timed transcript and
-  selected-caption JSON; MDRack does not decode video or provide FFmpeg/STT/VLM
-  quality guarantees.
-- Local source capture, bounded snapshots, source-after-read guards, and the
-  caller-selected WAVE/video subprocesses are app-ingestion responsibilities.
-  `mdrack_core` and `mdrack_media` do not open source files or run those
-  processes. Media builders accept prepared transcript/frame records only;
-  the core accepts prepared resource graphs through ports; `mdrack_sqlite` owns
-  their generic catalog/search persistence.
+- Legacy raw audio/video textual paths still consume supplied transcripts/frame captions
+  or explicit local STT/extractor output. The separate 1.4.0rc3
+  [native temporal component](../contracts/native-temporal-v1.md) performs bounded
+  actual CPU PNG-frame/PCM-audio/visual-MP4 preparation, with independently declared
+  image/audio/direct-video typed capabilities and vector-only units. FFmpeg/ffprobe
+  are explicit existing local tools, not an STT/VLM/model or general format guarantee.
+  V1 supports WAVE/ISO-BMFF with matching tracks, zero stream origins and bounded
+  integer-ms coordinates; unsupported formats/timelines/ranges fail closed.
+- Production selected LM Studio embeddings remain textual: no live native pixel/image,
+  audio or video transport/semantic quality is qualified. Explicit synthetic native
+  providers prove local orchestration only, never model availability or relevance.
+  The original real corpus/held-out/public A–D/quality-cost and W6 release gates remain open.
+- Local capture, source guards, CPU decoding and child cleanup remain app-owned.
+  `mdrack_core` and `mdrack_media` never open sources or run processes. Pure media
+  builders now accept native ready observations separately from genuine textual
+  artifacts; shared Core validation and SQLite persistence/publication stay unchanged.
 - Unified 1.2 retrieval is text-first: it searches Markdown text, supplied audio/
   video transcripts, frame-caption text, and explicit image caption/OCR text. Its
   `find-similar` command reuses stored textual whole-resource vectors only; it does

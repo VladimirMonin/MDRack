@@ -82,12 +82,12 @@ _LABELS = {
     "status": frozenset("started completed success partial_success failed missing".split()),
     "mode": frozenset(("text", "semantic", "hybrid")),
     "effective_mode": frozenset(("text", "semantic", "hybrid")),
-    "query_modality": frozenset(("text", "image", "stored_unit")),
+    "query_modality": frozenset(("text", "image", "audio", "video", "stored_unit")),
     "encoding_role": frozenset(("document", "query", "similarity")),
     "target": frozenset(("unit", "resource")),
     "publication_status": frozenset(("not_requested", "published", "already_published", "conflict", "failed",
                                      "withdrawn", "already_withdrawn")),
-    "artifact_status": frozenset(("not_requested", "caller_prepared")),
+    "artifact_status": frozenset(("not_requested", "caller_prepared", "decoded_native")),
     "reason": frozenset("""
         cancelled validation_failed unsupported_embedding_route
         config_invalid status_unavailable diagnostics_unavailable storage_analysis_failed

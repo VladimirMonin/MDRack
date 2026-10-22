@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0rc3
+
+- Media API 1.0.0-rc.2 adds pure native frame/audio/direct-video observations and
+  vector-only builders using the existing Core validator. Existing text artifacts
+  and Core dependency 1.0.0rc2 are unchanged; no decoder/provider/storage dependency.
+
 ## 1.0.0rc2
 
 - Metadata-only repackaging pins core 1.0.0rc2; media API/builders remain unchanged.
