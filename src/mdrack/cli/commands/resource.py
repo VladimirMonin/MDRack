@@ -93,6 +93,57 @@ def resource() -> None:
     """Import, export, inspect, or delete one configured catalog resource."""
 
 
+@resource.command(name="ocr-binding")
+@click.argument("resource_id")
+@click.pass_context
+def ocr_binding(ctx: click.Context, resource_id: str) -> None:
+    """Return an explicit local source/lifecycle binding, never a creation grant."""
+    engine = None
+    try:
+        engine = _engine(ctx)
+        result = engine.ready_ocr_binding(resource_id)
+    except Exception:
+        _output(ctx, envelope_error("Ready OCR binding unavailable", "READY_OCR_ERROR", "resource ocr-binding"))
+        ctx.exit(1)
+    else:
+        _output(ctx, envelope_success(result, command="resource ocr-binding"))
+    finally:
+        if engine is not None:
+            engine.close()
+
+
+@resource.command(name="enrich-ocr")
+@click.argument("resource_id")
+@click.argument("artifact_path", type=click.Path(path_type=Path))
+@click.option("--variant", default="default", show_default=True)
+@click.option("--source-image", "source_path", type=click.Path(path_type=Path), default=None)
+@click.option("--lexical/--no-lexical", default=True, show_default=True)
+@click.option("--dense/--no-dense", default=False, show_default=True)
+@click.option("--require-durable", is_flag=True)
+@click.option("--max-retries", type=click.IntRange(0, 3), default=1, show_default=True)
+@click.pass_context
+def enrich_ocr(
+    ctx: click.Context, resource_id: str, artifact_path: Path, variant: str,
+    lexical: bool, dense: bool, require_durable: bool, max_retries: int, source_path: Path | None,
+) -> None:
+    """Publish ready caller-owned OCR; never invoke OCR or embedding models."""
+    engine = None
+    try:
+        engine = _engine(ctx)
+        result = engine.enrich_ready_ocr(
+            resource_id, artifact_path, variant=variant, lexical=lexical, dense=dense,
+            require_durable=require_durable, max_retries=max_retries, source_path=source_path,
+        )
+    except Exception:
+        _output(ctx, envelope_error("Ready OCR enrichment failed", "READY_OCR_ERROR", "resource enrich-ocr"))
+        ctx.exit(1)
+    else:
+        _output(ctx, envelope_success(result, command="resource enrich-ocr"))
+    finally:
+        if engine is not None:
+            engine.close()
+
+
 @resource.command(name="import")
 @click.argument("manifest_path")
 @click.pass_context

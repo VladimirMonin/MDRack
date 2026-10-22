@@ -24,6 +24,7 @@ REGISTRY_IMPORTS = {
     "mdrack.application.query": ("SearchService",),
     "mdrack.application.retrieval": ("RetrievalService", "HybridRetrievalService"),
     "mdrack.public_api": (
+        "ReadyOCRError", "ReadyOCROperation",
         "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput", "SourceResolver",
         "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability",
         "RouteCapabilities", "TextInput", "LegacyTextEmbeddingAdapter", "PreparedEmbeddingProvider",

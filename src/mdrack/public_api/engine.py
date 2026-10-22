@@ -19,6 +19,7 @@ from mdrack.application.media_search import (
 )
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.application.query import ReadService
+from mdrack.application.ready_ocr import ReadyOCROperation, ReadyOCRService
 from mdrack.application.resource_catalog import (
     MetadataCatalogService,
     MetadataFacetValue,
@@ -395,6 +396,43 @@ class MDRackEngine:
             limit=limit,
         )
 
+    def ready_ocr_binding(self, resource_id: str) -> dict[str, object]:
+        """Return the current local source/lifecycle binding for a ready OCR file."""
+        from mdrack_core.ports.publication import PublicationPort
+        return ReadyOCRService(cast(PublicationPort, self._transcript_catalog())).binding(resource_id)
+
+    def prepare_ready_ocr(
+        self, resource_id: str, artifact_path: Path, *, variant: str = "default",
+        lexical: bool = True, dense: bool = False, require_durable: bool = False,
+        source_path: Path | None = None,
+    ) -> ReadyOCROperation:
+        """Capture publication authority before caller-owned artifact I/O."""
+        from mdrack_core.ports.publication import PublicationPort
+        return ReadyOCRService(cast(PublicationPort, self._transcript_catalog())).prepare(
+            resource_id, artifact_path, variant=variant, lexical=lexical, dense=dense,
+            require_durable=require_durable, source_path=source_path,
+        )
+
+    def publish_ready_ocr(self, operation: ReadyOCROperation, *, max_retries: int = 1) -> dict[str, object]:
+        """Publish a captured ready result; never authorize a new lifecycle."""
+        from mdrack_core.ports.publication import PublicationPort
+        return ReadyOCRService(cast(PublicationPort, self._transcript_catalog())).publish(
+            operation, max_retries=max_retries,
+        )
+
+    def enrich_ready_ocr(
+        self, resource_id: str, artifact_path: Path, *, variant: str = "default",
+        lexical: bool = True, dense: bool = False, require_durable: bool = False,
+        max_retries: int = 1, source_path: Path | None = None,
+    ) -> dict[str, object]:
+        """Publish a bound caller-owned ready OCR file without extraction/embedding."""
+        from mdrack_core.ports.publication import PublicationPort
+
+        return ReadyOCRService(cast(PublicationPort, self._transcript_catalog())).enrich(
+            resource_id, artifact_path, variant=variant, lexical=lexical, dense=dense,
+            require_durable=require_durable, max_retries=max_retries, source_path=source_path,
+        )
+
     def import_resource_manifest(self, payload: bytes) -> ResourceImportResult:
         """Import one existing manifest-v1 payload into the active resource catalog."""
         batch = PreparedResourceFacade(
@@ -653,6 +691,7 @@ class MDRackEngine:
             visual_space=self.visual_embedding_space,
             profile=self.profile,
             read_sessions=self._search_read_sessions,
+            conditional_publication=isinstance(self._search_read_sessions, ApplicationSearchReadSessions),
         )
         if not scoped_search:
             self._images = service

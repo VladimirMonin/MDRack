@@ -347,6 +347,7 @@ async def _ingest_native_image(provider: PreparedEmbeddingProvider, catalog_fact
             text_space=space if derived_dense else None, prepared_texts=derived_text,
             derived_lexical=derived_lexical, derived_dense=derived_dense,
             max_image_bytes=capability.max_input_bytes,
+            conditional_publication=True,
             _publication_observer=_observation.publication,
         )
         return await service.ingest(selected, resource_id=resource_id, source_namespace=source_namespace,

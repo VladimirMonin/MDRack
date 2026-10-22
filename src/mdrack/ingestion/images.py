@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
+from uuid import uuid4
 
 from mdrack._observability import AppEventLogger
 from mdrack.application.vector_values import (
@@ -294,8 +295,10 @@ class ImageIngestionService:
         prepared_texts: tuple[ExtractedImageText, ...] | None = None,
         derived_lexical: bool = True,
         derived_dense: bool = True,
+        conditional_publication: bool = False,
         _publication_observer: Callable[[float, bool], None] | None = None,
     ) -> None:
+        self._conditional_publication = conditional_publication
         self._read_sessions = read_sessions
         self._publication_observer = _publication_observer
         if type(derived_lexical) is not bool or type(derived_dense) is not bool:
@@ -348,6 +351,11 @@ class ImageIngestionService:
             max_source_bytes=self._max_image_bytes,
             max_whole_resource_tokens=self._max_text_tokens,
         )
+        publication_before = None
+        if self._conditional_publication:
+            if not isinstance(self._catalog, PublicationPort):
+                raise TypeError("publication capability required")
+            publication_before = self._catalog.read_snapshot(resource_id)
         snapshot = _snapshot if _snapshot is not None else capture_source(
             path,
             source_ref,
@@ -362,6 +370,57 @@ class ImageIngestionService:
             if media_type is not None and media_type != resolved_media_type:
                 snapshot.cleanup()
                 raise RawSourceError(RawSourceErrorCode.MIME_SIGNATURE_MISMATCH)
+            if (publication_before is not None and publication_before.batch is not None
+                    and self._visual_provider is None and self._extractor is None and not self._prepared_texts):
+                old = publication_before.batch
+                replay_provenance = old.resource.metadata.get("provenance")
+                generation = old.resource.metadata.get("source_revision")
+                compatible = (self._visual_space is None
+                              or self._visual_space.core_record(modality=MODALITY_IMAGE) in old.spaces)
+                if (isinstance(replay_provenance, Mapping)
+                        and replay_provenance.get("raw_source_sha256") == content_hash
+                        and isinstance(generation, str) and generation and compatible
+                        and old.resource.source_namespace == source_namespace
+                        and old.resource.locator == Locator("local_image", {"source_ref": source_ref})
+                        and (title is None or title == old.resource.title)):
+                    # A real image producer rescan: bounded source capture/signature,
+                    # no extraction intent, exact stored ready projections, guarded CAS.
+                    current = publication_before
+                    counts = {"representation_count": len(old.representations), "unit_count": len(old.units),
+                              "vector_count": len(old.vectors), "byte_size": len(content)}
+                    logger.info("image.ingest.started", extra=counts)
+                    rescan_started = time.perf_counter()
+                    guarded = _GuardedWritePort(self._catalog, snapshot, path, budget)
+                    for attempt in range(2):
+                        assert current.batch is not None
+                        outcome = guarded.compare_and_publish(current.batch, ExpectedPublication(current.state))
+                        if outcome.applied:
+                            if self._publication_observer is not None:
+                                self._publication_observer((time.perf_counter() - rescan_started) * 1000, True)
+                            logger.info("image.ingest.completed", extra={
+                                "representation_count": len(current.batch.representations),
+                                "unit_count": len(current.batch.units), "vector_count": len(current.batch.vectors),
+                                "byte_size": len(content),
+                            })
+                            native_units = {u.unit_id for u in current.batch.units if u.modality == MODALITY_IMAGE}
+                            native_spaces = [v.space_id for v in current.batch.vectors if v.unit_id in native_units]
+                            return ImageIngestionResult(
+                                resource_id, content_hash, resolved_media_type, len(content),
+                                tuple(r.representation_id for r in current.batch.representations),
+                                tuple(u.unit_id for u in current.batch.units), None,
+                                native_spaces[0] if native_spaces else None,
+                            )
+                        current = guarded.read_snapshot(resource_id)
+                        if (not current.state.live or current.batch is None
+                                or current.state.lifecycle_id != publication_before.state.lifecycle_id
+                                or current.batch.resource != old.resource):
+                            raise ValueError("image_rescan_stale")
+                    raise ValueError("image_rescan_conflict")
+            if (publication_before is not None and publication_before.batch is not None
+                    and any("enrichment_v1" in r.metadata for r in publication_before.batch.representations)):
+                # New source/processing needs explicit new ready outputs; never run
+                # the old destructive replacement over independently enriched data.
+                raise ValueError("enriched_image_requires_explicit_repreparation")
             extracted = (
                 self._prepared_texts if self._prepared_texts is not None
                 else await self._extract(content, resolved_media_type)
@@ -600,6 +659,21 @@ class ImageIngestionService:
             if not representations:
                 raise ValueError("image ingestion requires text extraction or a visual vector")
 
+            source_generation: dict[str, str] = {}
+            if publication_before is not None:
+                previous = publication_before.batch
+                if previous is None:
+                    source_generation = {"source_revision": str(uuid4())}
+                else:
+                    old_generation = previous.resource.metadata.get("source_revision")
+                    old_provenance = previous.resource.metadata.get("provenance")
+                    if isinstance(old_generation, str) and old_generation:
+                        same_source = (isinstance(old_provenance, Mapping)
+                                       and old_provenance.get("raw_source_sha256") == content_hash
+                                       and previous.resource.source_namespace == source_namespace
+                                       and previous.resource.locator == Locator(
+                                           "local_image", {"source_ref": source_ref}))
+                        source_generation = {"source_revision": old_generation if same_source else str(uuid4())}
             batch = PreparedResourceBatch(
                 ResourceRecord(
                     resource_id,
@@ -611,6 +685,7 @@ class ImageIngestionService:
                     title,
                     {
                         **resource_metadata(provenance),
+                        **source_generation,
                         "adapter": "direct_image",
                         "byte_size": len(content),
                     },
@@ -635,7 +710,13 @@ class ImageIngestionService:
             publication_started = time.perf_counter()
             published = False
             try:
-                indexing.index(batch)
+                if publication_before is None:
+                    indexing.index(batch)
+                else:
+                    outcome = indexing.index_if_current(batch, ExpectedPublication(
+                        publication_before.state, create=not publication_before.state.live))
+                    if not outcome.applied:
+                        raise ValueError("image_publication_conflict")
                 published = True
             except Exception:
                 if guarded_port.source_error is not None:

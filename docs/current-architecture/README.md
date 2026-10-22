@@ -29,6 +29,9 @@ When sources disagree, use this order:
 
 ## Supporting current contracts
 
+- [Ready OCR publication v1](../contracts/ready-ocr-v1.md) — app-owned merge, caller custody, source binding, normal image rescan and explicit limits.
+- [ADR-0015: ready OCR publication](../decisions/0015-ready-ocr-publication.md)
+
 - [Getting started](../getting-started.md)
 - [Operations and troubleshooting](../operations.md)
 - [Development guide](../development.md)
@@ -89,7 +92,10 @@ snapshot graph+state, conditional/unconditional graph writing, withdrawal/deleti
 and FTS repair. App composition retains its verified catalog. Explicit old-v2/0004
 upgrade requires offline maintenance and verified backup outside store; normal open
 never migrates. See [recovery](../recovery.md) and [SQLite API](../../packages/mdrack-sqlite/API.md).
-Purpose-aware merge/manual durability remains future W4, not storage proof.
+The first [ready-OCR family](../contracts/ready-ocr-v1.md), including purpose-aware
+merge and normal image rescan, is independently accepted on Windows/CPython 3.14.2
+source/local components and non-editable installed packages. Caller-owned retention
+is verified; host archival and the remaining W4 families are still open, not storage proof.
 
 ## Future / proposed
 

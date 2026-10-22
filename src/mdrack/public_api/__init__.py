@@ -1,6 +1,7 @@
 """Stable embedded Python API."""
 
 from mdrack.application.media_search import MediaSearchRequest, MediaSearchResult, StoredUnitInput
+from mdrack.application.ready_ocr import ReadyOCRError, ReadyOCROperation
 from mdrack.application.resources import (
     DuplicateResourceItem,
     DuplicateResourceResult,
@@ -43,6 +44,7 @@ from mdrack.public_api.models import (
 )
 
 __all__ = [
+    "ReadyOCRError", "ReadyOCROperation",
     "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput", "SourceResolver",
     "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability",
     "RouteCapabilities", "TextInput", "LegacyTextEmbeddingAdapter", "PreparedEmbeddingProvider",

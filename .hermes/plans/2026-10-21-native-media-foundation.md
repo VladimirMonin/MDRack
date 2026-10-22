@@ -72,15 +72,23 @@ This entry tracks execution, not another roadmap or evidence registry.
   checks are qualified; inherited expanded CLI strict failures are not full green.
   M04-S02 purpose-aware app merge and full enrichment stay W4; W5/W6/native/model/
   quality/full-release and the earlier global remainders are not closed.
-- W4: W3 + provider/planner contracts → purpose/variant/dependency-aware enrichment,
-  bounded retries/reuse, manual durability and rescan/import/delete/FTS consumers.
+- W4: FIRST_READY_OCR_FAMILY_ACCEPTED on Windows/CPython3.14.2 source/local
+  components and non-editable installed packages; W4-R1 CLOSED. Public engine and
+  registered CLI publish caller-owned ready OCR into real FTS without model/OCR
+  calls, preserving native/independent graphs and vector bytes through repeat,
+  correction, bounded CAS, stale-result refusal, reopen and normal image rescan.
+  The additive export/import snapshots are synchronized and closed negative controls
+  remain strict. This is the first family, not whole W4/M03-06: other artifacts/
+  projectors, dense-only transitions, changed-source rebuilding/withdrawal and
+  host archival remain OPEN. Caller custody does not claim host durability.
 - W5: common mechanisms + evaluator → native temporal/media builders and app preparation;
   frames/audio/direct video separately; real versioned RU/EN/cross-language corpus,
   held-out source groups, A–D/optional E, paired enrichment and quality/cost policy.
 - W6: all declared release-scope families → exact candidate, installed CLI/engine,
   actual OS/Python cells, migration/reopen, G01/R01–R04/T01–T02 and three separate
   contract/runtime/quality-cost verdicts. Image release includes late enrichment;
-  reduced release scope is a separate decision. Git/package publication not authorized.
+  reduced release scope is a separate decision. Scoped repository publication is
+  separate from package/tag/release publication; no full-release approval is implied.
 
 ## Roles and maintained owners
 

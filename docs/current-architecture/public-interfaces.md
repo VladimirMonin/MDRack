@@ -15,6 +15,24 @@ effective modes, nullable evidence and explicit score_kind. CLI adapters are
 Production LM Studio pixels are unsupported; explicit synthetic selection tests
 local orchestration only. This does not change the legacy methods below.
 
+## Prepared OCR enrichment
+
+This first family is independently accepted on Windows/CPython 3.14.2 at source/
+local-component and non-editable installed-package boundaries, not whole W4 or release.
+
+The additive `ready_ocr_binding`, `prepare_ready_ocr`, `publish_ready_ocr` and
+`enrich_ready_ocr` methods share `ReadyOCRService` with registered CLI
+`resource ocr-binding` / `resource enrich-ocr`. The service checks a retained
+caller-owned ready file, captures authority before I/O, and delegates dependency-
+aware merging and bounded CAS to pure app logic over the existing neutral port.
+It performs no extraction, embeddings or SQL. Lexical-only OCR enters real FTS;
+read-only retention does not. Selected-source validation is explicit, and missing
+legacy generations or unavailable host durability refuse. Native/independent graph
+data survive normal source-validated ready image rescans. Exact new operation/error
+exports, file grammar, result keys and remaining limitations are in
+[ready OCR v1](../contracts/ready-ocr-v1.md) and
+[ADR-0015](../decisions/0015-ready-ocr-publication.md).
+
 ## Explicit catalog maintenance
 
 Fresh `MDRackEngine.upgrade_catalog(backup_path, maintenance=True)` and CLI

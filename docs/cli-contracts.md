@@ -24,6 +24,17 @@ side effects; `--provider synthetic` is explicit offline testing, not a model.
 No OCR, caption, filename-as-text or hidden provider substitution is performed.
 Old `image ingest/search` and text search envelopes remain unchanged.
 
+## Ready OCR publication v1 (1.4.0rc2 source candidate)
+
+`resource ocr-binding RESOURCE_ID` exposes an explicit local source/lifecycle
+binding. `resource enrich-ocr RESOURCE_ID READY_JSON --source-image IMAGE_PATH`
+uses the shared ready-OCR engine service: lexical-only by default, no inference,
+actual caller-owned file verification, bounded conditional merge and honest
+`published`/`already_published`/`conflict`/`not_requested` outcomes. Read-only never
+publishes FTS; unavailable requested host durability refuses. Full grammar, API,
+options, source-validation boundary, compatibility and remaining limits:
+[ready OCR v1](contracts/ready-ocr-v1.md).
+
 ## Scope
 
 This document is the current S2 contract for the normal local MDRack CLI. All

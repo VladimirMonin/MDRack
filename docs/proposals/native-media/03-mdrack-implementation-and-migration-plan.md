@@ -1,7 +1,7 @@
 ---
 id: "MDRACK-NATIVE-03"
 kind: "plan"
-updated: "2026-10-21"
+updated: "2026-10-22"
 areas: ["retrieval", "native-media", "late-enrichment"]
 summary: "Полная программа реализации, перехода и проверки совместимости."
 title: "MDRack: план внедрения, совместимость и переход"
@@ -227,6 +227,17 @@ Nullable чтение исправляется вместе с этим срез
 **Граница завершения контрактной части:** применимые части `M04-P01–P06`, `M04-Q01–Q08`, `M04-U01–U03`, `M04-O01–O06` связаны со сквозными offline/local проверками. Runtime-приёмка реальной image capability фиксируется отдельно и может оставаться заблокированной после завершения этой части. Для выпуска с заявленным native image она обязательна в `M03-08`. Общая готовность обновлённой установки дополнительно зависит от storage-перехода `M03-03`.
 
 ### M03-06. Подключить обогащение и сохранение независимых проекций 🌱
+
+Первая семья [ready OCR v1](../../contracts/ready-ocr-v1.md) и
+[ADR-0015](../../decisions/0015-ready-ocr-publication.md) независимо принята на
+Windows/CPython 3.14.2 в source/local-component и non-editable installed границах;
+W4-R1 CLOSED. Проверены публичные engine/CLI, caller-owned файл, actual FTS,
+сохранение native/independent графа и vector bytes, repeat/correction, bounded CAS,
+stale-result refusal, reopen/new process и нормальный source-validated image rescan.
+Это не приёмка всей M03-06: остальные артефакты/projectors, dense-only transitions,
+source-transition rebuilding/withdrawal, host-durable хранение и применимые сквозные
+критерии остаются открыты. Live runtime, качество/стоимость и полная квалификация
+выпуска из этого результата не следуют.
 
 Новый прикладной use case, например `application/enrichment.py` TARGET, координирует source resolver, готовые артефакты, projectors и условную публикацию. Он использует существующий `ArtifactCache`, но не превращает его в каталог жизненных циклов или обязательный job store.
 

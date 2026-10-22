@@ -71,6 +71,9 @@ _NATIVE_FIELDS = (
 _schema("media.search.started media.search.completed media.search.failed "
         "media.ingest.started media.ingest.completed media.ingest.failed", _NATIVE_FIELDS)
 
+_schema("enrichment.started enrichment.completed enrichment.failed",
+        "publication_status attempt_count reason provider_call_count extraction_call_count")
+
 # App-owned categorical fields admit exact built-in strings only. Unknown labels
 # use the shared redaction marker, never interpolated or stringified.
 _LABELS = {
@@ -80,7 +83,7 @@ _LABELS = {
     "query_modality": frozenset(("text", "image", "stored_unit")),
     "encoding_role": frozenset(("document", "query", "similarity")),
     "target": frozenset(("unit", "resource")),
-    "publication_status": frozenset(("not_requested", "published", "failed")),
+    "publication_status": frozenset(("not_requested", "published", "already_published", "conflict", "failed")),
     "artifact_status": frozenset(("not_requested", "caller_prepared")),
     "reason": frozenset("""
         cancelled validation_failed unsupported_embedding_route

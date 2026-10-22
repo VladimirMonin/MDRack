@@ -14,6 +14,7 @@ from mdrack.eval.privacy import scan_privacy
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CURRENT_DOCS = REPO_ROOT / "docs" / "current-architecture"
 EXPECTED_PUBLIC_API_EXPORTS = (
+    "ReadyOCRError", "ReadyOCROperation",
     "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput", "SourceResolver",
     "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability",
     "RouteCapabilities", "TextInput", "LegacyTextEmbeddingAdapter", "PreparedEmbeddingProvider",
@@ -92,6 +93,28 @@ def test_public_api_exports_v03_image_and_resource_contracts() -> None:
 
     assert tuple(public_api.__all__) == EXPECTED_PUBLIC_API_EXPORTS
     assert all(hasattr(public_api, name) for name in EXPECTED_PUBLIC_API_EXPORTS)
+
+
+def test_ready_ocr_additive_app_inventory_is_closed_and_matches_public_exports() -> None:
+    """App-only synchronization; the separate whole-registry oracle stays strict."""
+    import mdrack.public_api as public_api
+    from mdrack.application.ready_ocr import ReadyOCRError, ReadyOCROperation
+
+    registry = (REPO_ROOT / "docs" / "compatibility" / "v0.3-compatibility-registry.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"```json compatibility-oracle\n(.*?)\n```", registry, flags=re.DOTALL)
+    assert match is not None
+    documented = json.loads(match.group(1))
+    script = runpy.run_path(str(REPO_ROOT / "scripts" / "check_installed_package.py"), run_name="oracle")
+    expected = list(EXPECTED_PUBLIC_API_EXPORTS)
+    assert documented["modules"]["mdrack.public_api"] == expected
+    assert documented["public_api_all"] == expected
+    assert list(script["REGISTRY_IMPORTS"]["mdrack.public_api"]) == expected
+    assert list(script["EXPECTED_PUBLIC_API_EXPORTS"]) == expected
+    assert public_api.__all__ == expected
+    assert public_api.ReadyOCRError is ReadyOCRError
+    assert public_api.ReadyOCROperation is ReadyOCROperation
 
 
 def test_installed_oracle_matches_documented_compatibility_inventory() -> None:
