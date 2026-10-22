@@ -6,8 +6,11 @@
 The 1.0 release-candidate API opens existing MDRack bridge databases and creates
 independent clean catalogs. `create()` preserves the immutable
 `mdrack_sqlite_catalog_v1` `0000`–`0003` compatibility history. `create_v2()`
-creates the fresh `mdrack_sqlite_catalog_v2` `0000`–`0004` history directly,
-including its exact vector codec/backend registry. Neither path copies, rewrites,
+creates the fresh `mdrack_sqlite_catalog_v2` `0000`–`0005` history directly,
+including exact vector codec/backend registries and publication state.
+Explicit `upgrade_v2(path, backup_path, maintenance=True)` supports only recognized
+completed v2/0004 after all consumers stop and a verified external backup. Normal
+open never upgrades; see [API](API.md). Neither creation path copies, rewrites,
 or upgrades app migrations `0000`–`0007`.
 
 ```python

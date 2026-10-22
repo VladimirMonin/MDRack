@@ -7,9 +7,16 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, cast
 
+from mdrack.adapters.sqlite.canonical_catalog import ApplicationSearchReadSessions
 from mdrack.application.compatibility import create_application_storage
 from mdrack.application.indexing import IndexingService
 from mdrack.application.manifest import PreparedResourceFacade
+from mdrack.application.media_search import (
+    MediaSearchRequest,
+    MediaSearchResult,
+    MediaSearchService,
+    ingest_native_image,
+)
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.application.query import ReadService
 from mdrack.application.resource_catalog import (
@@ -46,6 +53,7 @@ from mdrack.application.retrieval import (
     ResourceSearchPresetName,
     RetrievalService,
 )
+from mdrack.application.source_resolution import SourceResolver
 from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.application.transcript_ingestion import (
     TimedRetrievalMode,
@@ -62,8 +70,10 @@ from mdrack.diagnostics.storage import StorageAnalysis, analyze_application_stor
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.domain.retrieval import RetrievalResult
+from mdrack.embeddings.prepared import LegacyTextEmbeddingAdapter
 from mdrack.embeddings.runtime import embedding_profile_from_config
 from mdrack.ingestion.images import (
+    ExtractedImageText,
     ImageEmbeddingSpace,
     ImageExtractor,
     ImageIngestionResult,
@@ -71,7 +81,7 @@ from mdrack.ingestion.images import (
     ImageSearchResult,
     VisualEmbeddingProvider,
 )
-from mdrack.ports.embeddings import EmbeddingProvider
+from mdrack.ports.embeddings import EmbeddingProvider, PreparedEmbeddingProvider
 from mdrack.ports.storage import KnowledgeStorage, ReadStorage, RetrievalStorage
 from mdrack.public_api.models import UnifiedTextSimilarityResult
 from mdrack_core import (
@@ -101,6 +111,7 @@ class MDRackEngine:
         image_extractor: ImageExtractor | None = None,
         visual_embedding_provider: VisualEmbeddingProvider | None = None,
         visual_embedding_space: ImageEmbeddingSpace | None = None,
+        prepared_embedding_provider: PreparedEmbeddingProvider | None = None,
     ) -> None:
         self.root = root.resolve()
         self.config = config
@@ -110,12 +121,31 @@ class MDRackEngine:
         self._storage = storage
         self._search_index = search_index
         self._read_storage = read_storage
+        # Injected legacy storage has its own capability boundary; never silently
+        # substitute a different on-disk catalog for it.
+        self._search_read_sessions = (
+            ApplicationSearchReadSessions(self.root, config)
+            if storage is None and search_index is None
+            else getattr(search_index if search_index is not None else storage, "search_read_sessions", None)
+        )
+        self.prepared_embedding_provider = prepared_embedding_provider
         self.image_extractor = image_extractor
         self.visual_embedding_provider = visual_embedding_provider
         self.visual_embedding_space = visual_embedding_space
         self._images: ImageIngestionService | None = None
         self._search_service: RetrievalService | None = None
         self._text_embedding_profile: EmbeddingProfile | None = None
+
+    def upgrade_catalog(self, backup_path: Path, *, maintenance: bool) -> bool:
+        """Explicit maintenance; caller must stop/close every store consumer.
+
+        Construct a fresh engine with no injected/open storage for this operation.
+        No model, source resolution or automatic fallback is performed.
+        """
+        if any(handle is not None for handle in (self._storage, self._search_index, self._read_storage, self._images)):
+            raise ValueError("maintenance_requires_closed_handles")
+        from mdrack.adapters.sqlite.canonical_catalog import upgrade_application_catalog
+        return upgrade_application_catalog(self.root, self.config, backup_path, maintenance=maintenance)
 
     def _active_embedding_profile(self) -> EmbeddingProfile | None:
         if self.embedding_provider is None:
@@ -156,7 +186,8 @@ class MDRackEngine:
             return self._search_service
         embedding_profile = self._active_embedding_profile()
         self._search_service = RetrievalService(
-            self.search_index,
+            cast(RetrievalStorage, None) if self._search_read_sessions is not None else self.search_index,
+            read_sessions=self._search_read_sessions,
             embedding_provider=self.embedding_provider,
             profile=self.profile,
             profile_fingerprint=None if embedding_profile is None else embedding_profile.fingerprint,
@@ -272,7 +303,8 @@ class MDRackEngine:
     ) -> ResourcePresetSearchResult:
         """Search text-media branches with one explicit deterministic preset."""
         return await ResourcePresetSearchService(
-            self._transcript_catalog(),
+            None if self._search_read_sessions is not None else self._transcript_catalog(),
+            read_sessions=self._search_read_sessions,
             embedding_provider=self.embedding_provider,
             embedding_fingerprint=self._transcript_embedding_fingerprint(),
             profile=self.profile,
@@ -298,7 +330,8 @@ class MDRackEngine:
     ) -> UnifiedTextSearchResult:
         """Search every supported textual resource class through the active generation."""
         return await UnifiedTextSearchService(
-            self._transcript_catalog(),
+            None if self._search_read_sessions is not None else self._transcript_catalog(),
+            read_sessions=self._search_read_sessions,
             embedding_provider=self.embedding_provider,
             embedding_fingerprint=self._transcript_embedding_fingerprint(),
             profile=self.profile,
@@ -350,7 +383,11 @@ class MDRackEngine:
         metadata_weight: float = 0.2,
         limit: int = 20,
     ) -> ResourceSearchResult:
-        return self._metadata_service().search(
+        service = (
+            MetadataCatalogService(None, read_sessions=self._search_read_sessions)
+            if self._search_read_sessions is not None else self._metadata_service()
+        )
+        return service.search(
             query,
             metadata_filters=metadata_filters,
             body_weight=body_weight,
@@ -411,6 +448,34 @@ class MDRackEngine:
         """Delete one active logical resource graph without exposing storage IDs."""
         return delete_resource(self._transcript_catalog(), resource_id)
 
+    def _prepared_provider(self) -> PreparedEmbeddingProvider:
+        if self.prepared_embedding_provider is not None:
+            return self.prepared_embedding_provider
+        profile = self._active_embedding_profile()
+        if self.embedding_provider is None or profile is None:
+            raise ValueError("embedding_provider_unavailable")
+        return LegacyTextEmbeddingAdapter(self.embedding_provider, profile)
+
+    async def ingest_native_image(
+        self, path: Path | None, *, resource_id: str, source_namespace: str, source_ref: str,
+        expected_revision: str | None = None, resolver: SourceResolver | None = None,
+        derived_text: tuple[ExtractedImageText, ...] = (),
+        derived_lexical: bool = True, derived_dense: bool = False,
+    ) -> ImageIngestionResult:
+        return await ingest_native_image(
+            self._prepared_provider(),
+            lambda: getattr(self._application_storage(create=True), "resource_store"), path,
+            resource_id=resource_id, source_namespace=source_namespace, source_ref=source_ref,
+            expected_revision=expected_revision, resolver=resolver,
+            derived_text=derived_text, derived_lexical=derived_lexical, derived_dense=derived_dense,
+        )
+
+    async def search_media(self, request: MediaSearchRequest) -> MediaSearchResult:
+        return await MediaSearchService(
+            self._prepared_provider(), read_sessions=self._search_read_sessions,
+            catalog=None if self._search_read_sessions is not None else self._transcript_catalog(),
+        ).search(request)
+
     async def ingest_image(
         self,
         path: Path,
@@ -434,13 +499,13 @@ class MDRackEngine:
         self._image_service().delete(resource_id)
 
     def search_images_text(self, query: str, *, limit: int = 20) -> ImageSearchResult:
-        return self._image_service().search_text(query, limit=limit)
+        return self._image_service(search=True).search_text(query, limit=limit)
 
     async def search_images_semantic(self, query: str, *, limit: int = 20) -> ImageSearchResult:
-        return await self._image_service().search_semantic(query, limit=limit)
+        return await self._image_service(search=True).search_semantic(query, limit=limit)
 
     async def search_images_hybrid(self, query: str, *, limit: int = 20) -> ImageSearchResult:
-        return await self._image_service().search_hybrid(query, limit=limit)
+        return await self._image_service(search=True).search_hybrid(query, limit=limit)
 
     def find_resource_duplicates(
         self,
@@ -502,6 +567,11 @@ class MDRackEngine:
         limit: int = 20,
     ) -> UnifiedTextSimilarityResult:
         """Find provider-free textual matches by resource ID with portable evidence only."""
+        if self._search_read_sessions is not None:
+            with self._search_read_sessions.open() as session:
+                return MDRackEngine(
+                    root=self.root, config=self.config, storage=cast(KnowledgeStorage, session.storage),
+                ).find_similar_resource(resource_id, scope=scope, limit=limit)
         catalog = self._transcript_catalog()
         resolver = cast(Any, self.storage) if callable(
             getattr(self.storage, "resolve_textual_whole_resource_units", None)
@@ -546,17 +616,22 @@ class MDRackEngine:
 
     def read_unit(self, unit_id: str) -> dict[str, object] | None:
         """Read any logical search unit without Markdown chunk projection."""
+        if self._search_read_sessions is not None:
+            with self._search_read_sessions.open() as session:
+                unit = session.catalog.read_unit(unit_id)
+                return None if unit is None else project_unit(unit).to_dict()
         unit = cast(Any, self._transcript_catalog()).read_unit(unit_id)
         return None if unit is None else project_unit(unit).to_dict()
 
     def get_chunk_source_locator(self, chunk_id: str) -> SourceLocator:
         return ReadService(self.read_storage).get_chunk_source_locator(chunk_id)
 
-    def _image_service(self) -> ImageIngestionService:
+    def _image_service(self, *, search: bool = False) -> ImageIngestionService:
         if self._images is not None:
             return self._images
-        catalog = getattr(self.storage, "resource_store", None)
-        if catalog is None:
+        scoped_search = search and self._search_read_sessions is not None
+        catalog = None if scoped_search else getattr(self.storage, "resource_store", None)
+        if catalog is None and not scoped_search:
             raise RuntimeError("active resource-core generation is required for image operations")
         text_space = None
         profile = self._active_embedding_profile()
@@ -569,7 +644,7 @@ class MDRackEngine:
                 profile_name=profile.name,
                 vector_value_policy=profile.vector_value_policy,
             )
-        self._images = ImageIngestionService(
+        service = ImageIngestionService(
             catalog,
             extractor=self.image_extractor,
             text_embedding_provider=self.embedding_provider,
@@ -577,10 +652,15 @@ class MDRackEngine:
             visual_embedding_provider=self.visual_embedding_provider,
             visual_space=self.visual_embedding_space,
             profile=self.profile,
+            read_sessions=self._search_read_sessions,
         )
-        return self._images
+        if not scoped_search:
+            self._images = service
+        return service
 
     def _resource_query_service(self) -> ResourceQueryService:
+        if self._search_read_sessions is not None:
+            return ResourceQueryService(cast(Any, None), read_sessions=self._search_read_sessions)
         catalog = getattr(self.storage, "resource_store", None)
         if catalog is None:
             raise RuntimeError("active resource-core generation is required for resource operations")
@@ -706,7 +786,8 @@ class MDRackEngine:
 
     def _timed_retrieval_service(self) -> TimedRetrievalService:
         return TimedRetrievalService(
-            self._transcript_catalog(),
+            None if self._search_read_sessions is not None else self._transcript_catalog(),
+            read_sessions=self._search_read_sessions,
             embedding_provider=self.embedding_provider,
             embedding_fingerprint=self._transcript_embedding_fingerprint(),
             profile=self.profile,

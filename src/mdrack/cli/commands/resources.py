@@ -9,6 +9,7 @@ from typing import Any, TypeVar, cast
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.resources import FacetFilter, ResourceQueryScope, ResourceQueryService
 from mdrack.output.envelope import error as envelope_error
@@ -18,7 +19,7 @@ from mdrack.public_api.engine import MDRackEngine
 from mdrack_core.application.retrieval import RetrievalService
 from mdrack_core.domain import TARGET_RESOURCE, TARGET_UNIT, LexicalBranch, SearchRequest
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 _F = TypeVar("_F", bound=Callable[..., object])
 
 
@@ -168,7 +169,7 @@ def duplicates(
     storage = None
     try:
         storage, catalog = _open_catalog(ctx)
-        result = ResourceQueryService(catalog).find_duplicates(
+        result = ResourceQueryService(catalog, read_sessions=storage.search_read_sessions).find_duplicates(
             resource_id,
             scope=_scope(**filters),
             limit=limit,
@@ -214,7 +215,7 @@ def similar(
     storage = None
     try:
         storage, catalog = _open_catalog(ctx)
-        result = ResourceQueryService(catalog).find_similar(
+        result = ResourceQueryService(catalog, read_sessions=storage.search_read_sessions).find_similar(
             query_unit_id,
             space_id,
             scope=_scope(**filters),
@@ -267,25 +268,26 @@ def search(
             target=TARGET_RESOURCE if target == "resource" else TARGET_UNIT,
             limit=limit,
         )
-        result = RetrievalService(catalog).search(request)
-        reason = result.degradations[0].category.value if result.degradations else None
-        data = {
-            "query": query,
-            "target": target,
-            "results": [
-                {
-                    "logical_id": item.logical_id,
-                    "resource_id": item.resource_id,
-                    "unit_id": item.unit_id,
-                    "score": item.score,
-                    "rank": item.rank,
-                }
-                for item in result.items
-            ],
-            "total_count": len(result.items),
-            "degraded": reason is not None,
-            "degraded_reason": reason,
-        }
+        with storage.search_read_sessions.open() as session:
+            result = RetrievalService(session.catalog).search(request)
+            reason = result.degradations[0].category.value if result.degradations else None
+            data = {
+                "query": query,
+                "target": target,
+                "results": [
+                    {
+                        "logical_id": item.logical_id,
+                        "resource_id": item.resource_id,
+                        "unit_id": item.unit_id,
+                        "score": item.score,
+                        "rank": item.rank,
+                    }
+                    for item in result.items
+                ],
+                "total_count": len(result.items),
+                "degraded": reason is not None,
+                "degraded_reason": reason,
+            }
         _output(ctx, envelope_success(data, command=command))
     except Exception:
         logger.error("cli.resources.search.failed", extra={"reason": "resource_search_error"})

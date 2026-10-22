@@ -44,6 +44,38 @@ When applicable, document:
 Use source anchors (`path:line` or symbol names) during audit/review. Published docs
 may use stable paths/symbols when line numbers would age quickly.
 
+## Knowledge lifecycle and selected metadata
+
+The author updates affected architecture/contracts/instructions/examples/guides in the
+same logical change, or records a concrete no-document-impact reason. Find the existing
+knowledge owner before creating another document. Navigation selects knowledge; it is
+not another tracker or a second editable architecture source. Requirements, CURRENT,
+TARGET/proposed, executed evidence and history remain distinct. An accepted plan is not
+an implemented API. Preserve historical verification metadata when importing material.
+
+Only the four imported `docs/proposals/native-media/01…04` documents currently use the
+selected authoring passport: `id/title/kind/status/created/updated/areas/summary`.
+Scalars are nonempty strings (quote dates/versions); areas is a nonempty list of resolved
+strings. IDs are unique `MDRACK-NATIVE-01` through `04`; kinds are philosophy/proposal/
+plan/proposal. Status is draft/proposed/accepted/superseded/archived, never PASS or done.
+Dates are quoted ISO dates: created preserves source creation, updated records actual
+editorial change, not evidence freshness. Preserve original technical/verification
+fields. YAML duplicate keys, anchors, aliases, merges and executable tags are forbidden.
+AGENTS, native instructions (`applyTo/name/description`) and immutable evidence retain
+their grammar; do not stamp the rest of the repository with this passport.
+
+`docs/documentation-scope.json` explicitly selects authoring/native Markdown paths, not
+all linked bodies. `uv run python scripts/check_documentation.py --check` reads only
+that corpus, checks local target existence and checks anchors only in selected bodies;
+unselected anchors and external URLs are not_checked. Simple inline/reference links,
+ATX headings and explicit HTML IDs are supported, not full CommonMark/GFM or rendering.
+
+`--update-index` updates only the single marked block in the bundle README after input
+validation; it derives title/kind/status/link from validated records, never architecture
+truth or acceptance status. Authors maintain the bodies. Preserve surrounding manual
+bytes, all other files, dates and no-op mtime. Missing/duplicate markers or invalid inputs
+must refuse writes. Scope is a checker input, not authority to expand source access.
+
 ## Mermaid and links
 
 - Give each diagram one role: component, sequence, class/port, or current ER model.

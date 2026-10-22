@@ -1,0 +1,605 @@
+{
+  "contract": "mdrack.quality-input",
+  "schema_version": 2,
+  "corpus_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "judgments_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "implementation_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "cases": [
+    {
+      "case_id": "resource-zero-before-positive",
+      "case_type": "positive",
+      "target": "resource",
+      "match": "identity",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": null,
+      "judgments": [
+        {
+          "judgment_id": "zero",
+          "grade": 0,
+          "unit_id": null,
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        },
+        {
+          "judgment_id": "good",
+          "grade": 3,
+          "unit_id": null,
+          "resource_id": "b",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "a-unit",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        },
+        {
+          "unit_id": "b-unit",
+          "resource_id": "b",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ]
+    },
+    {
+      "case_id": "one-of-two-positive",
+      "case_type": "positive",
+      "target": "unit",
+      "match": "identity",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": null,
+      "judgments": [
+        {
+          "judgment_id": "one",
+          "grade": 1,
+          "unit_id": "one",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        },
+        {
+          "judgment_id": "two",
+          "grade": 3,
+          "unit_id": "two",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "one",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ]
+    },
+    {
+      "case_id": "temporal-one-to-one",
+      "case_type": "positive",
+      "target": "unit",
+      "match": "temporal",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": {
+        "interval_iou": 0.5,
+        "timestamp_tolerance_ms": 10
+      },
+      "judgments": [
+        {
+          "judgment_id": "g",
+          "grade": 3,
+          "unit_id": null,
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              100,
+              200
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "new-one",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              100,
+              200
+            ]
+          ],
+          "timestamp_ms": null
+        },
+        {
+          "unit_id": "new-two",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              100,
+              200
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ]
+    },
+    {
+      "case_id": "foreign-owner",
+      "case_type": "positive",
+      "target": "unit",
+      "match": "temporal",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": {
+        "interval_iou": 0.5,
+        "timestamp_tolerance_ms": 10
+      },
+      "judgments": [
+        {
+          "judgment_id": "g",
+          "grade": 3,
+          "unit_id": null,
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              100,
+              200
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "new",
+          "resource_id": "b",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              100,
+              200
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ]
+    },
+    {
+      "case_id": "old-revision",
+      "case_type": "positive",
+      "target": "unit",
+      "match": "temporal",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": {
+        "interval_iou": 0.5,
+        "timestamp_tolerance_ms": 10
+      },
+      "judgments": [
+        {
+          "judgment_id": "g",
+          "grade": 3,
+          "unit_id": null,
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              100,
+              200
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "new",
+          "resource_id": "a",
+          "source_revision": "v2",
+          "intervals": [
+            [
+              100,
+              200
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ]
+    },
+    {
+      "case_id": "compound-gap",
+      "case_type": "positive",
+      "target": "unit",
+      "match": "temporal",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": {
+        "interval_iou": 0.5,
+        "timestamp_tolerance_ms": 10
+      },
+      "judgments": [
+        {
+          "judgment_id": "g",
+          "grade": 3,
+          "unit_id": null,
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              0,
+              10
+            ],
+            [
+              90,
+              100
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "span",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [
+            [
+              0,
+              100
+            ]
+          ],
+          "timestamp_ms": null
+        }
+      ]
+    },
+    {
+      "case_id": "timestamp-within-tolerance",
+      "case_type": "positive",
+      "target": "unit",
+      "match": "temporal",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": {
+        "interval_iou": 0.5,
+        "timestamp_tolerance_ms": 10
+      },
+      "judgments": [
+        {
+          "judgment_id": "g",
+          "grade": 3,
+          "unit_id": null,
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": 100
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "frame",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": 110
+        }
+      ]
+    },
+    {
+      "case_id": "negative-empty",
+      "case_type": "negative",
+      "target": "unit",
+      "match": "identity",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": null,
+      "judgments": [],
+      "ranked": []
+    },
+    {
+      "case_id": "negative-zero-and-unjudged",
+      "case_type": "negative",
+      "target": "unit",
+      "match": "identity",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": null,
+      "judgments": [
+        {
+          "judgment_id": "zero",
+          "grade": 0,
+          "unit_id": "zero",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "zero",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        },
+        {
+          "unit_id": "unjudged",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ]
+    },
+    {
+      "case_id": "scope-correct-gold",
+      "case_type": "positive",
+      "target": "unit",
+      "match": "identity",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "a",
+          "source_revision": "v2"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v2"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": null,
+      "judgments": [
+        {
+          "judgment_id": "g",
+          "grade": 3,
+          "unit_id": "good",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        },
+        {
+          "judgment_id": "excluded",
+          "grade": 3,
+          "unit_id": "excluded",
+          "resource_id": "outside",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "good",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ]
+    }
+  ]
+}

@@ -39,6 +39,10 @@ def test_workflow_is_offline_and_covers_linux_windows_python_matrix() -> None:
     assert "uv sync --all-extras --frozen --offline" not in workflow
     assert "offline_release_matrix.py --output-dir \"${{ runner.temp }}/mdrack-release-artifacts\"" in workflow
     assert "check_v13_release_packet.py --artifacts-dir" in workflow
+    assert "check_documentation.py --check" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "SKIPPED historical release identity" in workflow
+    assert "Whitespace gate (all routes)" in workflow
     for gate in (
         "ruff check",
         "mypy",
@@ -76,6 +80,9 @@ def test_current_verification_wrappers_use_the_v13_packet_gate() -> None:
     for path in (REPO_ROOT / "scripts" / "verify.sh", REPO_ROOT / "scripts" / "verify.ps1"):
         source = path.read_text(encoding="utf-8")
         assert "check_v13_release_packet.py" in source
+        assert "check_documentation.py --check" in source
+        assert "--development" in source
+        assert "SKIPPED historical release identity" in source
         assert "v0.4-release-packet" not in source
         assert "w5-offline-release-matrix" not in source
         assert "check_release_docs.py" not in source
@@ -102,9 +109,9 @@ def test_matrix_script_has_no_network_enabled_default() -> None:
 def test_matrix_install_graph_accepts_the_root_sqlite_rc2_edge() -> None:
     module = runpy.run_path(str(REPO_ROOT / "scripts" / "offline_release_matrix.py"))
     assert module["EXPECTED_LOCAL_DEPENDENCIES"]["mdrack-sqlite"] == (
-        "mdrack-core==1.0.0rc1",
+        "mdrack-core==1.0.0rc2",
     )
-    assert "mdrack-sqlite==1.0.0rc2" in (
+    assert "mdrack-sqlite==1.0.0rc3" in (
         REPO_ROOT / "pyproject.toml"
     ).read_text(encoding="utf-8")
     runtime, _ = module["_locked_runtime"]()

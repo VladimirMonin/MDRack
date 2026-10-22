@@ -121,6 +121,7 @@ def test_v2_clean_catalog_has_independent_manifest_registry_and_reopen_contract(
         "0002",
         "0003",
         "0004",
+        "0005",
     ]
     assert all(
         hashlib.sha256(content).hexdigest() == digest

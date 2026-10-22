@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -31,7 +33,7 @@ def _key() -> ArtifactCacheKey:
 
 def _write_config(root: Path, cache_path: Path) -> Path:
     config = root / "config.toml"
-    config.write_text(f'[cache]\ndirectory = "{cache_path}"\n', encoding="utf-8")
+    config.write_text(f'[cache]\ndirectory = {json.dumps(str(cache_path))}\n', encoding="utf-8")
     return config
 
 
@@ -185,3 +187,29 @@ def test_cache_purge_removes_only_owned_entries_and_keeps_owned_root(tmp_path: P
         "mdrack.artifact-cache.v1\n"
     )
     assert cache.status().entry_count == 0
+
+
+@pytest.mark.parametrize("command", ["status", "verify", "purge"])
+def test_cache_cli_rejects_lexical_root_reparse(tmp_path: Path, command: str) -> None:
+    outside = tmp_path / "outside"
+    cache = ArtifactCache(outside)
+    cache.store(_key(), b"PRIVATE_OUTSIDE")
+    link = tmp_path / "configured-cache"
+    if os.name == "nt":
+        result = subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(outside)],
+                                capture_output=True, timeout=15)
+        assert result.returncode == 0
+    else:
+        link.symlink_to(outside, target_is_directory=True)
+    config = _write_config(tmp_path, link)
+    try:
+        result = CliRunner().invoke(main, ["--root", str(tmp_path), "--config-file", str(config),
+                                          "cache", command, *(["--confirm"] if command == "purge" else [])])
+        assert result.exit_code == 1
+        assert json.loads(result.stdout)["error"]["code"] == f"CACHE_{command.upper()}_ERROR"
+        captured = result.stdout + result.stderr
+        assert "PRIVATE_OUTSIDE" not in captured
+        assert str(outside) not in captured
+        assert cache.lookup(_key()).payload == b"PRIVATE_OUTSIDE"
+    finally:
+        link.rmdir() if os.name == "nt" else link.unlink()

@@ -65,12 +65,22 @@ subject to MPL-2.0. The normal MDRack Python artifact does not embed `certifi`; 
 installs it separately. If a later product bundles or modifies MPL-covered files, preserve
 the MPL notices and provide the corresponding modified covered source files under MPL-2.0.
 MPL-2.0 is not a blanket rule that every surrounding proprietary file must be opened, but
-this ledger is not a substitute for checking the exact bundle and legal situation.[4][8]
+this ledger is not a substitute for checking the exact bundle and legal situation.
+See [MPL-2.0](https://spdx.org/licenses/MPL-2.0.html) and
+[the certifi release](https://pypi.org/project/certifi/2026.6.17).
 
 A Windows PyInstaller onedir EXE is also outside this ledger's accepted Python-artifact
 scope. Before it is called release-ready, build it on Windows and retain an exact manifest
 of every embedded file plus the applicable license/notice texts. Do not infer that result
 from resolver-only wheel/sdist evidence.
+
+## Separate documentation/tooling adaptation
+
+Selective Project Foundation Kit 0.2.0 adaptation and applicable PFK/ECC full MIT
+notices are in [project-foundation-kit provenance](docs/provenance/project-foundation-kit.md).
+These source/docs/tooling portions are not resolver runtime dependencies and do not
+change the 19 rows above or MDRack's own license. Preserve that notice in source/sdist
+copies containing the adapted material; no such tooling/docs payload is in the app wheel.
 
 ## Sources
 

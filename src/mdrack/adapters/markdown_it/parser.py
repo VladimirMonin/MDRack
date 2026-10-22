@@ -115,7 +115,7 @@ def _source_slice(content: str, offsets: list[int], start: int, end: int) -> tup
 def _inline_text(tokens: list[Token], start_index: int) -> str | None:
     opener = tokens[start_index]
     end_index = start_index + 1
-    depth = opener.nesting
+    depth: int = opener.nesting
     collected: list[str] = []
     while end_index < len(tokens) and depth > 0:
         token = tokens[end_index]

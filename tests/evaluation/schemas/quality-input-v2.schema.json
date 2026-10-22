@@ -1,0 +1,299 @@
+{
+  "$defs": {
+    "case": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "case_type": {
+          "enum": [
+            "positive",
+            "negative"
+          ]
+        },
+        "cutoffs": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "judgment_policy": {
+          "enum": [
+            "complete",
+            "pooled"
+          ]
+        },
+        "judgments": {
+          "items": {
+            "$ref": "#/$defs/judgment"
+          },
+          "type": "array"
+        },
+        "match": {
+          "enum": [
+            "identity",
+            "temporal"
+          ]
+        },
+        "ranked": {
+          "items": {
+            "$ref": "#/$defs/ranked"
+          },
+          "type": "array"
+        },
+        "scope": {
+          "items": {
+            "$ref": "#/$defs/owner"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "target": {
+          "enum": [
+            "resource",
+            "unit"
+          ]
+        },
+        "temporal_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/policy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unjudged_policy": {
+          "enum": [
+            "error",
+            "nonrelevant"
+          ]
+        }
+      },
+      "required": [
+        "case_id",
+        "case_type",
+        "cutoffs",
+        "judgment_policy",
+        "judgments",
+        "match",
+        "ranked",
+        "scope",
+        "target",
+        "temporal_policy",
+        "unjudged_policy"
+      ],
+      "type": "object"
+    },
+    "judgment": {
+      "additionalProperties": false,
+      "properties": {
+        "grade": {
+          "maximum": 3,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "intervals": {
+          "items": {
+            "items": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "judgment_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "resource_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_revision": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "timestamp_ms": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "grade",
+        "intervals",
+        "judgment_id",
+        "resource_id",
+        "source_revision",
+        "timestamp_ms",
+        "unit_id"
+      ],
+      "type": "object"
+    },
+    "owner": {
+      "additionalProperties": false,
+      "properties": {
+        "resource_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_revision": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_id",
+        "source_revision"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "interval_iou": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "timestamp_tolerance_ms": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "interval_iou",
+        "timestamp_tolerance_ms"
+      ],
+      "type": "object"
+    },
+    "ranked": {
+      "additionalProperties": false,
+      "properties": {
+        "intervals": {
+          "items": {
+            "items": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "resource_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_revision": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "timestamp_ms": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "intervals",
+        "resource_id",
+        "source_revision",
+        "timestamp_ms",
+        "unit_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/case"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "contract": {
+      "const": "mdrack.quality-input"
+    },
+    "corpus_ref": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "implementation_ref": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "judgments_ref": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 2
+    }
+  },
+  "required": [
+    "cases",
+    "contract",
+    "corpus_ref",
+    "implementation_ref",
+    "judgments_ref",
+    "schema_version"
+  ],
+  "type": "object"
+}

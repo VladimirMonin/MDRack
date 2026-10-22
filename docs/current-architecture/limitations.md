@@ -41,8 +41,9 @@ This page is a current-state boundary, not a roadmap promise.
 - Standard Markdown hybrid retrieval applies configured `text_weight` and
   `semantic_weight`; a zero-weight branch is omitted before provider/storage
   execution. Low-level services without configuration retain equal defaults.
-- Semantic search does not short-circuit an empty string before invoking the
-  provider.
+- Semantic-only search does not short-circuit an empty string before invoking the
+  provider. Ordinary application hybrid search instead rejects empty/whitespace
+  queries before provider preparation or reader entry.
 - The bounded synthetic measurements in
   [v0.3.1 offline evidence](../evidence/v0.3.1-release-gate.md) are observations
   from one Linux host, not a portable latency/RSS support SLA. Larger matrix
@@ -50,6 +51,30 @@ This page is a current-state boundary, not a roadmap promise.
 - Provider-free vectors and the accepted real-source media run prove application
   wiring, timing evidence, source integrity, and textual retrieval. They do not
   establish universal semantic quality from a live embedding model.
+
+## Search response consistency
+
+- The [operation-owned search snapshot](README.md#operation-owned-search-snapshots)
+  covers one ordinary application response. A later independent read, metadata
+  inspection, export or enrich request may observe a newer commit; there is no
+  shared filesystem snapshot or publication/CAS token in the search response.
+  The separate conditional-publication API does not extend a search transaction
+  across later enrich work or the external filesystem.
+- Standalone services and injected legacy storage without the optional app
+  read-session factory retain their legacy consistency boundary. A catalog context
+  manager alone owns lifetime, not a multi-call search snapshot.
+- Query-provider/HTTP preparation is outside the owned transaction. Existing-vector
+  similarity reads its basis, candidates and hydration together without a provider.
+  A future consumer needing a basis before HTTP must capture immutable values,
+  close, perform HTTP and revalidate in a new session, not keep a borrowed reader.
+- Each operation opens and fully verifies a readonly catalog. Verification preflight
+  and the subsequent search use separate snapshots; opening/verification cost is
+  not zero. Retained small synthetic warm timings are not a dense/native benchmark
+  or portable latency/CPU/RSS guarantee.
+- Deterministic published-catalog interleavings were checked on Windows/CPython
+  3.14.2 with a writer-ready barrier. A retained Windows SHM/topology bootstrap
+  `PermissionError` observation is not claimed fixed; arbitrary simultaneous
+  bootstrap/open topology remains outside that evidence.
 
 ## Parsing and chunking
 
@@ -102,7 +127,11 @@ extension inferred from an existing protocol or reserved field.
   app-bridge, and legacy stores are unsupported; MDRack does not read, copy, or
   migrate them automatically.
 - First creation is exclusive and failure-cleaned. There is no candidate,
-  activation, rollback, retention, or migration mode in the application CLI.
+  activation, automatic rollback, retention or automatic migration mode. Explicit
+  offline `rebuild upgrade` supports only exact completed clean v2/0004 to current
+  v2/0005, with all consumers stopped/closed and verified backup outside store.
+  It never adopts v1/app-bridge/unknown/damaged/incomplete catalogs; see
+  [ADR-0014](../decisions/0014-conditional-publication-and-v2-upgrade.md).
 - Linux unit/offline, local SQLite/filesystem, and installed-wheel evidence does
   not prove real-source safety, live external providers, or Windows execution.
   The [one-store acceptance runner](../one-store-acceptance.md) adds a bounded

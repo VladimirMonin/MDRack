@@ -3,17 +3,30 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
+from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import httpx
 import pytest
 
+from mdrack.adapters.sqlite.canonical_catalog import open_application_catalog, open_application_catalog_readonly
+from mdrack.config.models import MDRackConfig
 from mdrack.embeddings.lmstudio import (
     LMStudioControlClient,
     LMStudioControlError,
     LMStudioProvider,
 )
 from mdrack.embeddings.protocol import EmbeddingError, EmbeddingHealth
+from mdrack.ingestion.images import (
+    ExtractedImageText,
+    ImageEmbeddingSpace,
+    ImageIngestionService,
+    StaticImageExtractor,
+)
+from mdrack.integrations.lmstudio import client as lm
 
 
 class _AsyncClientStub:
@@ -710,3 +723,202 @@ class TestLMStudioProviderClose:
         )
 
         await provider.close()
+
+
+@pytest.mark.parametrize("failed_event", ["llm.request.started", "llm.request.finished"])
+def test_real_image_semantic_result_survives_lm_sink_io(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failed_event: str,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def response(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        body = json.loads(request.content)
+        return httpx.Response(200, json={"data": [
+            {"embedding": [0.25, 0.75], "index": i} for i in range(len(body["input"]))
+        ]})
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(lm.httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(response), **kwargs,
+    ))
+    provider = LMStudioProvider(
+        endpoint="https://PRIVATE_HOST.invalid/private-api", model="fixture-model", dimensions=2,
+    )
+    source = tmp_path / "PRIVATE_PATH.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\nsynthetic")
+    logger = logging.getLogger(lm.__name__)
+    previous = (logger.level, logger.propagate)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    good = logging.FileHandler(tmp_path / "lm.log", encoding="utf-8")
+    logger.addHandler(good)
+
+    class Broken(logging.Handler):
+        calls = 0
+
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.getMessage().startswith(failed_event + " "):
+                self.calls += 1
+                raise OSError("PRIVATE_EXCEPTION")
+
+    broken = Broken()
+    catalog = None
+    try:
+        catalog = open_application_catalog(tmp_path, MDRackConfig(), create=True)
+        service = ImageIngestionService(
+            catalog,
+            extractor=StaticImageExtractor([ExtractedImageText("caption_text", "PRIVATE_CONTENT", "fixture-v1")]),
+            text_embedding_provider=provider, text_space=ImageEmbeddingSpace("fixture-space", 2, "fixture-fingerprint"),
+        )
+        asyncio.run(service.ingest(source, resource_id="fixture-image", source_namespace="fixture",
+                                   source_ref="images/fixture.png"))
+        healthy = asyncio.run(service.search_semantic("PRIVATE_QUERY", limit=1))
+        assert [item.resource_id for item in healthy.results] == ["fixture-image"]
+        assert healthy.degraded is False
+        before_requests = len(requests)
+        logger.addHandler(broken)
+        after = asyncio.run(service.search_semantic("PRIVATE_QUERY", limit=1))
+        assert len(requests) == before_requests + 1
+        assert broken.calls == 1
+        assert after == healthy
+        # Query recipe and vector transport remain real provider behavior.
+        query_body = json.loads(requests[-1].content)
+        assert query_body["input"] == ["Represent the query for retrieval: PRIVATE_QUERY"]
+        good.flush()
+        output = (tmp_path / "lm.log").read_text(encoding="utf-8")
+        assert output
+        assert "input_count=1" in output and "vector_count=1" in output and "elapsed_ms=" in output
+        for private in ("PRIVATE_HOST", "private-api", "PRIVATE_PATH", "PRIVATE_CONTENT", "PRIVATE_QUERY",
+                        "PRIVATE_EXCEPTION"):
+            assert private not in output
+    finally:
+        if catalog is not None:
+            catalog.close()
+        logger.removeHandler(broken)
+        logger.removeHandler(good)
+        logger.setLevel(previous[0])
+        logger.propagate = previous[1]
+        good.close()
+    reopened = open_application_catalog_readonly(tmp_path, MDRackConfig())
+    try:
+        counts = reopened.verify()
+        assert (counts.resources, counts.representations, counts.units, counts.vectors) == (1, 2, 2, 2)
+    finally:
+        reopened.close()
+
+
+@pytest.mark.parametrize("failure,reason", [
+    ("capability", "requested_dimensions_not_tested"),
+    ("timeout", "timeout"), ("http", "http_status"), ("request", "request_error"),
+    ("json", "invalid_json"), ("missing", "missing_data_field"),
+    ("structure", "invalid_embedding_structure"), ("dimensions", "dimension_mismatch"),
+])
+def test_real_provider_failure_is_not_replaced_by_failed_diagnostic_io(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str, reason: str,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def response(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if failure == "timeout":
+            raise httpx.ReadTimeout("PRIVATE_EXCEPTION", request=request)
+        if failure == "request":
+            raise httpx.ConnectError("PRIVATE_EXCEPTION", request=request)
+        if failure == "http":
+            return httpx.Response(503, text="PRIVATE_PROVIDER_BODY")
+        if failure == "json":
+            return httpx.Response(200, text="PRIVATE_PROVIDER_BODY")
+        if failure == "missing":
+            return httpx.Response(200, json={"private": "PRIVATE_PROVIDER_BODY"})
+        if failure == "structure":
+            return httpx.Response(200, json={"data": [{"private": "PRIVATE_PROVIDER_BODY"}]})
+        return httpx.Response(200, json={"data": [{"embedding": [0.25], "index": 0}]})
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(lm.httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(response), **kwargs,
+    ))
+    provider = LMStudioProvider(
+        endpoint="https://PRIVATE_HOST.invalid/private-api", model="fixture-model", dimensions=2,
+        requested_dimensions=1 if failure == "capability" else None,
+    )
+    logger = logging.getLogger(lm.__name__)
+    previous = (logger.level, logger.propagate)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    good = logging.FileHandler(tmp_path / "failure.log", encoding="utf-8")
+    logger.addHandler(good)
+
+    class Broken(logging.Handler):
+        calls = 0
+
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.getMessage().startswith("llm.request.failed "):
+                self.calls += 1
+                raise OSError("PRIVATE_SINK_EXCEPTION")
+
+    broken = Broken()
+    try:
+        with pytest.raises(EmbeddingError) as healthy:
+            asyncio.run(provider.embed(["PRIVATE_CONTENT"]))
+        logger.addHandler(broken)
+        with pytest.raises(EmbeddingError) as after:
+            asyncio.run(provider.embed(["PRIVATE_CONTENT"]))
+        assert type(after.value) is type(healthy.value)
+        assert str(after.value) == str(healthy.value)
+        assert type(after.value.__cause__) is type(healthy.value.__cause__)
+        assert broken.calls == 1
+        assert len(requests) == (0 if failure == "capability" else 2)
+        good.flush()
+        output = (tmp_path / "failure.log").read_text(encoding="utf-8")
+        assert output and "reason=" + reason in output
+        assert ("calls_attempted=0" if failure == "capability" else "input_count=1") in output
+        for private in ("PRIVATE_HOST", "private-api", "PRIVATE_PROVIDER_BODY", "PRIVATE_CONTENT",
+                        "PRIVATE_EXCEPTION", "PRIVATE_SINK_EXCEPTION"):
+            assert private not in output
+    finally:
+        logger.removeHandler(broken)
+        logger.removeHandler(good)
+        logger.setLevel(previous[0])
+        logger.propagate = previous[1]
+        good.close()
+
+
+@pytest.mark.parametrize("edge", ["filter", "formatter", "emit"])
+def test_provider_programming_errors_remain_visible(monkeypatch: pytest.MonkeyPatch, edge: str) -> None:
+    original_client = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"data": [{"embedding": [0.25, 0.75]}]}))
+    monkeypatch.setattr(lm.httpx, "AsyncClient", lambda **kwargs: original_client(transport=transport, **kwargs))
+    provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+    logger = logging.getLogger(lm.__name__)
+    previous = (logger.level, logger.propagate)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    class BrokenFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            raise ValueError("synthetic programming defect")
+
+    class BrokenFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            raise ValueError("synthetic programming defect")
+
+    class BrokenHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise ValueError("synthetic programming defect")
+
+    handler = BrokenHandler() if edge == "emit" else logging.StreamHandler(StringIO())
+    if edge == "filter":
+        handler.addFilter(BrokenFilter())
+    if edge == "formatter":
+        handler.setFormatter(BrokenFormatter())
+    logger.addHandler(handler)
+    try:
+        with pytest.raises(ValueError, match="programming defect"):
+            asyncio.run(provider.embed(["PRIVATE_CONTENT"]))
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
+        logger.setLevel(previous[0])
+        logger.propagate = previous[1]

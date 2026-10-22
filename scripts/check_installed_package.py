@@ -16,11 +16,17 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-EXPECTED_VERSION = "1.3.0"
+EXPECTED_VERSION = "1.4.0rc2"
 REGISTRY_IMPORTS = {
+    "mdrack_core": (
+        "ExpectedPublication", "PublicationResult", "PublicationState", "ResourceSnapshot", "PublicationPort",
+    ),
     "mdrack.application.query": ("SearchService",),
     "mdrack.application.retrieval": ("RetrievalService", "HybridRetrievalService"),
     "mdrack.public_api": (
+        "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput", "SourceResolver",
+        "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability",
+        "RouteCapabilities", "TextInput", "LegacyTextEmbeddingAdapter", "PreparedEmbeddingProvider",
         "EmbeddingCapabilities",
         "EmbeddingProfile",
         "DuplicateResourceItem",
@@ -46,6 +52,8 @@ REGISTRY_IMPORTS = {
         "VisualEmbeddingProvider",
     ),
     "mdrack.public_api.models": (
+        "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput",
+        "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability", "RouteCapabilities", "TextInput",
         "EmbeddingCapabilities",
         "EmbeddingProfile",
         "IndexingResult",
@@ -575,6 +583,42 @@ def _check_catalog_retrieval_parity() -> int:
     return 3
 
 
+def _check_installed_native_image() -> None:
+    """Native source/reopen/parity on installed bytes, not a native model claim."""
+    import struct
+    import zlib
+
+    from mdrack.config.models import MDRackConfig
+    from mdrack.embeddings.synthetic import SyntheticPreparedProvider
+    from mdrack.public_api import ImageInput, MDRackEngine, MediaSearchRequest
+    from mdrack_core import SearchScope
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    content = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0))
+               + chunk(b'IDAT', zlib.compress(b'\x00\xff\x00\x00')) + chunk(b'IEND', b''))
+    with tempfile.TemporaryDirectory(prefix='mdrack-native-installed-') as directory:
+        root = Path(directory)
+        source = root / 'source.png'
+        source.write_bytes(content)
+        command = [sys.executable, '-B', '-m', 'mdrack', '--root', str(root)]
+        result = subprocess.run(command + ['image', 'native-ingest', str(source), '--resource-id', 'image',
+                                '--source-namespace', 'host', '--source-ref', 'source.png',
+                                '--provider', 'synthetic'], cwd=root, capture_output=True, text=True, check=True)
+        unit_id = json.loads(result.stdout)['data']['unit_ids'][0]
+        with MDRackEngine(root=root, config=MDRackConfig(),
+                          prepared_embedding_provider=SyntheticPreparedProvider()) as engine:
+            assert engine.read_unit(unit_id)['text'] is None
+            request = MediaSearchRequest(ImageInput(content, 'image/png', 'query'),
+                                         SearchScope(modalities=('image',)))
+            expected = asyncio.run(engine.search_media(request)).to_dict()
+            assert engine._storage is None
+        child = subprocess.run(command + ['image', 'native-search', '--image-file', str(source),
+                               '--provider', 'synthetic'], cwd=root, capture_output=True, text=True, check=True)
+        assert json.loads(child.stdout)['data'] == expected
+        assert source.read_bytes() == content
+
+
 def main() -> None:
     network_attempts = 0
 
@@ -591,6 +635,7 @@ def main() -> None:
         _check_cli_json()
         _check_installed_raw_text_cli()
         _check_installed_image_cli()
+        _check_installed_native_image()
         _check_installed_raw_audio_cli()
         _check_installed_raw_video_cli()
         parity_mode_count = _check_catalog_retrieval_parity()
@@ -611,6 +656,7 @@ def main() -> None:
                     "cli_json": "passed",
                     "installed_raw_text_cli": "passed",
                     "installed_image_cli": "passed",
+                    "installed_native_image_contract": "passed",
                     "installed_raw_audio_cli": "passed",
                     "installed_raw_video_cli": "passed",
                     "legacy_retrieval_parity_modes": parity_mode_count,

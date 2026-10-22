@@ -5,9 +5,10 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from mdrack.cli import main
+from tests.python_tool_fixture import install_python_tool_launcher
 
 
-def test_ingest_audio_emits_safe_success(tmp_path: Path) -> None:
+def test_ingest_audio_emits_safe_success(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "root"
     root.mkdir()
     source = tmp_path / "private-audio.wav"
@@ -26,6 +27,7 @@ def test_ingest_audio_emits_safe_success(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     command.chmod(0o755)
+    install_python_tool_launcher(monkeypatch, command)
 
     result = CliRunner().invoke(
         main,

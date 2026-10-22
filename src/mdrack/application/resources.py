@@ -9,6 +9,7 @@ from typing import Literal, Protocol, cast
 
 from mdrack.application.vector_values import canonicalize_for_space
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
+from mdrack.ports.search_sessions import SearchReadSessionFactory
 from mdrack_core.application.retrieval import ResourceDiscoveryService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_core.domain import (
@@ -516,10 +517,12 @@ class UnifiedTextSearchService:
         embedding_fingerprint: str | None = None,
         profile: str = "default",
         rrf_k: int = 60,
+        read_sessions: SearchReadSessionFactory | None = None,
     ) -> None:
-        if not callable(getattr(catalog, "search_lexical", None)):
+        self._read_sessions = read_sessions or getattr(catalog, "search_read_sessions", None)
+        if self._read_sessions is None and not callable(getattr(catalog, "search_lexical", None)):
             raise TypeError("catalog must support lexical search")
-        if not callable(getattr(catalog, "search_vector", None)):
+        if self._read_sessions is None and not callable(getattr(catalog, "search_vector", None)):
             raise TypeError("catalog must support vector search")
         self._catalog = catalog
         self._provider = embedding_provider
@@ -541,8 +544,33 @@ class UnifiedTextSearchService:
             raise ValueError("mode must be text, semantic, or hybrid")
         if type(limit) is not int or limit < 1:
             raise ValueError("limit must be a positive integer")
+        resolve_unified_text_scope(scope)
+        vector, reason = await self._prepare_query_vector(query, mode)
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return UnifiedTextSearchService(
+                    session.catalog,
+                    embedding_fingerprint=self._fingerprint,
+                    profile=self._profile,
+                    rrf_k=self._rrf_k,
+                )._search_prepared(query, scope=scope, mode=mode, limit=limit, vector=vector, reason=reason)
+        # Explicit legacy/injected boundary: no snapshot capability, no consistency claim.
+        return self._search_prepared(query, scope=scope, mode=mode, limit=limit, vector=vector, reason=reason)
+
+    def _search_prepared(
+        self,
+        query: str,
+        *,
+        scope: UnifiedTextScopeName,
+        mode: UnifiedTextSearchMode,
+        limit: int,
+        vector: tuple[float, ...] | None,
+        reason: str | None,
+    ) -> UnifiedTextSearchResult:
         resolved_scope = resolve_unified_text_scope(scope)
-        vector, spaces, reason = await self._semantic_query_vector(query, mode)
+        spaces: tuple[EmbeddingSpaceRecord, ...] = ()
+        if vector is not None:
+            vector, spaces, reason = self._resolve_query_spaces(vector)
         if mode == "semantic" and vector is None:
             return UnifiedTextSearchResult(query, mode, scope, (), True, reason or "branch_unavailable")
         effective_mode: UnifiedTextSearchMode = "text" if vector is None and mode == "hybrid" else mode
@@ -583,22 +611,28 @@ class UnifiedTextSearchService:
             degraded_reason=reason or core_reason,
         )
 
-    async def _semantic_query_vector(
+    async def _prepare_query_vector(
         self,
         query: str,
         mode: UnifiedTextSearchMode,
-    ) -> tuple[tuple[float, ...] | None, tuple[EmbeddingSpaceRecord, ...], str | None]:
+    ) -> tuple[tuple[float, ...] | None, str | None]:
         if mode == "text":
-            return None, (), None
+            return None, None
         if self._provider is None or self._fingerprint is None:
-            return None, (), "embedding_provider_unavailable"
+            return None, "embedding_provider_unavailable"
         try:
             raw_vector = await self._provider.embed_query(query, profile=self._profile)
             vector = self._validated_query_vector(raw_vector)
         except EmbeddingError:
-            return None, (), "embedding_provider_error"
+            return None, "embedding_provider_error"
         except Exception:
-            return None, (), "semantic_search_error"
+            return None, "semantic_search_error"
+        return vector, None
+
+    def _resolve_query_spaces(
+        self,
+        vector: tuple[float, ...],
+    ) -> tuple[tuple[float, ...] | None, tuple[EmbeddingSpaceRecord, ...], str | None]:
         plural_resolver = getattr(self._catalog, "resolve_embedding_spaces", None)
         singular_resolver = getattr(self._catalog, "resolve_embedding_space", None)
         try:
@@ -719,7 +753,9 @@ class ResourceQueryService:
         catalog: ResourceReadPort,
         *,
         whole_resource_resolver: WholeResourceTextResolver | None = None,
+        read_sessions: SearchReadSessionFactory | None = None,
     ) -> None:
+        self._read_sessions = read_sessions or getattr(catalog, "search_read_sessions", None)
         self._catalog = catalog
         self._whole_resource_resolver = whole_resource_resolver
         self._discovery = ResourceDiscoveryService(
@@ -734,6 +770,11 @@ class ResourceQueryService:
         scope: ResourceQueryScope | None = None,
         limit: int = 20,
     ) -> DuplicateResourceResult:
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return ResourceQueryService(session.catalog).find_duplicates(
+                    resource_id, scope=scope, limit=limit,
+                )
         try:
             try:
                 resource = self._catalog.read_resource(resource_id)
@@ -773,6 +814,11 @@ class ResourceQueryService:
         limit: int = 20,
         exclude_same_resource: bool = True,
     ) -> SimilarResourceResult:
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return ResourceQueryService(session.catalog).find_similar(
+                    query_unit_id, space_id, scope=scope, limit=limit, exclude_same_resource=exclude_same_resource,
+                )
         result = self._discovery.similar(
             SimilarityRequest(
                 query_unit_id,
@@ -809,6 +855,14 @@ class ResourceQueryService:
         exclude_same_resource: bool = True,
     ) -> TextualSimilarityResult:
         """Resolve one textual whole-resource identity without a provider call."""
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return ResourceQueryService(
+                    session.catalog,
+                    whole_resource_resolver=cast(WholeResourceTextResolver, session.storage),
+                ).find_similar_resource(
+                    resource_id, scope=scope, limit=limit, exclude_same_resource=exclude_same_resource,
+                )
         if scope == "frames":
             return self._textual_unavailable(
                 "",
@@ -942,6 +996,13 @@ class ResourceQueryService:
         _source_bases: frozenset[str] = _TEXTUAL_SOURCE_BASES,
     ) -> TextualSimilarityResult:
         """Search explicit whole-resource text vectors through the core owner."""
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return ResourceQueryService(session.catalog).find_textual_similarity(
+                    query_unit_id, space_id, aggregation=aggregation, expected_fingerprint=expected_fingerprint,
+                    scope=scope, limit=limit, exclude_same_resource=exclude_same_resource,
+                    _source_bases=_source_bases,
+                )
         if aggregation not in _TEXTUAL_AGGREGATIONS:
             raise ValueError("aggregation must be direct_text_v1 or token_weighted_centroid_v1")
         if not isinstance(expected_fingerprint, str) or not expected_fingerprint:

@@ -47,7 +47,9 @@ explicitly changes that architecture.
   Explicit direct-image ingestion is a separate local-file path. Neither path mutates
   Markdown or fetches remote files.
 - Text, semantic, and hybrid retrieval converge on the same public result DTO.
-- Hybrid fusion and ranking policy live in the application layer, not SQLite.
+- Reusable retrieval execution, branch grouping and weighted RRF live in core.
+  The application planner selects policy, branches, scopes, weights and budgets;
+  SQLite supplies candidates, not a second fusion implementation.
 - Production reranking is unsupported; non-null reranker injection must fail closed.
 - Public APIs prefer logical IDs and `SourceLocator`; internal SQLite record IDs are not new public contracts.
 
@@ -60,8 +62,10 @@ explicitly changes that architecture.
 - The approved SQLite boundary is the standalone `mdrack-sqlite` distribution at
   `packages/mdrack-sqlite/`. Its generic API may open recognized bridge/v1 stores,
   but normal app composition uses only `<store>/catalog.sqlite3` and requires the
-  independent clean `mdrack_sqlite_catalog_v2` `0000`–`0004` identity. The app
-  never reads, copies, or migrates an obsolete store.
+  independent clean `mdrack_sqlite_catalog_v2` `0000`–`0005` identity. Normal open
+  never upgrades. Explicit offline maintenance may upgrade only exact completed
+  v2/0004 with verified external backup; legacy v1/bridge remains unsupported.
+  Retain the verified catalog through app composition, not a second SQL owner.
 - `mdrack_core` is stdlib-only and must not import `mdrack`, Click, HTTP, SQLite,
   Markdown/parser, provider/model, filesystem, or network code.
 - Current Markdown IR, `PreparedFile`, `SourceLocator`, `EmbeddingProfile`, and

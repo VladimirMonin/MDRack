@@ -1,6 +1,9 @@
 # MDRack current architecture
 
-This package describes the checked-out MDRack 1.3.0 implementation. It is the
+This package describes the checked-out MDRack 1.4.0rc2 source candidate.
+The app-owned [native image contract](../contracts/native-image-v1.md) adds typed
+routes; production pixels remain unsupported, with runtime/quality acceptance
+separate from deterministic offline contract evidence. It is the
 maintainer entry point for current module boundaries, indexing, persistence,
 retrieval, asset handling, public interfaces, and known limitations.
 
@@ -50,6 +53,51 @@ When sources disagree, use this order:
 - [Offline release verification](../offline-release-verification.md) and [W5-CI contract](../contracts/v0.4-w5-ci-contract.md)
 - [v0.4 offline release-candidate packet](../evidence/v0.4-release-packet.md) and [public-surface compatibility ledger](../compatibility/v0.4-public-surface-ledger.json)
 
+## Operation-owned search snapshots
+
+The current unreleased application source supplies
+[`SearchReadSessionFactory`](../../src/mdrack/ports/search_sessions.py) through
+[`ApplicationSearchReadSessions`](../../src/mdrack/adapters/sqlite/canonical_catalog.py).
+Each ordinary application search opens its own verified readonly v2 connection.
+Catalog and compatibility projection share that connection and one read snapshot
+for catalog-dependent space resolution/canonicalization, branches, filters,
+fallback, fusion and eager result hydration. Results are materialized before the
+reader closes. Readers also close on error or cancellation; concurrent operations
+do not share a reader handle.
+
+This covers Markdown text/semantic/hybrid retrieval, UnifiedText, resource presets,
+image/timed search, metadata body/metadata lexical branches and resource discovery,
+including registered CLI consumers. Query-provider preparation finishes before
+session entry. Ordinary hybrid search rejects empty/whitespace queries before
+provider preparation or reader entry. Verified open and public `verify()` use a
+separate consistent preflight snapshot; the active-caller-transaction guard remains.
+See the [SQLite transaction contract](../../packages/mdrack-sqlite/API.md#concurrency-and-transactions).
+
+The guarantee is one logical search response, not a later independent read/enrich
+request, a filesystem snapshot or CAS/source-revision validation. Injected legacy
+storage without the optional factory retains its own consistency boundary; it is
+not silently replaced with a disk reader. Qualification is Windows/CPython 3.14.2
+source/local SQLite with synthetic vectors and MockTransport, not installed-package,
+native-media or model-quality acceptance. Further bounds are in
+[search response consistency](limitations.md#search-response-consistency).
+
+## Conditional publication and recognized v2 maintenance
+
+[ADR-0014](../decisions/0014-conditional-publication-and-v2-upgrade.md) defines the
+optional neutral core publication contract and current app-v2/0005. SQLite owns
+snapshot graph+state, conditional/unconditional graph writing, withdrawal/deletion
+and FTS repair. App composition retains its verified catalog. Explicit old-v2/0004
+upgrade requires offline maintenance and verified backup outside store; normal open
+never migrates. See [recovery](../recovery.md) and [SQLite API](../../packages/mdrack-sqlite/API.md).
+Purpose-aware merge/manual durability remains future W4, not storage proof.
+
+## Future / proposed
+
+[Native media and late enrichment](../proposals/native-media/README.md) is the full
+proposed 01–04 design bundle and implementation programme. The search-snapshot
+foundation above is implemented in unreleased source; it does not make native-media
+full native-media or late enrichment current implemented contracts.
+
 ## Historical material
 
 Files under `docs/plans/` and legacy planning documents such as `docs/plan.md`,
@@ -66,4 +114,5 @@ context and route maintainers back to this package.
 
 [Store recovery](../recovery.md) documents the current fixed
 `catalog.sqlite3` operational boundary. It does not prescribe a generation,
-candidate, activation, rollback, retention, or old-store migration procedure.
+candidate, activation or retention procedure. Only the explicit recognized old-v2
+maintenance transition above is supported, not legacy-store adoption.

@@ -29,9 +29,20 @@ cross-table integrity. SQLite is MDRack's only persistent database.
 - `packages/mdrack-sqlite/src/mdrack_sqlite/` owns the generic `core_*` resource
   catalog/search adapter, FTS query fallback, lifecycle API, safe errors, and bridge
   verification. Its independent clean identities are `mdrack_sqlite_catalog_v1`
-  (`0000`–`0003`) and `mdrack_sqlite_catalog_v2` (`0000`–`0004`); it must not
+  (`0000`–`0003`) and `mdrack_sqlite_catalog_v2` (`0000`–`0005`); it must not
   import `mdrack`. `create_v2()` creates fresh compact catalogs directly and never
   upgrades, copies, or backfills v1/app-bridge bytes.
+- V2 `0005_publication` adds independent publication state (no graph-cascade FK),
+  local lifecycle/token, retained live source binding and metadata, and deletion
+  tombstones. All writers update graph/state atomically; withdrawal keeps lifecycle,
+  deletion ends it, explicit recreate invalidates old authority. Same-graph FTS
+  repair serializes at SQLite and does not change token or extract hidden text.
+- Explicit maintenance may upgrade only exact completed clean v2/0004 after ALL
+  consumers stop/close and a SQLite-aware verified backup outside store. Recheck
+  old identity/manifest/objects/integrity under write lock; DDL/state/ledger/identity
+  commit atomically, then reopen. Failure never invokes fresh-create deletion.
+  Normal open/readonly refuses old version with upgrade_required; unknown,
+  damaged/incomplete/v1/bridge are never adopted. See ADR-0014.
 - Normal app composition opens only `<store>/catalog.sqlite3`, requires
   `mdrack_sqlite_catalog_v2`, and rejects any additional SQLite main file or obsolete
   lifecycle artifact. The standalone package must not copy or rewrite app migrations

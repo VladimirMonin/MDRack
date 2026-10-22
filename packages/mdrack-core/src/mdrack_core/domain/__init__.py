@@ -9,6 +9,7 @@ from .errors import (
     DegradationCategory,
     ErrorCategory,
 )
+from .publication import ExpectedPublication, PublicationResult, PublicationState, ResourceSnapshot
 from .resources import (
     FACET_ORIGIN_CLASSIFIER,
     FACET_ORIGIN_EXTRACTOR,
@@ -134,4 +135,8 @@ __all__ = (
     "VectorBranch",
     "VectorRecord",
     "canonical_json",
+    "ExpectedPublication",
+    "PublicationResult",
+    "PublicationState",
+    "ResourceSnapshot",
 )

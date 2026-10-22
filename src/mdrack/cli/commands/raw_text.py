@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.ingestion.raw_source_provenance import RawSourceError
 from mdrack.ingestion.raw_text import RawTextIngestionService
@@ -14,7 +15,7 @@ from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 @click.command(name="text")

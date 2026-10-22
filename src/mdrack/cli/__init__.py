@@ -10,6 +10,7 @@ from typing import Any
 import click
 
 from mdrack import __version__
+from mdrack._observability import AppEventLogger
 from mdrack.cli.commands.cache import cache as cache_group
 from mdrack.cli.commands.eval import evaluation as eval_group
 from mdrack.cli.commands.files import files as files_group
@@ -20,7 +21,7 @@ from mdrack.cli.commands.raw_audio import ingest_audio
 from mdrack.cli.commands.raw_text import ingest_text
 from mdrack.cli.commands.raw_video import ingest_raw_video
 from mdrack.cli.commands.read import read
-from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd
+from mdrack.cli.commands.rebuild import rebuild_embeddings_cmd, rebuild_fts_cmd, upgrade_catalog_cmd
 from mdrack.cli.commands.resource import resource as resource_group
 from mdrack.cli.commands.resources import facets as facets_command
 from mdrack.cli.commands.resources import find_similar as find_similar_command
@@ -38,7 +39,7 @@ from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, MDRackError
 from mdrack.output.json_output import emit_json
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 # Click context object keys
 CTX_CONFIG = "config"
@@ -420,6 +421,7 @@ def rebuild(ctx: click.Context) -> None:
 
 
 rebuild.add_command(rebuild_fts_cmd, name="fts")
+rebuild.add_command(upgrade_catalog_cmd, name="upgrade")
 rebuild.add_command(rebuild_embeddings_cmd, name="embeddings")
 
 

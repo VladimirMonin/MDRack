@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from typing import TypedDict
 
 from mdrack_sqlite.fts import plain_query_fallback
 
 logger = logging.getLogger(__name__)
+
+class _FTSSearchRow(TypedDict):
+    chunk_id: str
+    rank: float
+    snippet: str
+
 
 class FTSQueryError(Exception):
     """Raised when an FTS5 query is invalid."""
@@ -63,7 +70,7 @@ def search_fts(
     conn: sqlite3.Connection,
     query: str,
     limit: int = 20,
-) -> list[dict]:
+) -> list[_FTSSearchRow]:
     """Search chunks_fts using FTS5 full-text search.
 
     Args:

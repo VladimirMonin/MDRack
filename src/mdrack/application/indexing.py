@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mdrack._observability import AppEventLogger
 from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
 from mdrack.application.metadata_normalization import normalize_metadata
@@ -24,7 +25,7 @@ from mdrack.domain.identifiers import (
     normalize_heading_path,
     safe_file_ref,
 )
-from mdrack.domain.indexing import IndexingResult, PreparedFile, StoredChunk, StoredSection
+from mdrack.domain.indexing import IndexingResult, IndexStatus, PreparedFile, StoredChunk, StoredSection
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.embeddings.runtime import embedding_profile_from_config
 from mdrack.indexing.scanner import CorpusScanError, scan_markdown_files
@@ -35,7 +36,7 @@ from mdrack.markdown.section_builder import build_sections
 from mdrack.ports.parser import MarkdownParser
 from mdrack.ports.storage import IndexStorage
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 LEGACY_PARSER_NAME = "legacy_markdown"
 LEGACY_PARSER_VERSION = "1"
@@ -301,15 +302,15 @@ class IndexingService:
         stored_chunks: list[StoredChunk] = []
         duplicate_ordinals: dict[tuple[str, str], int] = {}
         for chunk in chunks:
-            section = sections_by_id[chunk.section_id]
+            stored_section = sections_by_id[chunk.section_id]
             fingerprint = content_fingerprint(chunk.content)
-            duplicate_key = (section.logical_id, fingerprint)
+            duplicate_key = (stored_section.logical_id, fingerprint)
             duplicate_ordinal = duplicate_ordinals.get(duplicate_key, 0)
             duplicate_ordinals[duplicate_key] = duplicate_ordinal + 1
             start_line, end_line = self._chunk_source_span(
                 parsed.blocks,
-                section.start_line,
-                section.end_line,
+                stored_section.start_line,
+                stored_section.end_line,
                 chunk.content,
                 duplicate_ordinal,
             )
@@ -692,7 +693,7 @@ class IndexingService:
         return embedding_profile_from_config(self.config, self.provider, self.profile)
 
     @staticmethod
-    def _status(stats: dict[str, int]):
+    def _status(stats: dict[str, int]) -> IndexStatus:
         if stats["errors_count"] == 0:
             return "success"
         if stats["files_indexed"] > 0 or stats["files_deleted"] > 0:

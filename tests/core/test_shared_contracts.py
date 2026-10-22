@@ -350,6 +350,7 @@ def test_protocol_composites_and_public_export_inventory_are_frozen() -> None:
         "ResourceReadPort",
         "ResourceRecord",
         "ResourceWritePort",
+        "PublicationPort",
         "SafeEvent",
         "SafeFingerprint",
         "SearchPort",

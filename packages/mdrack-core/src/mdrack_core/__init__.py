@@ -65,6 +65,7 @@ from .domain import (
     VectorRecord,
     canonical_json,
 )
+from .domain.publication import ExpectedPublication, PublicationResult, PublicationState, ResourceSnapshot
 from .observability import (
     CORE_EVENT_NAMES,
     REDACTED,
@@ -82,6 +83,7 @@ from .ports import (
     SearchPort,
     VectorSearchPort,
 )
+from .ports.publication import PublicationPort
 
 __all__ = (
     "BranchExecutionError",
@@ -160,4 +162,9 @@ __all__ = (
     "canonical_json",
     "emit_event",
     "safe_fingerprint",
+    "ExpectedPublication",
+    "PublicationResult",
+    "PublicationState",
+    "ResourceSnapshot",
+    "PublicationPort",
 )

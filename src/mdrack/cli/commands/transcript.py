@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.manifest import MAX_MANIFEST_BYTES
 from mdrack.application.transcript_ingestion import TranscriptIngestionService
@@ -31,7 +32,7 @@ from mdrack.output.json_output import emit_json
 from mdrack_core import Locator
 from mdrack_media import ProducerFingerprint
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 _FORMAT_READERS: dict[str, Callable[..., object]] = {
     "auto": read_transcript,

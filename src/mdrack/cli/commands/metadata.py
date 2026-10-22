@@ -8,6 +8,7 @@ from typing import Any
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.metadata_projection import (
@@ -20,7 +21,7 @@ from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
@@ -41,7 +42,7 @@ def _open_service(ctx: click.Context) -> tuple[Any, MetadataCatalogService]:
     if catalog is None:
         storage.close()
         raise RuntimeError("resource_generation_unavailable")
-    return storage, MetadataCatalogService(catalog)
+    return storage, MetadataCatalogService(catalog, read_sessions=storage.search_read_sessions)
 
 
 def _failure(ctx: click.Context, *, command: str, code: str, message: str) -> None:

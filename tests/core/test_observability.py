@@ -189,6 +189,32 @@ def test_event_fields_are_copied_sorted_and_immutable() -> None:
         event.name = "core.search.failed"  # type: ignore[misc]
 
 
+def test_sink_io_failure_does_not_escape_and_does_not_log_raw_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+    class BrokenStream:
+        def write(self, text: str) -> None:
+            raise OSError("PRIVATE_EXCEPTION_SENTINEL")
+
+        def flush(self) -> None:
+            raise OSError("PRIVATE_EXCEPTION_SENTINEL")
+
+    class RaisingHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise OSError("PRIVATE_EXCEPTION_SENTINEL")
+
+    logger = logging.getLogger("mdrack-core-broken-sink")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    handlers = [logging.StreamHandler(BrokenStream()), RaisingHandler()]
+    for handler in handlers:
+        logger.addHandler(handler)
+    try:
+        emit_event(logger, SafeEvent("core.search.completed", {"result_count": 0}))
+        assert capsys.readouterr().err == ""
+    finally:
+        for handler in handlers:
+            logger.removeHandler(handler)
+
+
 def test_emit_event_rejects_unredacted_objects() -> None:
     logger = logging.getLogger("mdrack-core-invalid-event")
     with pytest.raises(ValueError, match="SafeEvent"):

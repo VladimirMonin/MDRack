@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.retrieval import validate_embedding_vector
 from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.application.vector_values import (
@@ -17,6 +18,7 @@ from mdrack.application.vector_values import (
 )
 from mdrack.domain.profiles import EmbeddingProfile
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
+from mdrack.ports.search_sessions import SearchReadSessionFactory
 from mdrack_core import (
     TARGET_RESOURCE,
     TARGET_UNIT,
@@ -46,7 +48,7 @@ from mdrack_media import (
     group_timed_atoms,
 )
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 _DIRECT_TEXT_AGGREGATION = "direct_text_v1"
 _CENTROID_AGGREGATION = "token_weighted_centroid_v1"
@@ -505,10 +507,12 @@ class TimedRetrievalService:
         rrf_k: int = 60,
         text_weight: float = 1.0,
         semantic_weight: float = 1.0,
+        read_sessions: SearchReadSessionFactory | None = None,
     ) -> None:
-        if not callable(getattr(catalog, "search_lexical", None)):
+        self._read_sessions = read_sessions
+        if read_sessions is None and not callable(getattr(catalog, "search_lexical", None)):
             raise TypeError("catalog must support lexical search")
-        if not callable(getattr(catalog, "search_vector", None)):
+        if read_sessions is None and not callable(getattr(catalog, "search_vector", None)):
             raise TypeError("catalog must support vector search")
         if rrf_k < 1:
             raise ValueError("rrf_k must be positive")
@@ -549,6 +553,29 @@ class TimedRetrievalService:
             raise ValueError("query must be a non-empty string")
         if type(limit) is not int or limit < 1:
             raise ValueError("limit must be a positive integer")
+        prepared = (
+            await self._query_vector(query)
+            if mode in {"semantic", "hybrid"} and self._semantic_weight > 0 else (None, None)
+        )
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return TimedRetrievalService(
+                    session.catalog, embedding_fingerprint=self._embedding_fingerprint,
+                    profile=self._profile, rrf_k=self._rrf_k,
+                    text_weight=self._text_weight, semantic_weight=self._semantic_weight,
+                )._search_prepared(query, mode=mode, target=target, scope=scope, limit=limit, prepared=prepared)
+        return self._search_prepared(query, mode=mode, target=target, scope=scope, limit=limit, prepared=prepared)
+
+    def _search_prepared(
+        self,
+        query: str,
+        *,
+        mode: TimedRetrievalMode,
+        target: str,
+        scope: SearchScope | None,
+        limit: int,
+        prepared: tuple[tuple[float, ...] | None, str | None],
+    ) -> TimedSearchResult:
         active_scope = _timed_scope(scope or SearchScope())
         lexical: tuple[LexicalBranch, ...] = ()
         if mode in {"text", "hybrid"} and self._text_weight > 0:
@@ -568,7 +595,7 @@ class TimedRetrievalService:
         vector_branches: tuple[VectorBranch, ...] = ()
         degraded_reason: str | None = None
         if mode in {"semantic", "hybrid"} and self._semantic_weight > 0:
-            vector, degraded_reason = await self._query_vector(query)
+            vector, degraded_reason = prepared
             if vector is not None:
                 space = _resolve_embedding_space(
                     self._catalog,

@@ -8,12 +8,13 @@ from typing import Any
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.artifact_cache import ArtifactCache, ArtifactCacheReport
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
@@ -41,7 +42,7 @@ def _cache(ctx: click.Context) -> ArtifactCache:
         or store_root.is_relative_to(cache_root)
     ):
         raise ValueError("cache_root_overlaps_protected_root")
-    return ArtifactCache(cache_root, max_entry_bytes=config.cache.max_entry_bytes)
+    return ArtifactCache(directory, max_entry_bytes=config.cache.max_entry_bytes)
 
 
 def _report_data(report: ArtifactCacheReport) -> dict[str, int | bool]:

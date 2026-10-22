@@ -184,7 +184,7 @@ def test_backend_protocol_and_catalog_injection_keep_transaction_ownership(
     assert isinstance(backend, SQLiteVectorBackend)
     database = tmp_path / "plugin.db"
     with SQLiteCatalog.create_v2(database, vector_backend=backend) as catalog:
-        assert backend.events == [("initialize", True, True), ("verify", False, False)]
+        assert backend.events == [("initialize", True, True), ("verify", True, False)]
         backend.events.clear()
 
         catalog.replace_resource(_batch())

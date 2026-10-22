@@ -21,7 +21,7 @@ def test_version_outputs_version() -> None:
     """Verify that `mdrack --version` prints the version string."""
     result = CliRunner().invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "1.3.0" in result.output
+    assert "1.4.0rc2" in result.output
 
 
 _COMMAND_GROUPS = ["init", "scan", "status", "doctor"]

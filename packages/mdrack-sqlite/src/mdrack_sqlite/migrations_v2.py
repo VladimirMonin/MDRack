@@ -30,7 +30,7 @@ _FTS5_SHADOW_OBJECTS = frozenset(
     }
 )
 _FTS5_SHADOW_NAMES = frozenset(name for _type, name, _table in _FTS5_SHADOW_OBJECTS)
-_CLEAN_V2_SCHEMA_FINGERPRINT = "854fd964b5fc6e3018205e562d49b4ec0dcb20be3b5d3428297a557f9ae06c4b"
+_CLEAN_V2_SCHEMA_FINGERPRINT = "7bd2baf97a3833abb5446644504dc096dafced04c1e0bcc0f305d7e474590ed1"
 
 
 def get_v2_migrations_dir() -> Path:

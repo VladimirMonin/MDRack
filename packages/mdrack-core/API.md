@@ -53,8 +53,20 @@ Important semantics:
 Implementations may be in-memory, SQLite-backed, or host-specific, but those
 implementations and dependencies do not belong in this distribution.
 
+## Conditional publication (contract 1.0.0-rc.2)
+
+Root/domain additionally export `PublicationState`, `ExpectedPublication`,
+`ResourceSnapshot`, `PublicationResult`; root/ports export optional `PublicationPort`.
+Minimal `CatalogPort` is unchanged. `CoreIndexingService.index_if_current(batch,
+expected)` shares the unconditional I/O-free validator and returns applied/state.
+ExpectedPublication(state) requires a live state; absent/deleted creation requires
+`create=True`. Snapshot includes full graph or None plus local lifecycle/token and
+source binding. Conflict is applied=False without writes. Withdrawal keeps live
+identity; delete ends it; explicit recreate starts a different lifecycle. Tokens
+are not transferable manifest authority. See [ADR-0014](../../docs/decisions/0014-conditional-publication-and-v2-upgrade.md).
+
 ## Compatibility policy
 
-`1.0.0rc1` is a release candidate. Any RC export change requires an ADR, updated
+`1.0.0rc2` is a release candidate (rc1 remains historical). Any RC export change requires an ADR, updated
 ordered export snapshot, compatibility evidence and a migration note. Final 1.x
 removal policy begins only after a final `1.0.0` contract is declared.

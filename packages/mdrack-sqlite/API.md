@@ -4,7 +4,7 @@
 
 `mdrack_sqlite` exports:
 
-- `SQLITE_CATALOG_API_VERSION` (`1.0.0rc1`);
+- `SQLITE_CATALOG_API_VERSION` (`1.0.0rc2`);
 - `SQLITE_BRIDGE_SCHEMA_ID` (`mdrack-app-core-bridge-v1`);
 - `SQLITE_CATALOG_SCHEMA_ID` (`mdrack_sqlite_catalog_v1`);
 - `SQLITE_CATALOG_SCHEMA_VERSION` (`0003`);
@@ -29,6 +29,14 @@
 - The context manager returns the catalog, propagates exceptions and always closes.
 - `verify()` rejects active transactions and fails closed on integrity, FK, required
   table/index/FK mapping, or manual FTS drift. It returns only safe aggregate counts.
+  Verification owns a read transaction: all checks and counts observe one committed
+  state, including during `open`/`open_readonly`. Each resource's complete graph is
+  reconstructed by the common eager reader and checked by the shared I/O-free core
+  validator. FTS must exactly match eligible published unit IDs/text, not merely
+  row counts or tokenized search equivalence. Empty published graphs and extra
+  dense-only FTS entries are rejected; legitimate withdrawn/deleted states have no
+  resource row. Verification never extracts text or repairs damaged data. The
+  active-caller-transaction rejection remains unchanged.
 
 ## Concurrency and transactions
 
@@ -37,6 +45,43 @@ adapter. Concurrent readers use separately opened read-only catalogs. Resource
 replace/delete own one `BEGIN IMMEDIATE` transaction and reject a caller-owned
 transaction. Preflight validation completes before the transaction; failures roll
 back the complete graph.
+
+Unreleased internal application integration uses an adapter-owned read scope plus
+an operation-owned readonly reader factory. It pins one snapshot for space
+resolution, branches, filtering, fusion and eager result hydration after query
+provider preparation. No transaction spans HTTP or a later independent read.
+The internal scope is not a new exported standalone API or a required method on
+legacy core catalog ports. Standalone/injected services without the optional app
+factory retain their legacy consistency boundary; a catalog context manager alone
+owns lifetime, not a multi-call search snapshot. Each concurrent app operation
+needs its own reader. Schema, result shapes and package exports are unchanged.
+
+The app capability is `mdrack.ports.search_sessions.SearchReadSessionFactory`;
+its reader combines read/search/space-resolution protocols without write methods.
+Normal application composition supplies it to UnifiedText, compatibility retrieval,
+resource presets, timed/image search, metadata lexical search and resource discovery,
+including the direct CLI consumers. App-side provider preparation precedes entry;
+subsequent independent unit reads use a new operation rather than that old session.
+
+## Publication and explicit v2 maintenance
+
+Current app-v2 uses compiled schema 0005 (0000–0004 unchanged). `read_snapshot(id)`
+owns a read transaction and rejects an active external transaction. `export_graph`
+eagerly reconstructs the same graph and can join an adapter-owned read scope.
+`compare_and_publish(batch, ExpectedPublication(state))`, `withdraw_if_current` and
+`delete_if_current` atomically compare and return PublicationResult(applied,state).
+Absent/deleted creation requires explicit create=True with the exact observed state.
+Unconditional replace/delete also advance state. Repeated delete preserves tombstone.
+`delete_live_resource` returns whether a live lifecycle ended, including withdrawal.
+`rebuild_fts_index` repairs only published unit.text without changing lifecycle/token.
+
+`SQLiteCatalog.upgrade_v2(path, backup_path, maintenance=True)` is an explicit
+maintenance boundary for exact completed old-v2/0004 only. Normal open returns
+upgrade_required, never migrates. All consumers must first stop and close handles.
+A verified SQLite backup outside store precedes atomic DDL/state/ledger/identity;
+rollback never removes an existing catalog. Target reopen verifies; already-target
+returns False. V1/bridge/unknown/incomplete are not guessed into an upgrade.
+See [ADR-0014](../../docs/decisions/0014-conditional-publication-and-v2-upgrade.md).
 
 ## Errors
 
@@ -82,5 +127,6 @@ identity; frozen app-bridge verification behavior is unchanged.
 - lock/busy during catalog writes: core `adapter_timeout`;
 - read-only writes and other adapter failures: privacy-safe core categories.
 
-This package does not adopt the clean catalog as the app default, migrate active
-data, switch generations, clean retained data, or claim Windows/backend cutover.
+Generic v1/bridge compatibility remains separate from normal app-v2. Only the
+explicit recognized old-v2 maintenance transition above is supported; no automatic
+migration, generation switching, retained-data cleanup or native quality claim.

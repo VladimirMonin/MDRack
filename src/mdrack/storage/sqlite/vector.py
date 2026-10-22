@@ -11,6 +11,7 @@ import logging
 import math
 import sqlite3
 from datetime import datetime, timezone
+from typing import TypedDict
 
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 
@@ -30,6 +31,11 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     if denom == 0.0:
         return 0.0
     return _dot(a, b) / denom
+
+
+class _ScoredChunk(TypedDict):
+    chunk_id: str
+    score: float
 
 
 class VectorIndex:
@@ -103,7 +109,7 @@ class VectorIndex:
         limit: int = 20,
         *,
         profile_fingerprint: str | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> list[_ScoredChunk]:
         """Return the *limit* nearest chunks by cosine similarity.
 
         Args:
@@ -151,7 +157,7 @@ class VectorIndex:
         if q_norm == 0.0:
             return []
 
-        scored: list[dict[str, object]] = []
+        scored: list[_ScoredChunk] = []
         for row in rows:
             vec = json.loads(row["embedding"])
             if len(vec) != profile["dimensions"]:
@@ -161,7 +167,7 @@ class VectorIndex:
             score = _cosine_similarity(query_vector, vec)
             scored.append({"chunk_id": row["chunk_id"], "score": score})
 
-        scored.sort(key=lambda d: d["score"], reverse=True)  # type: ignore[arg-type]
+        scored.sort(key=lambda d: d["score"], reverse=True)
         return scored[:limit]
 
     def delete(self, chunk_id: str, profile_name: str) -> None:

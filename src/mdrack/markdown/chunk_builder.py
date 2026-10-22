@@ -398,7 +398,7 @@ def build_chunks(
     blocks: list[MarkdownBlock],
     sections: list[SectionNode],
     file_id: str,
-    config: dict | None = None,
+    config: dict[str, int] | None = None,
 ) -> list[FinalChunk]:
     """Build final chunks from parsed blocks and section hierarchy."""
     if not blocks or not sections:

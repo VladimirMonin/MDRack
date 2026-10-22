@@ -6,6 +6,7 @@ import pytest
 import mdrack.ingestion.raw_audio as raw_audio_module
 from mdrack.ingestion.raw_audio import RawAudioIngestionService
 from mdrack.ingestion.raw_source_provenance import RawSourceError, RawSourceErrorCode
+from tests.python_tool_fixture import install_python_tool_launcher
 
 
 class Catalog:
@@ -40,13 +41,16 @@ def make_stt(path: Path) -> None:
     path.chmod(0o755)
 
 
-def test_wave_ingestion_uses_snapshot_and_raw_provenance(tmp_path: Path) -> None:
+def test_wave_ingestion_uses_snapshot_and_raw_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     root = tmp_path / "root"
     root.mkdir()
     source = tmp_path / "source.wav"
     command = tmp_path / "stt.py"
     make_wave(source)
     make_stt(command)
+    launches = install_python_tool_launcher(monkeypatch, command)
     catalog = Catalog()
 
     result = RawAudioIngestionService(catalog).ingest(
@@ -57,6 +61,7 @@ def test_wave_ingestion_uses_snapshot_and_raw_provenance(tmp_path: Path) -> None
         allow_external_stt=True,
     )
 
+    assert len(launches) == 1 and launches[0][0] > 0
     assert result.resource_kind == "audio"
     assert result.media_type == "audio/wav"
     assert len(catalog.batches) == 1
@@ -101,6 +106,7 @@ def test_stt_stdout_is_bounded_during_execution(
         encoding="utf-8",
     )
     command.chmod(0o755)
+    launches = install_python_tool_launcher(monkeypatch, command)
     monkeypatch.setattr(raw_audio_module, "MAX_STT_STDOUT_BYTES", 64)
     catalog = Catalog()
 
@@ -113,5 +119,6 @@ def test_stt_stdout_is_bounded_during_execution(
             allow_external_stt=True,
         )
 
+    assert len(launches) == 1 and launches[0][0] > 0
     assert caught.value.code is RawSourceErrorCode.PREPARED_TEXT_LIMIT_EXCEEDED
     assert catalog.batches == []

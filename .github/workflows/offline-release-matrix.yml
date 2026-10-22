@@ -38,9 +38,12 @@ jobs:
       - name: Enter offline verification boundary
         shell: bash
         run: echo "UV_OFFLINE=1" >> "$GITHUB_ENV"
+      - name: Bounded documentation gate (development and strict)
+        shell: bash
+        run: uv run --no-sync --offline python scripts/check_documentation.py --check
       - name: Ruff gate
         shell: bash
-        run: uv run ruff check src/ tests/ packages/mdrack-core/src/ packages/mdrack-media/src/ packages/mdrack-sqlite/src/
+        run: uv run ruff check src/ tests/ packages/mdrack-core/src/ packages/mdrack-media/src/ packages/mdrack-sqlite/src/ scripts/check_documentation.py
       - name: Mypy gate
         shell: bash
         run: uv run mypy packages/mdrack-core/src/mdrack_core packages/mdrack-sqlite/src/mdrack_sqlite
@@ -51,7 +54,7 @@ jobs:
       - name: Windows package contract gate
         if: runner.os == 'Windows'
         shell: bash
-        run: uv run pytest tests/unit/test_offline_release_matrix.py tests/unit/test_v13_release_contract.py
+        run: uv run pytest tests/unit/test_offline_release_matrix.py tests/unit/test_v13_release_contract.py tests/unit/test_documentation.py tests/unit/test_verification_wrappers.py
       - name: Offline E2E gate
         if: runner.os == 'Linux'
         shell: bash
@@ -71,19 +74,26 @@ jobs:
       - name: Build and audit all distributions offline
         shell: bash
         run: uv run python scripts/offline_release_matrix.py --output-dir "${{ runner.temp }}/mdrack-release-artifacts" --smoke --allow-index-for-smoke-provisioning
-      - name: Documentation and whitespace gates
-        if: runner.os == 'Linux'
+      - name: Strict historical packet gate (Linux)
+        if: runner.os == 'Linux' && github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           uv run python scripts/check_v13_release_packet.py --artifacts-dir "${{ runner.temp }}/mdrack-release-artifacts"
           git diff --check
       - name: Windows artifact evidence gate
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           uv run python scripts/check_v13_release_packet.py --skip-quality-replay --artifacts-dir "${{ runner.temp }}/mdrack-release-artifacts"
           git diff --check
-      - name: Upload release evidence
+      - name: PR development boundary
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: echo 'SKIPPED historical release identity; NOT_RUN strict release acceptance'
+      - name: Whitespace gate (all routes)
+        shell: bash
+        run: git diff --check
+      - name: Upload build evidence (not release acceptance)
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}-py${{ matrix.python-version }}

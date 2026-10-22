@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.embeddings.runtime import (
@@ -22,13 +23,16 @@ from mdrack.ingestion.images import (
     ImageIngestionService,
     StaticImageExtractor,
 )
-from mdrack.ingestion.raw_source_provenance import RawSourceError
+from mdrack.ingestion.raw_source_provenance import RawInputBudget, RawSourceError
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 from mdrack.ports.embeddings import EmbeddingProvider
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from mdrack.public_api.engine import MDRackEngine
+
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
@@ -192,6 +196,7 @@ def search_images(
             provider = create_embedding_provider(provider_name, config)
         service = ImageIngestionService(
             catalog,
+            read_sessions=storage.search_read_sessions,
             text_embedding_provider=provider,
             text_space=_text_space(config, provider, "default") if provider is not None else None,
         )
@@ -240,6 +245,123 @@ def delete_image(ctx: click.Context, resource_id: str) -> None:
     finally:
         if storage is not None:
             storage.close()
+
+
+def _native_engine(ctx: click.Context, provider_name: str) -> tuple[MDRackEngine, object | None]:
+    from mdrack.embeddings.synthetic import SyntheticPreparedProvider
+    from mdrack.public_api import MDRackEngine
+    config = ctx.obj["config"]
+    if provider_name == "synthetic":
+        return MDRackEngine(root=ctx.obj["root"], config=config,
+                            prepared_embedding_provider=SyntheticPreparedProvider()), None
+    provider = create_embedding_provider(provider_name, config)
+    return MDRackEngine(root=ctx.obj["root"], config=config, embedding_provider=provider), provider
+
+
+async def _close_native(engine: Any, provider: object | None) -> None:
+    try:
+        engine.close()
+    except OSError:
+        logger.warning("image.embedding.cleanup_failed", extra={"reason": "cleanup_error"})
+    try:
+        await close_async_resource(provider)
+    except Exception:
+        logger.warning("image.embedding.cleanup_failed", extra={"reason": "cleanup_error"})
+
+
+def _native_error_code(error: Exception, default: str) -> str:
+    if isinstance(error, RawSourceError):
+        return error.code.value.upper()
+    if isinstance(error, ValueError) and error.args == ("unsupported_embedding_route",):
+        return "UNSUPPORTED_EMBEDDING_ROUTE"
+    return default
+
+
+@image.command(name="native-ingest")
+@click.argument("path", type=click.Path(path_type=Path))
+@click.option("--resource-id", required=True)
+@click.option("--source-namespace", required=True)
+@click.option("--source-ref", required=True)
+@click.option("--provider", "provider_name", type=click.Choice(["lmstudio", "synthetic"]), default="lmstudio")
+@click.pass_context
+def native_ingest(ctx: click.Context, path: Path, resource_id: str, source_namespace: str,
+                  source_ref: str, provider_name: str) -> None:
+    """Native image input, without OCR. Synthetic is offline contract testing only."""
+    async def execute() -> dict[str, object]:
+        engine, provider = _native_engine(ctx, provider_name)
+        try:
+            result = await engine.ingest_native_image(path, resource_id=resource_id,
+                                                     source_namespace=source_namespace, source_ref=source_ref)
+            return result.to_dict()
+        finally:
+            await _close_native(engine, provider)
+    try:
+        result = asyncio.run(execute())
+    except Exception as error:
+        code = _native_error_code(error, "NATIVE_IMAGE_ERROR")
+        _output(ctx, envelope_error("Native image route failed", code, "image native-ingest"))
+        ctx.exit(1)
+        return
+    _output(ctx, envelope_success(result, command="image native-ingest"))
+
+
+@image.command(name="native-search")
+@click.option("--text", default=None)
+@click.option("--image-file", type=click.Path(path_type=Path), default=None)
+@click.option("--unit-id", default=None)
+@click.option("--candidates", type=click.Choice(["image", "text", "all"]), default="image")
+@click.option("--target", type=click.Choice(["resource", "unit"]), default="resource")
+@click.option("--mode", type=click.Choice(["text", "semantic", "hybrid"]), default="hybrid")
+@click.option("--allow-partial", is_flag=True)
+@click.option("--limit", type=click.IntRange(1, 10000), default=20)
+@click.option("--candidate-budget", type=click.IntRange(1, 10000), default=100)
+@click.option("--provider", "provider_name", type=click.Choice(["lmstudio", "synthetic"]), default="lmstudio")
+@click.pass_context
+def native_search(ctx: click.Context, text: str | None, image_file: Path | None, unit_id: str | None,
+                  candidates: str, target: str, mode: str, allow_partial: bool, limit: int,
+                  candidate_budget: int, provider_name: str) -> None:
+    """Typed query with an independently selected candidate scope."""
+    from mdrack.application.media_search import MediaSearchRequest, StoredUnitInput
+    from mdrack.application.source_resolution import SourceResolver
+    from mdrack.domain.embedding_inputs import EncodingRole, TextInput
+    from mdrack_core import SearchScope
+
+    async def execute() -> dict[str, object]:
+        if sum(value is not None for value in (text, image_file, unit_id)) != 1:
+            raise ValueError("one_query_required")
+        engine, provider = _native_engine(ctx, provider_name)
+        try:
+            scope = SearchScope(modalities=() if candidates == "all" else (candidates,))
+            def request(query: Any) -> MediaSearchRequest:
+                return MediaSearchRequest(query, scope, target, mode, allow_partial, limit, candidate_budget)
+            if image_file is not None:
+                # Refuse unsupported selected transport before opening even the query file.
+                capability = engine._prepared_provider().capabilities.require(
+                    EncodingRole.QUERY, "image", scope.modalities,
+                )
+                budget = RawInputBudget(max_source_bytes=capability.max_input_bytes)
+                with SourceResolver().image(namespace="query", source_ref="query-image", selected=image_file,
+                                            budget=budget) as source:
+                    result = await engine.search_media(request(source[2]))
+            else:
+                query: StoredUnitInput | TextInput
+                if unit_id is not None:
+                    query = StoredUnitInput(unit_id)
+                else:
+                    assert text is not None
+                    query = TextInput(text, "query")
+                result = await engine.search_media(request(query))
+            return result.to_dict()
+        finally:
+            await _close_native(engine, provider)
+    try:
+        result = asyncio.run(execute())
+    except Exception as error:
+        code = _native_error_code(error, "NATIVE_SEARCH_ERROR")
+        _output(ctx, envelope_error("Native search route failed", code, "image native-search"))
+        ctx.exit(1)
+        return
+    _output(ctx, envelope_success(result, command="image native-search"))
 
 
 __all__ = ["image"]

@@ -11,13 +11,14 @@ from typing import Any
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.indexing.indexer import IndexerResult, run_indexer
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:
@@ -100,4 +101,4 @@ def cli_scan(
 
                 asyncio.run(close_async_resource(provider))
             except Exception:
-                logger.debug("embedding.provider.close_failed reason=cleanup_error")
+                logger.debug("embedding.provider.close_failed", extra={"reason": "cleanup_error"})

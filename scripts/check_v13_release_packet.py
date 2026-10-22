@@ -171,18 +171,16 @@ def _validate_packet(packet: dict[str, Any], *, replay_quality: bool = True) -> 
 
     from mdrack_sqlite.contract_v2 import (
         SQLITE_CATALOG_V2_SCHEMA_ID,
-        SQLITE_CATALOG_V2_SCHEMA_VERSION,
         SQLITE_V2_MIGRATION_MANIFEST,
-        SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
     )
 
     expected_schema = {
         "schema_id": SQLITE_CATALOG_V2_SCHEMA_ID,
-        "schema_version": SQLITE_CATALOG_V2_SCHEMA_VERSION,
+        "schema_version": "0004",
         "migration_manifest": [
-            {"name": name, "sha256": digest} for name, digest in SQLITE_V2_MIGRATION_MANIFEST
+            {"name": name, "sha256": digest} for name, digest in SQLITE_V2_MIGRATION_MANIFEST[:5]
         ],
-        "manifest_digest": SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
+        "manifest_digest": "353facc85a46cfc30fea8511993e06aa49910b09d60fe7750cb1855df120dd98",
     }
     if packet["clean_v2_schema"] != expected_schema:
         _fail("clean_v2_schema_invalid")

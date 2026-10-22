@@ -5,6 +5,13 @@ All notable changes to `mdrack-core` are documented here.
 The format follows Keep a Changelog. Versions use PEP 440 in distribution
 metadata and SemVer spelling for the core contract where the two differ.
 
+## 1.0.0rc2 — 2026-10-22
+
+- Add neutral optional publication records/port and conditional indexing entry.
+- Share one I/O-free batch validator across both indexing paths; preserve minimal ports.
+- Add boolean publication_applied to conditional completion events without exposing tokens.
+- Migration: new consumers explicitly require PublicationPort; old indexing/retrieval remain supported.
+
 ## 1.0.0rc1 — 2026-07-19
 
 ### Added

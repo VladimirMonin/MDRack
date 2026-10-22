@@ -222,6 +222,7 @@ class StructuralChunker:
         *,
         word_mode: bool,
     ) -> list[tuple[int, int]]:
+        units: list[tuple[int, int]]
         if word_mode:
             units = [(match.start(), match.end()) for match in pattern.finditer(text, start, end)]
             if units and units[0][0] > start:
@@ -229,7 +230,7 @@ class StructuralChunker:
             if units and units[-1][1] < end:
                 units[-1] = (units[-1][0], end)
             return units
-        units: list[tuple[int, int]] = []
+        units = []
         cursor = start
         for match in pattern.finditer(text, start, end):
             units.append((cursor, match.end()))

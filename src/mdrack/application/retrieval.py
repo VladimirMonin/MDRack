@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import Literal
 
 from mdrack.application.compatibility import CoreCompatibilityMapper
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
@@ -24,6 +24,7 @@ from mdrack.domain.retrieval import (
     RetrievalResult,
 )
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
+from mdrack.ports.search_sessions import SearchReadSessionFactory
 from mdrack.ports.storage import RetrievalStorage
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_core.domain import (
@@ -208,10 +209,12 @@ class ResourcePresetSearchService:
         embedding_fingerprint: str | None = None,
         profile: str = "default",
         rrf_k: int = 60,
+        read_sessions: SearchReadSessionFactory | None = None,
     ) -> None:
-        if not callable(getattr(catalog, "search_lexical", None)):
+        self._read_sessions = read_sessions or getattr(catalog, "search_read_sessions", None)
+        if self._read_sessions is None and not callable(getattr(catalog, "search_lexical", None)):
             raise TypeError("catalog must support lexical search")
-        if not callable(getattr(catalog, "search_vector", None)):
+        if self._read_sessions is None and not callable(getattr(catalog, "search_vector", None)):
             raise TypeError("catalog must support vector search")
         self._catalog = catalog
         self._provider = embedding_provider
@@ -229,55 +232,73 @@ class ResourcePresetSearchService:
         limit: int = 20,
     ) -> ResourcePresetSearchResult:
         vector: tuple[float, ...] | None = None
-        space_id: str | None = None
         degraded_reason: str | None = None
-        effective_mode = mode
         if mode in {"semantic", "hybrid"}:
             if self._provider is None or self._fingerprint is None:
                 degraded_reason = "embedding_provider_unavailable"
             else:
                 try:
-                    vector = validate_embedding_vector(
-                        await self._provider.embed_query(query, profile=self._profile)
-                    )
+                    vector = validate_embedding_vector(await self._provider.embed_query(query, profile=self._profile))
                 except EmbeddingError:
                     degraded_reason = "embedding_provider_error"
                 except Exception:
                     degraded_reason = "semantic_search_error"
-                if vector:
-                    resolver = getattr(self._catalog, "resolve_embedding_space", None)
-                    try:
-                        space = (
-                            resolver(fingerprint=self._fingerprint, dimensions=len(vector))
-                            if callable(resolver)
-                            else None
-                        )
-                    except CatalogExecutionError as error:
-                        degraded_reason = _CATALOG_ERROR_TO_DEGRADED_REASON[error.category]
-                        space = None
-                    except TimeoutError:
-                        degraded_reason = "adapter_timeout"
-                        space = None
-                    except Exception:
-                        degraded_reason = "adapter_error"
-                        space = None
-                    if space is None:
-                        degraded_reason = degraded_reason or "incompatible_embedding_profile"
-                        vector = None
-                    elif not isinstance(space, EmbeddingSpaceRecord):
-                        degraded_reason = "incompatible_embedding_profile"
-                        vector = None
-                    else:
-                        resolved_space = cast(EmbeddingSpaceRecord, space)
-                        if (
-                            resolved_space.fingerprint != self._fingerprint
-                            or resolved_space.dimensions != len(vector)
-                        ):
-                            degraded_reason = "incompatible_embedding_profile"
-                            vector = None
-                        else:
-                            vector = canonicalize_for_space(vector, resolved_space)
-                            space_id = resolved_space.space_id
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return ResourcePresetSearchService(
+                    session.catalog, embedding_fingerprint=self._fingerprint,
+                    profile=self._profile, rrf_k=self._rrf_k,
+                )._search_prepared(
+                    query, preset=preset, mode=mode, scope=scope, limit=limit,
+                    vector=vector, degraded_reason=degraded_reason,
+                )
+        return self._search_prepared(
+            query, preset=preset, mode=mode, scope=scope, limit=limit,
+            vector=vector, degraded_reason=degraded_reason,
+        )
+
+    def _search_prepared(
+        self,
+        query: str,
+        *,
+        preset: ResourceSearchPresetName,
+        mode: ResourceSearchMode,
+        scope: SearchScope | None,
+        limit: int,
+        vector: tuple[float, ...] | None,
+        degraded_reason: str | None,
+    ) -> ResourcePresetSearchResult:
+        space_id: str | None = None
+        effective_mode = mode
+        if mode in {"semantic", "hybrid"} and vector:
+            resolver = getattr(self._catalog, "resolve_embedding_space", None)
+            try:
+                space = (
+                    resolver(fingerprint=self._fingerprint, dimensions=len(vector))
+                    if callable(resolver)
+                    else None
+                )
+            except CatalogExecutionError as error:
+                degraded_reason = _CATALOG_ERROR_TO_DEGRADED_REASON[error.category]
+                space = None
+            except TimeoutError:
+                degraded_reason = "adapter_timeout"
+                space = None
+            except Exception:
+                degraded_reason = "adapter_error"
+                space = None
+            if space is None:
+                degraded_reason = degraded_reason or "incompatible_embedding_profile"
+                vector = None
+            elif not isinstance(space, EmbeddingSpaceRecord):
+                degraded_reason = "incompatible_embedding_profile"
+                vector = None
+            elif space.fingerprint != self._fingerprint or space.dimensions != len(vector):
+                degraded_reason = "incompatible_embedding_profile"
+                vector = None
+            else:
+                vector = canonicalize_for_space(vector, space)
+                space_id = space.space_id
         if vector is None and mode == "semantic":
             return ResourcePresetSearchResult(
                 query,
@@ -485,7 +506,10 @@ class RetrievalService:
         rrf_k: int = 60,
         text_weight: float = 1.0,
         semantic_weight: float = 1.0,
+        read_sessions: SearchReadSessionFactory | None = None,
     ) -> None:
+        self._read_sessions = read_sessions or getattr(storage, "search_read_sessions", None)
+        self._prepared_query: tuple[tuple[float, ...] | None, str | None] | None = None
         if rrf_k < 1:
             raise ValueError("rrf_k must be positive")
         for value in (text_weight, semantic_weight):
@@ -504,6 +528,18 @@ class RetrievalService:
         self.semantic_weight = float(semantic_weight)
         self.compatibility_mapper = CoreCompatibilityMapper()
 
+    def _bound_reader(
+        self,
+        storage: RetrievalStorage,
+        prepared: tuple[tuple[float, ...] | None, str | None] | None = None,
+    ) -> RetrievalService:
+        service = RetrievalService(
+            storage, profile=self.profile, profile_fingerprint=self.profile_fingerprint,
+            rrf_k=self.rrf_k, text_weight=self.text_weight, semantic_weight=self.semantic_weight,
+        )
+        service._prepared_query = prepared
+        return service
+
     def search_text(
         self,
         query: str,
@@ -512,6 +548,11 @@ class RetrievalService:
         offset: int = 0,
         metadata_filters: MetadataFilters | None = None,
     ) -> RetrievalResult:
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return self._bound_reader(session.storage).search_text(
+                    query, limit=limit, offset=offset, metadata_filters=metadata_filters,
+                )
         self._validate_page(limit, offset)
         scope = compile_metadata_filters(metadata_filters or MetadataFilters())
         search_core = getattr(self.storage, "search_core", None)
@@ -562,6 +603,13 @@ class RetrievalService:
         limit: int = 20,
         metadata_filters: MetadataFilters | None = None,
     ) -> RetrievalResult:
+        if self._read_sessions is not None:
+            self._validate_page(limit, 0)
+            prepared = await self._prepare_query_vector(query)
+            with self._read_sessions.open() as session:
+                return await self._bound_reader(session.storage, prepared).search_semantic(
+                    query, limit=limit, metadata_filters=metadata_filters,
+                )
         self._validate_page(limit, 0)
         scope = compile_metadata_filters(metadata_filters or MetadataFilters())
         if callable(getattr(self.storage, "search_core", None)):
@@ -633,6 +681,17 @@ class RetrievalService:
         metadata_filters: MetadataFilters | None = None,
     ) -> RetrievalResult:
         """Fuse text and semantic ranks with RRF; production reranking is deferred."""
+        if self._read_sessions is not None:
+            if reranker is not None:
+                raise ValueError("reranking is not supported in v0.2")
+            self._validate_page(limit, 0)
+            if not query.strip():
+                raise InvalidTextSearchError("invalid_text_query")
+            prepared = await self._prepare_query_vector(query) if self.semantic_weight > 0.0 else (None, None)
+            with self._read_sessions.open() as session:
+                return await self._bound_reader(session.storage, prepared).search_hybrid(
+                    query, limit=limit, metadata_filters=metadata_filters,
+                )
         if reranker is not None:
             raise ValueError("reranking is not supported in v0.2")
         self._validate_page(limit, 0)
@@ -773,6 +832,10 @@ class RetrievalService:
         self,
         query: str,
     ) -> tuple[tuple[float, ...] | None, str | None]:
+        if self._prepared_query is not None:
+            # This bound service is operation-local. The immediate coroutine has no
+            # provider and cannot suspend for HTTP or mutate the long-lived facade.
+            return self._prepared_query
         if self.embedding_provider is None:
             logger.warning("retrieval.semantic.degraded reason=embedding_provider_unavailable")
             return None, "embedding_provider_unavailable"

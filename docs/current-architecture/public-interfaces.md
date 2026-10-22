@@ -4,6 +4,27 @@ MDRack has two public entry points: the Click CLI and the embedded
 `MDRackEngine`. Both compose the same canonical indexing and retrieval services,
 but their total capability sets are not identical.
 
+## Prepared/native API (1.4.0rc2 source candidate)
+
+`MDRackEngine.ingest_native_image` and `search_media(MediaSearchRequest)` are
+versioned app routes with typed inputs, independent candidate scope, requested/
+effective modes, nullable evidence and explicit score_kind. CLI adapters are
+`image native-ingest` and `image native-search`. See the exact
+[native image contract](../contracts/native-image-v1.md) and
+[ADR-0013](../decisions/0013-native-image-contract.md).
+Production LM Studio pixels are unsupported; explicit synthetic selection tests
+local orchestration only. This does not change the legacy methods below.
+
+## Explicit catalog maintenance
+
+Fresh `MDRackEngine.upgrade_catalog(backup_path, maintenance=True)` and CLI
+`rebuild upgrade --backup <absent-outside-store> --maintenance` share one boundary.
+All consumers must stop/close; only exact completed old-v2/0004 may upgrade to 0005.
+Normal open never upgrades; target returns false, unsupported/damaged input refuses.
+See [ADR-0014](../decisions/0014-conditional-publication-and-v2-upgrade.md).
+Resource deletion boolean now also reports true when ending a withdrawn live lifecycle;
+never-created/already-deleted remains false. Existing JSON keys do not change.
+
 ## Service and port relationships
 
 ```mermaid

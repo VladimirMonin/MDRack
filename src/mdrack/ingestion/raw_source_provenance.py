@@ -14,9 +14,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Callable
 
-from mdrack_core import Locator
+from mdrack_core import JSONValue, Locator
 
 RAW_SOURCE_PROVENANCE_SCHEMA = "mdrack.raw-source-provenance.v1"
 RAW_SOURCE_LOCATOR_KIND = "raw_local_source"
@@ -195,7 +195,7 @@ class RawSourceProvenance:
     def content_hash(self) -> str:
         return self.raw_source_sha256
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, JSONValue]:
         return {
             "byte_size": self.byte_size,
             "budget_fingerprint": self.budget_fingerprint,
@@ -249,11 +249,11 @@ class RawSourceProvenance:
                 source_ref=value["source_ref"],
                 media_kind=RawMediaKind(value["media_kind"]),
                 raw_source_sha256=value["raw_source_sha256"],
-                byte_size=value["byte_size"],  # type: ignore[arg-type]
+                byte_size=value["byte_size"],
                 signature=fact,
-                duration_ms=value["duration_ms"],  # type: ignore[arg-type]
-                selected_frame_count=value["selected_frame_count"],  # type: ignore[arg-type]
-                prepared_evidence_sha256=value["prepared_evidence_sha256"],  # type: ignore[arg-type]
+                duration_ms=value["duration_ms"],
+                selected_frame_count=value["selected_frame_count"],
+                prepared_evidence_sha256=value["prepared_evidence_sha256"],
                 budget_fingerprint=value["budget_fingerprint"],
             )
         except RawSourceError:
@@ -434,7 +434,7 @@ def check_source_after(snapshot: RawSourceSnapshot, source_path: Path,
         raise RawSourceError(RawSourceErrorCode.SOURCE_CHANGED)
 
 
-def resource_metadata(provenance: RawSourceProvenance) -> dict[str, object]:
+def resource_metadata(provenance: RawSourceProvenance) -> dict[str, JSONValue]:
     """Return the only allowlisted metadata shape for a future catalog adapter."""
     return {"provenance": provenance.to_dict()}
 

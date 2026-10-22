@@ -82,6 +82,23 @@ def rebuild_fts_cmd(ctx: click.Context) -> None:
 
 
 @click.command()
+@click.option("--backup", type=click.Path(path_type=Path), required=True, help="Absent backup file outside store.")
+@click.option("--maintenance", is_flag=True, required=True, help="Confirm ALL consumers stopped and handles closed.")
+@click.pass_context
+def upgrade_catalog_cmd(ctx: click.Context, backup: Path, maintenance: bool) -> None:
+    """Explicitly upgrade only recognized completed old app-v2; never legacy v1."""
+    from mdrack.adapters.sqlite.canonical_catalog import ApplicationStoreError, upgrade_application_catalog
+    config = ctx.obj.get("config") if ctx.obj else None
+    root = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+    try:
+        changed = upgrade_application_catalog(root, config, backup, maintenance=maintenance)
+    except ApplicationStoreError:
+        _output(ctx, envelope_error("Catalog upgrade refused", "CATALOG_UPGRADE_FAILED", "rebuild upgrade"))
+        raise click.exceptions.Exit(1) from None
+    _output(ctx, envelope_success({"upgraded": changed}, command="rebuild upgrade"))
+
+
+@click.command()
 @click.option(
     "--provider",
     "embedding_provider",

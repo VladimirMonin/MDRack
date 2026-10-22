@@ -294,6 +294,7 @@ def cli_search(
                 preset_result = asyncio.run(
                     ResourcePresetSearchService(
                         timed_catalog,
+                        read_sessions=getattr(storage, "search_read_sessions", None),
                         embedding_provider=provider,
                         embedding_fingerprint=fingerprint,
                         profile="default",
@@ -319,6 +320,7 @@ def cli_search(
                 return
             timed_service = TimedRetrievalService(
                 timed_catalog,
+                read_sessions=getattr(storage, "search_read_sessions", None),
                 embedding_provider=provider,
                 embedding_fingerprint=fingerprint,
                 profile="default",
@@ -349,7 +351,9 @@ def cli_search(
             catalog = getattr(storage, "resource_store", None)
             if catalog is None:
                 raise ValueError("resource target requires an active resource-core generation")
-            result = MetadataCatalogService(catalog).search(
+            result = MetadataCatalogService(
+                catalog, read_sessions=getattr(storage, "search_read_sessions", None),
+            ).search(
                 query,
                 metadata_filters=metadata_filters,
                 metadata_weight=metadata_weight,

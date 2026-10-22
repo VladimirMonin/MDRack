@@ -24,13 +24,13 @@ def test_sqlite_distribution_metadata_and_app_workspace_dependency() -> None:
     root = _load_pyproject(REPO_ROOT / "pyproject.toml")
 
     assert package["project"]["name"] == "mdrack-sqlite"
-    assert package["project"]["version"] == "1.0.0rc2"
+    assert package["project"]["version"] == "1.0.0rc3"
     assert package["project"]["requires-python"] == ">=3.11"
-    assert package["project"]["dependencies"] == ["mdrack-core==1.0.0rc1"]
+    assert package["project"]["dependencies"] == ["mdrack-core==1.0.0rc2"]
     assert package["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         "src/mdrack_sqlite"
     ]
-    assert "mdrack-sqlite==1.0.0rc2" in root["project"]["dependencies"]
+    assert "mdrack-sqlite==1.0.0rc3" in root["project"]["dependencies"]
     assert root["tool"]["uv"]["sources"]["mdrack-sqlite"] == {"workspace": True}
     assert "packages/mdrack-sqlite" in root["tool"]["uv"]["workspace"]["members"]
 
@@ -50,7 +50,7 @@ def test_sqlite_root_exports_and_legacy_fts_helper_are_frozen() -> None:
         "SQLiteResourceStore",
         "SQLiteVerification",
     ]
-    assert mdrack_sqlite.SQLITE_CATALOG_API_VERSION == "1.0.0rc1"
+    assert mdrack_sqlite.SQLITE_CATALOG_API_VERSION == "1.0.0rc2"
     assert legacy_plain_query_fallback is plain_query_fallback
     assert plain_query_fallback("plain words") == '"plain words"'
     assert plain_query_fallback("title:value") is None

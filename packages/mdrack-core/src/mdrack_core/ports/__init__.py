@@ -1,6 +1,7 @@
 """Public protocol exports for the standalone MDRack core."""
 
 from .catalog import CatalogPort, ResourceReadPort, ResourceWritePort
+from .publication import PublicationPort
 from .search import LexicalSearchPort, SearchPort, VectorSearchPort
 
 __all__ = (
@@ -10,4 +11,5 @@ __all__ = (
     "ResourceWritePort",
     "SearchPort",
     "VectorSearchPort",
+    "PublicationPort",
 )

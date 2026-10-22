@@ -8,8 +8,8 @@
 
 This is the current recovery boundary for the fixed application catalog. Normal
 MDRack uses exactly one database at `<store>/catalog.sqlite3`. It has no
-candidate catalog, activation, rollback, retention, pointer, or old-store
-migration procedure.
+candidate catalog, activation, retention or pointer. Normal open never migrates;
+the narrow recognized old-v2 maintenance procedure below is explicit.
 
 Markdown and explicitly supplied media remain source inputs. Indexing does not
 rewrite them, and recovery does not make the derived SQLite store a source of
@@ -54,6 +54,32 @@ A later fresh local rebuild must use authorized source inputs and a compatible
 embedding profile. It is a new derived-data operation, not a rollback to an old
 catalog. Deleting or recreating a catalog is destructive and requires separate
 owner authorization.
+
+## Explicit completed app-v2/0004 upgrade
+
+Only the exact clean v2/0004 identity is eligible, not v1/app bridge, interrupted
+creation, damaged or unknown schemas. Stop ALL CLI/embedded/background consumers
+and close handles first. A write lock alone cannot prove an old process stopped.
+Choose an absent backup file outside the entire store directory:
+
+```bash
+uv run mdrack --root ./notes rebuild upgrade --backup ../catalog-backup.sqlite3 --maintenance
+```
+
+The command verifies the old identity/objects/graph/integrity/FK, makes and verifies
+a SQLite-aware backup, rechecks under lock, then atomically applies 0005/state,
+ledger and identity. It reopens target after commit. Already-target is verified
+and returns upgraded=false without backup creation. Unknown signature refuses
+without changing source. Controlled pre-commit failure preserves the old catalog;
+existing source is never removed by fresh-create cleanup. Interrupted unknown
+commit outcome requires reopen to establish old or target complete identity.
+
+Backup is a recovery artifact, not a fallback catalog. Restore is a separate
+explicit offline host operation handling WAL/SHM. Never restore an old backup over
+new user changes without a separately designed preservation procedure. Graph,
+vector bytes/codecs/fingerprints and published FTS are preserved; no extraction or
+encoder runs and old content_hash is not promoted to a raw-source revision.
+See [ADR-0014](decisions/0014-conditional-publication-and-v2-upgrade.md).
 
 ## Evidence boundaries
 

@@ -56,6 +56,27 @@ and any skipped gate with a concrete reason.
 - Do not weaken an assertion merely to accommodate current output; first decide whether
   the output violates the contract.
 
+## Safe execution and observable outcomes
+
+Inspect plugins, bootstrap, config and fixtures before first import/collection. Set
+owned temporary/cache roots before that boundary; a later tmp_path fixture does not
+isolate early reads/writes. Do not disable required guards for a green result. Install
+cleanup/finalizers immediately after acquire, including partial setup, exceptions and
+cancellation; never clean another owner's resources.
+
+Use focused RED → minimal authorized implementation → the same GREEN test for a new
+behavior/regression. Preserve actual command, assertion/source identity and first failure;
+a fixture/setup error is not product RED. Verify observable bytes/state/readback/reopen
+and the next operation where lifecycle matters, not only called/count/done. Fakes replace
+external edges, not a second implementation of the subject. Preserve raw subprocess exit
+through wrappers. Exit 0 with skip/blocked cells is not PASS of those cells; report exact
+NOT_RUN boundaries. Reuse unchanged source-bound evidence by impact, not by report date.
+
+Documentation CLI tests use disposable synthetic projects and cover positive/refusal,
+selected/unselected bodies, no-write/check, fixed updater target, manual-byte/date
+preservation and byte/mtime no-op. Wrapper/CI development skips only historical release
+identity, never the other applicable gates; strict/default validation remains strict.
+
 ## Evidence language
 
 Use these boundaries explicitly:

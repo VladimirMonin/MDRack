@@ -1,0 +1,24 @@
+{
+  "authoring": [
+    "docs/proposals/native-media/01-search-with-late-enrichment.md",
+    "docs/proposals/native-media/02-mdrack-architecture-and-contracts.md",
+    "docs/proposals/native-media/03-mdrack-implementation-and-migration-plan.md",
+    "docs/proposals/native-media/04-mdrack-acceptance-quality-and-observability.md"
+  ],
+  "native": [
+    "docs/proposals/native-media/README.md",
+    "AGENTS.md",
+    "README.md",
+    "docs/development.md",
+    "docs/current-architecture/README.md",
+    "docs/offline-release-verification.md",
+    "docs/provenance/project-foundation-kit.md",
+    "THIRD_PARTY_NOTICES.md",
+    "instructions/ARCH.system.instructions.md",
+    "instructions/DOCS.architecture.instructions.md",
+    "instructions/DOCS.instruction-style-guide.instructions.md",
+    "instructions/TEST.quality-gates.instructions.md",
+    "instructions/OBS.logging.instructions.md",
+    "instructions/WORKFLOW.build-orchestration.instructions.md"
+  ]
+}

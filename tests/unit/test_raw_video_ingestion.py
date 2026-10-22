@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from mdrack.ingestion.raw_video import RawVideoIngestionService
+from tests.python_tool_fixture import install_python_tool_launcher
 
 
 class Catalog:
@@ -11,7 +14,9 @@ class Catalog:
         del resource_id
 
 
-def test_raw_video_uses_strict_extractor_and_composer(tmp_path: Path) -> None:
+def test_raw_video_uses_strict_extractor_and_composer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     root = tmp_path / "root"
     root.mkdir()
     source = tmp_path / "clip.mp4"
@@ -29,11 +34,13 @@ def test_raw_video_uses_strict_extractor_and_composer(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     extractor.chmod(0o755)
+    launches = install_python_tool_launcher(monkeypatch, extractor)
     catalog = Catalog()
     result = RawVideoIngestionService(catalog).ingest(
         source, source_ref="videos/clip.mp4", root=root,
         video_extractor_command=str(extractor), allow_external_video_extractor=True,
     )
+    assert len(launches) == 1 and launches[0][0] > 0
     assert result.resource_kind == "video"
     assert result.media_type == "video/mp4"
     assert result.transcript_unit_count == 1
@@ -43,7 +50,9 @@ def test_raw_video_uses_strict_extractor_and_composer(tmp_path: Path) -> None:
     assert catalog.batch.resource.metadata["provenance"]["selected_frame_count"] == 1
 
 
-def test_raw_video_rejects_non_video_extractor_media_type(tmp_path: Path) -> None:
+def test_raw_video_rejects_non_video_extractor_media_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     root = tmp_path / "root"
     root.mkdir()
     source = tmp_path / "clip.mp4"
@@ -51,6 +60,7 @@ def test_raw_video_rejects_non_video_extractor_media_type(tmp_path: Path) -> Non
     extractor = tmp_path / "extractor.py"
     extractor.write_text("import sys; sys.stdin.buffer.read(); print('{}')\n", encoding="utf-8")
     extractor.chmod(0o755)
+    launches = install_python_tool_launcher(monkeypatch, extractor)
     catalog = Catalog()
     try:
         RawVideoIngestionService(catalog).ingest(
@@ -61,4 +71,5 @@ def test_raw_video_rejects_non_video_extractor_media_type(tmp_path: Path) -> Non
         pass
     else:
         raise AssertionError("invalid extraction must fail")
+    assert len(launches) == 1 and launches[0][0] > 0
     assert not hasattr(catalog, "batch")

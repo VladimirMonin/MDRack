@@ -29,13 +29,13 @@ def test_media_distribution_metadata_and_app_workspace_dependency() -> None:
     root = _load_pyproject(REPO_ROOT / "pyproject.toml")
 
     assert package["project"]["name"] == "mdrack-media"
-    assert package["project"]["version"] == "1.0.0rc1"
+    assert package["project"]["version"] == "1.0.0rc2"
     assert package["project"]["requires-python"] == ">=3.11"
-    assert package["project"]["dependencies"] == ["mdrack-core==1.0.0rc1"]
+    assert package["project"]["dependencies"] == ["mdrack-core==1.0.0rc2"]
     assert package["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         "src/mdrack_media"
     ]
-    assert "mdrack-media==1.0.0rc1" in root["project"]["dependencies"]
+    assert "mdrack-media==1.0.0rc2" in root["project"]["dependencies"]
     assert root["tool"]["uv"]["sources"]["mdrack-media"] == {"workspace": True}
     assert "packages/mdrack-media" in root["tool"]["uv"]["workspace"]["members"]
 

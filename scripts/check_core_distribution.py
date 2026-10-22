@@ -25,8 +25,8 @@ EXTERNAL_SMOKE = (
     / "external_core_consumer"
     / "test_memory_catalog_consumer.py"
 )
-EXPECTED_DISTRIBUTION_VERSION = "1.0.0rc1"
-EXPECTED_CONTRACT_VERSION = "1.0.0-rc.1"
+EXPECTED_DISTRIBUTION_VERSION = "1.0.0rc2"
+EXPECTED_CONTRACT_VERSION = "1.0.0-rc.2"
 
 
 def _run(command: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
@@ -118,7 +118,7 @@ def _verify_app_archives(app_wheel: Path, app_sdist: Path) -> None:
         metadata = _wheel_metadata(archive)
     assert not any(name.startswith("mdrack_core/") for name in names)
     requirements = metadata.get_all("Requires-Dist") or []
-    assert "mdrack-core==1.0.0rc1" in requirements
+    assert "mdrack-core==1.0.0rc2" in requirements
     with tarfile.open(app_sdist, "r:gz") as archive:
         sdist_names = {member.name for member in archive.getmembers()}
     assert not any("/packages/mdrack-core/" in name for name in sdist_names)
@@ -159,9 +159,9 @@ def _verify_core_install(python: Path, workdir: Path) -> str:
             (
                 "import importlib.metadata as m, json, mdrack_core; "
                 "d=m.distribution('mdrack-core'); "
-                "assert d.version=='1.0.0rc1'; "
+                "assert d.version=='1.0.0rc2'; "
                 "assert not d.requires; "
-                "assert mdrack_core.CORE_CONTRACT_VERSION=='1.0.0-rc.1'; "
+                "assert mdrack_core.CORE_CONTRACT_VERSION=='1.0.0-rc.2'; "
                 "assert 'site-packages' in str(mdrack_core.__file__); "
                 "print(json.dumps({'version':d.version,'requires':d.requires or []},sort_keys=True))"
             ),
@@ -181,13 +181,13 @@ def _verify_co_install(python: Path, workdir: Path) -> None:
             "-c",
             (
                 "import importlib.metadata as m, mdrack, mdrack_core; "
-                "assert m.version('mdrack')=='1.1.0'; "
-                "assert m.version('mdrack-core')=='1.0.0rc1'; "
+                "assert m.version('mdrack')=='1.4.0rc2'; "
+                "assert m.version('mdrack-core')=='1.0.0rc2'; "
                 "owners=m.packages_distributions(); "
                 "assert owners['mdrack']==['mdrack']; "
                 "assert owners['mdrack_core']==['mdrack-core']; "
-                "assert mdrack.__version__=='1.1.0'; "
-                "assert mdrack_core.CORE_CONTRACT_VERSION=='1.0.0-rc.1'"
+                "assert mdrack.__version__=='1.4.0rc2'; "
+                "assert mdrack_core.CORE_CONTRACT_VERSION=='1.0.0-rc.2'"
             ),
         ],
         cwd=workdir,

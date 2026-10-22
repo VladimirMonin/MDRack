@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0rc3
+
+- API 1.0.0rc2 implements optional publication snapshot/CAS/withdraw/delete, local lifecycle/token.
+- Add immutable v2 migration 0005_publication; preserve applied 0000–0004.
+- Explicit exact old-v2/0004 maintenance upgrade with verified external backup and atomic transition.
+- Share graph reader with export and internal graph writer across unconditional/conditional paths.
+- Serialize FTS repair without source extraction or semantic token change.
+
 ## 1.0.0rc2
 
 - Publish the independent `mdrack_sqlite_catalog_v2` clean history (`0000`–`0004`)

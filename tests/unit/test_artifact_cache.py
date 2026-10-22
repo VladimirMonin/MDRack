@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -60,8 +61,19 @@ def test_cache_is_immutable_and_hit_does_not_rewrite_entry(tmp_path: Path) -> No
     assert existing.state == "exists"
     assert cache.lookup(key).payload == b"first-private-artifact"
     assert (entry_path / "metadata.json").stat().st_mtime_ns == metadata_mtime
-    assert entry_path.stat().st_mode & 0o077 == 0
-    assert (entry_path / "payload.bin").stat().st_mode & 0o077 == 0
+    if os.name == "nt":
+        from mdrack.application import _artifact_cache_windows as native
+
+        for path in (cache.root, entry_path.parent, entry_path, entry_path / "payload.bin",
+                     entry_path / "metadata.json", cache.root / ".mdrack-artifact-cache-v1"):
+            handle = native._open(None, "\\??\\" + str(path), directory=path.is_dir())
+            try:
+                native.validate_private(handle)
+            finally:
+                native.close(handle)
+    else:
+        assert entry_path.stat().st_mode & 0o077 == 0
+        assert (entry_path / "payload.bin").stat().st_mode & 0o077 == 0
 
 
 def test_corruption_is_discarded_and_can_be_rebuilt(tmp_path: Path) -> None:
@@ -104,9 +116,7 @@ def test_lookup_does_not_follow_symlinked_shard(tmp_path: Path) -> None:
     external.store(key, b"outside-private-payload")
     guarded_root = tmp_path / "guarded"
     guarded_root.mkdir()
-    (guarded_root / ".mdrack-artifact-cache-v1").write_text(
-        "mdrack.artifact-cache.v1\n", encoding="ascii"
-    )
+    (guarded_root / ".mdrack-artifact-cache-v1").write_bytes(b"mdrack.artifact-cache.v1\n")
     (guarded_root / key.digest[:2]).symlink_to(
         external.entry_path(key).parent, target_is_directory=True
     )
@@ -123,9 +133,7 @@ def test_store_does_not_follow_symlinked_shard(tmp_path: Path) -> None:
     external_shard.mkdir()
     guarded_root = tmp_path / "guarded"
     guarded_root.mkdir()
-    (guarded_root / ".mdrack-artifact-cache-v1").write_text(
-        "mdrack.artifact-cache.v1\n", encoding="ascii"
-    )
+    (guarded_root / ".mdrack-artifact-cache-v1").write_bytes(b"mdrack.artifact-cache.v1\n")
     (guarded_root / key.digest[:2]).symlink_to(external_shard, target_is_directory=True)
 
     with pytest.raises(ValueError, match="shard"):
@@ -140,9 +148,7 @@ def test_corrupt_recovery_does_not_remove_through_symlinked_shard(tmp_path: Path
     (external.entry_path(key) / "payload.bin").write_bytes(b"corrupt")
     guarded_root = tmp_path / "guarded"
     guarded_root.mkdir()
-    (guarded_root / ".mdrack-artifact-cache-v1").write_text(
-        "mdrack.artifact-cache.v1\n", encoding="ascii"
-    )
+    (guarded_root / ".mdrack-artifact-cache-v1").write_bytes(b"mdrack.artifact-cache.v1\n")
     (guarded_root / key.digest[:2]).symlink_to(
         external.entry_path(key).parent, target_is_directory=True
     )

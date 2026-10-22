@@ -7,6 +7,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.retrieval import validate_embedding_vector
 from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.application.transcript_ingestion import (
@@ -44,7 +45,7 @@ from mdrack_media import (
     weighted_centroid,
 )
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 @dataclass(frozen=True)

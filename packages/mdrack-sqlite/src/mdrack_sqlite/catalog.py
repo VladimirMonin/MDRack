@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 import os
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
@@ -318,6 +319,7 @@ class SQLiteCatalog(SQLiteResourceStore):
                     timeout_value=timeout_value,
                     readonly=readonly,
                 )
+                connection.execute("BEGIN")
                 extension = schema_extension_for_backend(vector_backend)
                 catalog = cls(
                     connection,
@@ -326,13 +328,14 @@ class SQLiteCatalog(SQLiteResourceStore):
                     schema_id=cls._detect_schema_id(connection, extension=extension),
                     vector_backend=vector_backend,
                 )
-                catalog._initialize_vector_backend(create=False)
-                catalog.verify()
+                catalog._initialize_vector_backend(create=False, in_read_snapshot=True)
+                catalog._verify_snapshot()
+                connection.commit()
                 if not readonly:
                     connection.execute("PRAGMA synchronous=FULL")
                     connection.execute("PRAGMA journal_mode=WAL")
                 return catalog
-            except Exception:
+            except BaseException:
                 connection.close()
                 raise
         except (TypeError, ValueError):
@@ -430,8 +433,33 @@ class SQLiteCatalog(SQLiteResourceStore):
     def verify(self) -> SQLiteVerification:
         """Fail closed on transaction, integrity, schema, FK, index, or FTS drift."""
         self._require_open()
+        try:
+            with self._read_snapshot():
+                return self._verify_snapshot()
+        except SQLiteCatalogError:
+            raise
+        except Exception:
+            raise SQLiteCatalogError(SQLiteErrorCode.VERIFY_FAILED) from None
+
+    @contextmanager
+    def _read_snapshot(self) -> Iterator[SQLiteCatalog]:
+        """Internal adapter scope; never borrow or finish a caller transaction."""
+        self._require_open()
         if self.connection.in_transaction:
             raise SQLiteCatalogError(SQLiteErrorCode.ACTIVE_TRANSACTION)
+        self.connection.execute("BEGIN")
+        try:
+            # Pin the state at entry, including empty searches, not at a later branch.
+            self.connection.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+            yield self
+        except BaseException:
+            self.connection.rollback()
+            raise
+        else:
+            self.connection.commit()
+
+    def _verify_snapshot(self) -> SQLiteVerification:
+        """Verify within a transaction exclusively owned by this adapter."""
         try:
             extension = self.vector_backend.schema_extension()
             if self._schema_id != SQLITE_CATALOG_V2_SCHEMA_ID and extension is not None:
@@ -447,6 +475,37 @@ class SQLiteCatalog(SQLiteResourceStore):
                     validate_v2_clean_schema(self.connection, extension=extension)
                 except SQLiteMigrationError:
                     raise ValueError from None
+            result = self._verify_graph_snapshot()
+            if self._schema_id == SQLITE_CATALOG_V2_SCHEMA_ID:
+                for row in self.connection.execute("SELECT resource_id,status FROM core_publication_states"):
+                    state = self._read_state(row[0])
+                    resource_row = self.connection.execute(
+                        "SELECT * FROM core_resources WHERE resource_id=?", (row[0],)
+                    ).fetchone()
+                    resource = None if resource_row is None else self._resource_from_row(resource_row)
+                    if (resource is not None) != (state.status == "published"):
+                        raise ValueError
+                    if resource is not None and (resource.source_namespace != state.source_namespace
+                                                 or resource.locator != state.source_locator):
+                        raise ValueError
+                if self.connection.execute(
+                    "SELECT 1 FROM core_resources r LEFT JOIN core_publication_states s USING(resource_id) "
+                    "WHERE s.resource_id IS NULL LIMIT 1"
+                ).fetchone() is not None:
+                    raise ValueError
+            return result
+        except SQLiteCatalogError:
+            raise
+        except Exception:
+            raise SQLiteCatalogError(SQLiteErrorCode.VERIFY_FAILED) from None
+
+    def _verify_graph_snapshot(self) -> SQLiteVerification:
+        """Prior graph invariants, also used by exact old-v2 maintenance preflight."""
+        try:
+            # Enter the FTS virtual table in this snapshot before SQLite asks its
+            # integrity hook to inspect it. A reused connection can otherwise keep
+            # FTS's prior-snapshot cache after a concurrent commit.
+            self.connection.execute("SELECT unit_id FROM core_search_units_fts LIMIT 1").fetchone()
             integrity = [row[0] for row in self.connection.execute("PRAGMA integrity_check")]
             if integrity != ["ok"]:
                 raise ValueError
@@ -481,14 +540,36 @@ class SQLiteCatalog(SQLiteResourceStore):
             if not _REQUIRED_FOREIGN_KEYS <= actual_foreign_keys:
                 raise ValueError
 
-            expected_fts = self.connection.execute(
-                "SELECT COUNT(*) FROM core_search_units WHERE text_content IS NOT NULL AND trim(text_content)<>''"
-            ).fetchone()[0]
-            actual_fts = self.connection.execute("SELECT COUNT(*) FROM core_search_units_fts").fetchone()[0]
-            distinct_fts = self.connection.execute(
-                "SELECT COUNT(DISTINCT unit_id) FROM core_search_units_fts"
-            ).fetchone()[0]
-            if expected_fts != actual_fts or actual_fts != distinct_fts:
+            from mdrack_core.application.validation import validate_prepared_batch
+
+            from .graph_reader import read_graph
+
+            # Validate every complete graph with the same I/O-free core owner as
+            # publication. No resource row is valid as an empty published graph;
+            # legitimate withdrawn/deleted states have no resource row at all.
+            for facet_row in self.connection.execute(
+                "SELECT producer_is_null,producer_value,confidence_json FROM core_resource_facets"
+            ):
+                self._validate_facet_row(facet_row)
+            # Keep the aggregate as part of the consistent preflight summary;
+            # semantic equality below, not this count, determines validity.
+            actual_fts = int(self.connection.execute("SELECT COUNT(*) FROM core_search_units_fts").fetchone()[0])
+            expected_text: dict[str, str] = {}
+            for resource_row in self.connection.execute("SELECT * FROM core_resources").fetchall():
+                resource = self._resource_from_row(resource_row)
+                batch = read_graph(self, resource.resource_id, resource=resource)
+                validate_prepared_batch(batch)
+                assert batch is not None
+                for unit in batch.units:
+                    if isinstance(unit.text, str) and unit.text.strip():
+                        expected_text[unit.unit_id] = unit.text
+
+            # Counts alone accept forged content, wrong units and duplicates.
+            # Match the writer's text eligibility and exact published text; never
+            # extract from dense-only projections or external read-only artifacts.
+            fts_rows = self.connection.execute("SELECT unit_id,content FROM core_search_units_fts").fetchall()
+            actual_text = {row[0]: row[1] for row in fts_rows}
+            if len(fts_rows) != actual_fts or len(actual_text) != actual_fts or actual_text != expected_text:
                 raise ValueError
 
             self.vector_backend.verify(
@@ -540,6 +621,19 @@ class SQLiteCatalog(SQLiteResourceStore):
         self.close()
         return False
 
+    def _refuse_external_transaction(self) -> None:
+        self._require_open()
+        super()._refuse_external_transaction()
+
+    @classmethod
+    def upgrade_v2(
+        cls, database_path: str | Path, backup_path: str | Path, *, maintenance: bool,
+        failure_hook: Callable[[str], None] | None = None,
+    ) -> bool:
+        """Explicit recognized old-v2 upgrade; never an open fallback."""
+        from .upgrade import upgrade_v2_file
+        return upgrade_v2_file(database_path, backup_path, maintenance=maintenance, failure_hook=failure_hook)
+
     def _require_open(self) -> None:
         if self._closed:
             raise SQLiteCatalogError(SQLiteErrorCode.CLOSED)
@@ -569,7 +663,7 @@ class SQLiteCatalog(SQLiteResourceStore):
         if versions != [f"{version:04d}" for version in range(8)]:
             raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
 
-    def _initialize_vector_backend(self, *, create: bool) -> None:
+    def _initialize_vector_backend(self, *, create: bool, in_read_snapshot: bool = False) -> None:
         context = SQLiteVectorGenerationContext(self._schema_id, create=create)
         try:
             if create:
@@ -577,7 +671,7 @@ class SQLiteCatalog(SQLiteResourceStore):
             self.vector_backend.initialize(self.connection, generation=context)
             if create:
                 self.connection.commit()
-            elif self.connection.in_transaction:
+            elif self.connection.in_transaction != in_read_snapshot:
                 raise ValueError
         except Exception:
             if self.connection.in_transaction:
@@ -627,6 +721,14 @@ class SQLiteCatalog(SQLiteResourceStore):
                     validate_v2_clean_identity(connection, extension=extension)
                     return SQLITE_CATALOG_V2_SCHEMA_ID
             except SQLiteMigrationError:
+                if identity is not None and identity[0] == SQLITE_CATALOG_V2_SCHEMA_ID:
+                    from .upgrade import _verify_old
+                    try:
+                        _verify_old(connection)
+                    except Exception:
+                        pass
+                    else:
+                        raise SQLiteCatalogError(SQLiteErrorCode.UPGRADE_REQUIRED) from None
                 raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH) from None
             raise SQLiteCatalogError(SQLiteErrorCode.SCHEMA_MISMATCH)
         if "schema_migrations" in objects:

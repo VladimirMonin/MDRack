@@ -18,13 +18,13 @@ def test_core_distribution_metadata_matches_frozen_contract() -> None:
     project = core["project"]
 
     assert project["name"] == "mdrack-core"
-    assert project["version"] == "1.0.0rc1"
+    assert project["version"] == "1.0.0rc2"
     assert project["requires-python"] == ">=3.11"
     assert project["dependencies"] == []
     assert core["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         "src/mdrack_core"
     ]
-    assert 'CORE_CONTRACT_VERSION = "1.0.0-rc.1"' in (
+    assert 'CORE_CONTRACT_VERSION = "1.0.0-rc.2"' in (
         CORE_SOURCE / "contract.py"
     ).read_text(encoding="utf-8")
 
@@ -32,7 +32,7 @@ def test_core_distribution_metadata_matches_frozen_contract() -> None:
 def test_app_depends_on_workspace_core_without_packaging_a_second_copy() -> None:
     root = _load_pyproject(REPO_ROOT / "pyproject.toml")
 
-    assert "mdrack-core==1.0.0rc1" in root["project"]["dependencies"]
+    assert "mdrack-core==1.0.0rc2" in root["project"]["dependencies"]
     assert root["tool"]["uv"]["sources"]["mdrack-core"] == {"workspace": True}
     assert root["tool"]["uv"]["workspace"]["members"] == [
         "packages/mdrack-core",
@@ -61,7 +61,7 @@ def test_core_distribution_carries_public_docs_and_typing_marker() -> None:
     readme = (CORE_PROJECT / "README.md").read_text(encoding="utf-8")
     api = (CORE_PROJECT / "API.md").read_text(encoding="utf-8")
     changelog = (CORE_PROJECT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "1.0.0rc1" in readme
-    assert "1.0.0rc1" in api
-    assert "1.0.0rc1" in changelog
+    assert "1.0.0rc2" in readme
+    assert "1.0.0rc2" in api
+    assert "1.0.0rc2" in changelog
     assert "no runtime dependencies" in readme.lower()

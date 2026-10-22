@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from mdrack.domain.indexing import PreparedFile, SourceLocator, StoredChunk
 from mdrack.domain.profiles import EmbeddingProfile, IncompatibleEmbeddingProfileError
 from mdrack.domain.retrieval import RetrievalCandidate
-from mdrack.indexing.change_detector import detect_changes
+from mdrack.indexing.change_detector import ChangePlan, detect_changes
 from mdrack.search.text import TextSearchResult, text_search
 from mdrack.storage.sqlite.vector import VectorIndex
 
@@ -66,7 +66,7 @@ class SQLiteIndexStorage:
         self.connection.commit()
         return run_id
 
-    def plan_changes(self, scanned: list[Path], root: Path):
+    def plan_changes(self, scanned: list[Path], root: Path) -> ChangePlan:
         return detect_changes(self.connection, scanned, root)
 
     def get_file_by_path(self, relative_path: str) -> dict[str, Any] | None:

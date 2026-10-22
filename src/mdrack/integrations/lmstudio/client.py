@@ -16,6 +16,7 @@ import httpx
 
 from mdrack.domain.profiles import CapabilityStatus
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingHealth
+from mdrack_core.observability import _log_safely
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +93,18 @@ class LMStudioControlError(EmbeddingError):
     """Raised when LM Studio model management requests fail."""
 
 
+def _log_message(level: int, message: str, *values: object) -> None:
+    """Keep the provider's existing message format; isolate sink I/O only."""
+    _log_safely(logger, level, message % values)
+
+
 def _log_event(level: int, event: str, **fields: object) -> None:
     message = event
     values: list[object] = []
     for key, value in fields.items():
         message += f" {key}=%s"
         values.append(value)
-    logger.log(level, message, *values)
+    _log_message(level, message, *values)
 
 
 def _strip_known_api_suffix(endpoint: str) -> str:
@@ -177,6 +183,7 @@ def _coerce_bool(value: Any) -> bool | None:
 
 
 def _extract_model_items(payload: Any) -> list[dict[str, Any]]:
+    items: object
     if isinstance(payload, list):
         items = payload
     elif isinstance(payload, dict):
@@ -191,6 +198,7 @@ def _extract_model_items(payload: Any) -> list[dict[str, Any]]:
 
 
 def _extract_download_items(payload: Any) -> list[dict[str, Any]]:
+    items: object
     if isinstance(payload, list):
         items = payload
     elif isinstance(payload, dict):
@@ -621,7 +629,8 @@ class LMStudioProvider:
         if self._requested_dimensions is not None:
             if self._dimensions_capability != "tested":
                 reason = f"requested_dimensions_{self._dimensions_capability}"
-                logger.error(
+                _log_message(
+                    logging.ERROR,
                     "llm.request.failed provider=%s model=%s profile=%s reason=%s "
                     "requested_dimensions=%d calls_attempted=0",
                     self._provider_name,
@@ -633,7 +642,8 @@ class LMStudioProvider:
                 raise EmbeddingError(reason)
             payload["dimensions"] = self._requested_dimensions
         started_at = perf_counter()
-        logger.info(
+        _log_message(
+            logging.INFO,
             "llm.request.started provider=%s model=%s profile=%s input_count=%d",
             self._provider_name,
             self._model,
@@ -646,7 +656,8 @@ class LMStudioProvider:
                 response = await client.post(self._embeddings_url, json=payload)
                 response.raise_for_status()
         except httpx.TimeoutException as exc:
-            logger.error(
+            _log_message(
+                logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s reason=timeout input_count=%d elapsed_ms=%d",
                 self._provider_name,
                 self._model,
@@ -657,7 +668,8 @@ class LMStudioProvider:
             raise EmbeddingError("Timeout calling LM Studio embeddings endpoint") from exc
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code if exc.response is not None else None
-            logger.error(
+            _log_message(
+                logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s reason=http_status "
                 "status_code=%s input_count=%d elapsed_ms=%d",
                 self._provider_name,
@@ -669,7 +681,8 @@ class LMStudioProvider:
             )
             raise EmbeddingError(f"LM Studio returned HTTP {status_code} for embeddings request") from exc
         except httpx.RequestError as exc:
-            logger.error(
+            _log_message(
+                logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s reason=request_error "
                 "error_type=%s input_count=%d elapsed_ms=%d",
                 self._provider_name,
@@ -684,7 +697,8 @@ class LMStudioProvider:
         try:
             data = response.json()
         except Exception as exc:
-            logger.error(
+            _log_message(
+                logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s reason=invalid_json "
                 "status_code=%d input_count=%d elapsed_ms=%d",
                 self._provider_name,
@@ -697,7 +711,8 @@ class LMStudioProvider:
             raise EmbeddingError("Failed to parse LM Studio response") from exc
 
         if "data" not in data:
-            logger.error(
+            _log_message(
+                logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s "
                 "reason=missing_data_field status_code=%d input_count=%d elapsed_ms=%d",
                 self._provider_name,
@@ -712,7 +727,8 @@ class LMStudioProvider:
         try:
             embeddings = [item["embedding"] for item in data["data"]]
         except (KeyError, TypeError) as exc:
-            logger.error(
+            _log_message(
+                logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s "
                 "reason=invalid_embedding_structure status_code=%d input_count=%d elapsed_ms=%d",
                 self._provider_name,
@@ -733,7 +749,8 @@ class LMStudioProvider:
         # Validate complete vectors locally. Never truncate provider output.
         for i, emb in enumerate(embeddings):
             if len(emb) != self._dimensions:
-                logger.error(
+                _log_message(
+                    logging.ERROR,
                     "llm.request.failed provider=%s model=%s profile=%s "
                     "reason=dimension_mismatch expected_dims=%d actual_dims=%d text_index=%d "
                     "status_code=%d input_count=%d elapsed_ms=%d",
@@ -751,7 +768,8 @@ class LMStudioProvider:
                     f"Dimension mismatch: expected {self._dimensions}, got {len(emb)} for text index {i}"
                 )
 
-        logger.info(
+        _log_message(
+            logging.INFO,
             "llm.request.finished provider=%s model=%s profile=%s input_count=%d "
             "vector_count=%d dims=%d status_code=%d elapsed_ms=%d",
             self._provider_name,

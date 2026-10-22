@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from mdrack.domain.embedding_inputs import EmbeddingResult, EncodingRole, PreparedInput, RouteCapabilities
+from mdrack_core import EmbeddingSpaceRecord
+
 
 @dataclass(frozen=True)
 class EmbeddingHealth:
@@ -21,6 +24,17 @@ class EmbeddingHealth:
 
 class EmbeddingError(Exception):
     """A privacy-safe embedding provider failure."""
+
+
+@runtime_checkable
+class PreparedEmbeddingProvider(Protocol):
+    @property
+    def capabilities(self) -> RouteCapabilities: ...
+
+    @property
+    def space(self) -> EmbeddingSpaceRecord: ...
+
+    async def encode(self, value: PreparedInput, role: EncodingRole) -> EmbeddingResult: ...
 
 
 @runtime_checkable

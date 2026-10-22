@@ -97,6 +97,47 @@ git diff --check
 The older `scripts/check_release_docs.py` command validates a historical v0.4
 packet and is not a current release gate.
 
+## Bounded documentation maintenance
+
+[Proposed native-media programme](proposals/native-media/README.md) preserves the full
+01 → 02 → 04 → 03 design bundle, separate from current architecture. Source baseline
+and original verification fields are historical; editorial dates do not renew evidence.
+The [DOCS instruction](../instructions/DOCS.architecture.instructions.md) owns metadata
+and knowledge lifecycle; [Foundation provenance](provenance/project-foundation-kit.md)
+records selective adaptation and full applicable MIT notices.
+
+```bash
+uv run --no-sync --offline python scripts/check_documentation.py --update-index
+uv run --no-sync --offline python scripts/check_documentation.py --check
+uv run --no-sync --offline pytest tests/unit/test_documentation.py tests/unit/test_verification_wrappers.py
+```
+
+Use pinned uv 0.11.15 and an owned environment/cache/tmp root; provision locked
+requirements separately before offline checks. Do not manually repair .pth/PYTHONPATH
+or refresh lock to conceal setup failures. An external UV_PROJECT_ENVIRONMENT leaves
+an inherited environment untouched. The checker defaults to its script-relative root;
+`--project ROOT` supports a synthetic project from another cwd. A mode is required.
+Exit 0 means structural success, 1 document errors, 2 input/usage failure.
+
+The fixed scope file explicitly selects authoring/native Markdown. Local target
+existence is checked inside root; only selected bodies/anchors are read, otherwise
+not_checked. External URLs are counted, never requested. Supported: simple inline/image
+and full/collapsed reference links, ATX headings, explicit HTML IDs; fences/code spans
+are ignored as syntax. Nested destinations/brackets, shortcut references, Setext/full
+GFM, renderer-specific anchors and Mermaid rendering are outside the guarantee.
+Mermaid rendering waiver: no renderer is installed/invoked by this checker.
+
+Authors update an existing knowledge owner for a semantic delta (or justify no impact),
+then update/check navigation and repeat to confirm no-op. Only the marked bundle README
+block is generated: four rows from validated title/kind/status and selected paths. It
+never writes bodies, status or dates. Invalid inputs/markers prevent writes; no-op
+preserves bytes/mtime. Automatic architecture truth or independent acceptance is not
+claimed. Existing manual rules and stronger test/release obligations remain.
+
+Development wrappers keep lint/type/test/privacy/docs/package checks and skip only the
+historical exact release packet. CI pull requests use this boundary; manual dispatch
+retains strict identity. See [runbook](offline-release-verification.md#development-versus-strict-release).
+
 ## Candidate identity and publication boundary
 
 Release evidence is point-in-time evidence. The committed MDRack 1.3 base

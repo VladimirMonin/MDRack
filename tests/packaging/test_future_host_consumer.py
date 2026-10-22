@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +24,9 @@ def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 def test_future_host_fixture_has_exact_pins_and_no_app_import() -> None:
     pyproject = (FIXTURE / "pyproject.toml").read_text(encoding="utf-8")
-    assert '"mdrack-core==1.0.0rc1"' in pyproject
-    assert '"mdrack-media==1.0.0rc1"' in pyproject
-    assert '"mdrack-sqlite==1.0.0rc2"' in pyproject
+    assert '"mdrack-core==1.0.0rc2"' in pyproject
+    assert '"mdrack-media==1.0.0rc2"' in pyproject
+    assert '"mdrack-sqlite==1.0.0rc3"' in pyproject
     source = (FIXTURE / "host_consumer.py").read_text(encoding="utf-8")
     assert "import mdrack" not in source
     assert "from mdrack import" not in source
@@ -41,17 +42,18 @@ def test_future_host_fixture_runs_from_installed_wheels(tmp_path: Path) -> None:
         _run(["uv", "build", "--wheel", "--out-dir", str(wheel_dir), str(package)], cwd=REPO_ROOT)
 
     venv_dir = tmp_path / "venv"
-    _run(["uv", "venv", "--python", "python3.11", str(venv_dir)], cwd=REPO_ROOT)
+    _run(["uv", "venv", "--python", sys.executable, str(venv_dir)], cwd=REPO_ROOT)
+    python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     wheels = sorted(str(path) for path in wheel_dir.glob("*.whl"))
     _run(
-        ["uv", "pip", "install", "--python", str(venv_dir / "bin" / "python"), "--no-index", *wheels],
+        ["uv", "pip", "install", "--python", str(python), "--no-index", *wheels],
         cwd=REPO_ROOT,
     )
 
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
     result = subprocess.run(
-        [str(venv_dir / "bin" / "python"), "host_consumer.py", str(tmp_path / "catalog.db")],
+        [str(python), "-I", "-B", "host_consumer.py", str(tmp_path / "catalog.db")],
         cwd=FIXTURE,
         text=True,
         capture_output=True,

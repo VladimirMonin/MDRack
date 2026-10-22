@@ -1,5 +1,6 @@
 """Stable embedded Python API."""
 
+from mdrack.application.media_search import MediaSearchRequest, MediaSearchResult, StoredUnitInput
 from mdrack.application.resources import (
     DuplicateResourceItem,
     DuplicateResourceResult,
@@ -9,6 +10,16 @@ from mdrack.application.resources import (
     SimilarResourceResult,
 )
 from mdrack.application.retrieval import HybridRetrievalService
+from mdrack.application.source_resolution import SourceResolver
+from mdrack.domain.embedding_inputs import (
+    EmbeddingResult,
+    EncodingRole,
+    ImageInput,
+    InputCapability,
+    RouteCapabilities,
+    TextInput,
+)
+from mdrack.embeddings.prepared import LegacyTextEmbeddingAdapter
 from mdrack.ingestion.images import (
     ExtractedImageText,
     ImageEmbeddingSpace,
@@ -19,6 +30,7 @@ from mdrack.ingestion.images import (
     StaticImageExtractor,
     VisualEmbeddingProvider,
 )
+from mdrack.ports.embeddings import PreparedEmbeddingProvider
 from mdrack.public_api.engine import MDRackEngine
 from mdrack.public_api.models import (
     EmbeddingCapabilities,
@@ -31,6 +43,9 @@ from mdrack.public_api.models import (
 )
 
 __all__ = [
+    "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput", "SourceResolver",
+    "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability",
+    "RouteCapabilities", "TextInput", "LegacyTextEmbeddingAdapter", "PreparedEmbeddingProvider",
     "EmbeddingCapabilities",
     "EmbeddingProfile",
     "DuplicateResourceItem",

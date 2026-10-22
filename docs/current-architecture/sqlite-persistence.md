@@ -37,7 +37,9 @@ and is not part of normal application startup.
 The standalone package has two separate immutable clean histories. Legacy
 `mdrack_sqlite_catalog_v1` ends at `0003_search`. The fixed application catalog
 uses `mdrack_sqlite_catalog_v2`: `0000_identity`, `0001_catalog`,
-`0002_vectors_facets`, `0003_search`, and `0004_vector_encoding`. V2 adds exact
+`0002_vectors_facets`, `0003_search`, `0004_vector_encoding`, and
+`0005_publication`. The latter stores independent lifecycle/token/source binding
+through withdrawal/deletion; all graph writers update it atomically. V2 adds exact
 codec and backend registries (`mdrack_vector_codecs`, `mdrack_vector_backends`) to
 the same `core_*` graph and persists filename/content digests plus the final
 schema/version/manifest identity in `mdrack_sqlite_migrations` and
@@ -64,6 +66,18 @@ keys, and removes the database plus WAL/SHM sidecars if initial creation fails. 
 concurrent opener waits only for that reserved path to become a complete verified
 v2 catalog and otherwise fails after a bounded timeout. There is no application
 candidate, active pointer, activation, rollback, retention, or cleanup flow.
+
+## Explicit recognized old-v2 maintenance
+
+Normal open never upgrades. Only exact completed v2/0004 may pass the explicit
+maintenance boundary, after all consumers stop/close and a SQLite-aware verified
+backup outside store. DDL, backfill, ledger and identity change atomically and target
+reopen verifies. No raw-source revision is inferred, no vectors/FTS are recomputed,
+no pre-upgrade deleted history is invented. Unknown/incomplete/v1/bridge refuse.
+Existing-catalog failure never invokes fresh-create cleanup. See
+[ADR-0014](../decisions/0014-conditional-publication-and-v2-upgrade.md) and
+[recovery](../recovery.md). State has no cascading FK to core_resources. Live metadata
+retention supports source deletion after withdrawal; tombstones discard metadata.
 
 ## Current ER model
 

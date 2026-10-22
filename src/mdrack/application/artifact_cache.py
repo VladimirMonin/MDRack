@@ -7,16 +7,17 @@ provider output and are stored with owner-only permissions.
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import json
-import os
 import re
 import stat
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+from . import _artifact_cache_fs as fs
+from ._artifact_cache_fs import close, flush, listdir
 
 _CACHE_SCHEMA = "mdrack.artifact-cache.v1"
 _CACHE_MARKER = ".mdrack-artifact-cache-v1"
@@ -26,13 +27,6 @@ _KIND_RE = re.compile(r"[a-z0-9][a-z0-9_.-]{0,63}\Z")
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
 _SHARD_RE = re.compile(r"[0-9a-f]{2}\Z")
 _MAX_METADATA_BYTES = 16_384
-_DIRECTORY_FLAGS = (
-    os.O_RDONLY
-    | getattr(os, "O_DIRECTORY", 0)
-    | getattr(os, "O_NOFOLLOW", 0)
-    | getattr(os, "O_CLOEXEC", 0)
-)
-_FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
 
 
 @dataclass(frozen=True)
@@ -138,7 +132,7 @@ class ArtifactCache:
                 return ArtifactCacheLookup("corrupt")
             try:
                 try:
-                    entry_info = os.stat(key.digest, dir_fd=shard_fd, follow_symlinks=False)
+                    entry_info = fs.file_info(shard_fd, key.digest)
                 except FileNotFoundError:
                     return ArtifactCacheLookup("miss")
                 payload = self._read_valid_entry_at(shard_fd, key.digest, key)
@@ -149,9 +143,9 @@ class ArtifactCache:
                     self._remove_empty_shard(root_fd, shard_fd, key.digest[:2])
                 return ArtifactCacheLookup("corrupt")
             finally:
-                os.close(shard_fd)
+                close(shard_fd)
         finally:
-            os.close(root_fd)
+            close(root_fd)
 
     def store(self, key: ArtifactCacheKey, payload: bytes) -> ArtifactCacheStoreResult:
         if not isinstance(payload, bytes):
@@ -171,8 +165,9 @@ class ArtifactCache:
             shard_fd = self._open_or_create_shard(root_fd, key.digest[:2])
             temp_name: str | None = None
             try:
-                temp_name = f".tmp-{uuid.uuid4().hex}"
-                os.mkdir(temp_name, mode=0o700, dir_fd=shard_fd)
+                proposed_name = f".tmp-{uuid.uuid4().hex}"
+                fs.mkdir(shard_fd, proposed_name)
+                temp_name = proposed_name  # cleanup authority starts only after exclusive creation
                 temp_fd = self._open_directory_at(shard_fd, temp_name, kind="temporary entry")
                 try:
                     metadata = {
@@ -190,31 +185,29 @@ class ArtifactCache:
                     ).encode("ascii")
                     self._write_private_file_at(temp_fd, "payload.bin", payload)
                     self._write_private_file_at(temp_fd, "metadata.json", metadata_bytes)
-                    os.fsync(temp_fd)
+                    flush(temp_fd)
                 finally:
-                    os.close(temp_fd)
+                    close(temp_fd)
                 try:
-                    os.rename(
-                        temp_name,
-                        key.digest,
-                        src_dir_fd=shard_fd,
-                        dst_dir_fd=shard_fd,
-                    )
+                    fs.publish(shard_fd, temp_name, key.digest)
+                    temp_name = None
                 except OSError:
                     if self._read_valid_entry_at(shard_fd, key.digest, key) is not None:
                         return ArtifactCacheStoreResult("exists")
                     raise
-                os.fsync(shard_fd)
+                flush(shard_fd)
                 return ArtifactCacheStoreResult("stored")
             finally:
-                if temp_name is not None:
-                    try:
-                        self._remove_tree_at(shard_fd, temp_name)
-                    except FileNotFoundError:
-                        pass
-                os.close(shard_fd)
+                try:
+                    if temp_name is not None:
+                        try:
+                            self._remove_tree_at(shard_fd, temp_name)
+                        except FileNotFoundError:
+                            pass
+                finally:
+                    close(shard_fd)
         finally:
-            os.close(root_fd)
+            close(root_fd)
 
     def discard(self, key: ArtifactCacheKey) -> None:
         """Discard one invalid semantic artifact without touching source/catalog data."""
@@ -231,9 +224,9 @@ class ArtifactCache:
             except FileNotFoundError:
                 return
             finally:
-                os.close(shard_fd)
+                close(shard_fd)
         finally:
-            os.close(root_fd)
+            close(root_fd)
 
     def status(self) -> ArtifactCacheReport:
         """Return count-only status without hashing payloads."""
@@ -254,31 +247,20 @@ class ArtifactCache:
             self._validate_root(root_fd, require_marker=True)
             self._validate_purge_structure(root_fd)
             entry_count = self._scan_at(root_fd, verify_payload=False).entry_count
-            for shard_name in os.listdir(root_fd):
+            for shard_name in listdir(root_fd):
                 if shard_name == _CACHE_MARKER:
                     continue
                 self._remove_tree_at(root_fd, shard_name)
-            os.fsync(root_fd)
+            flush(root_fd)
             return entry_count
         finally:
-            os.close(root_fd)
+            close(root_fd)
 
-    def _open_root(self, *, create: bool) -> int | None:
-        if create:
-            self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        try:
-            descriptor = os.open(self.root, _DIRECTORY_FLAGS)
-        except FileNotFoundError:
-            return None
-        except OSError as exc:
-            if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
-                raise ValueError("artifact cache root must be a real directory") from exc
-            raise
-        os.fchmod(descriptor, 0o700)
-        return descriptor
+    def _open_root(self, *, create: bool) -> fs.Directory | None:
+        return fs.open_root(self.root, create=create)
 
-    def _validate_root(self, root_fd: int, *, require_marker: bool) -> bool:
-        names = os.listdir(root_fd)
+    def _validate_root(self, root_fd: fs.Directory, *, require_marker: bool) -> bool:
+        names = listdir(root_fd)
         if _CACHE_MARKER not in names:
             if require_marker or names:
                 raise ValueError("artifact cache marker missing")
@@ -291,67 +273,26 @@ class ArtifactCache:
             raise ValueError("artifact cache root contains foreign content")
         return True
 
-    def _ensure_owned_root(self, root_fd: int) -> None:
+    def _ensure_owned_root(self, root_fd: fs.Directory) -> None:
         if self._validate_root(root_fd, require_marker=False):
             return
         self._write_private_file_at(root_fd, _CACHE_MARKER, _CACHE_MARKER_BYTES)
-        os.fsync(root_fd)
+        flush(root_fd)
 
-    def _open_or_create_shard(self, root_fd: int, name: str) -> int:
+    def _open_or_create_shard(self, root_fd: fs.Directory, name: str) -> fs.Directory:
         try:
-            os.mkdir(name, mode=0o700, dir_fd=root_fd)
+            fs.mkdir(root_fd, name)
         except FileExistsError:
             pass
-        descriptor = self._open_directory_at(root_fd, name, kind="shard")
-        os.fchmod(descriptor, 0o700)
-        return descriptor
+        return self._open_directory_at(root_fd, name, kind="shard")
 
-    @staticmethod
-    def _open_directory_at(parent_fd: int, name: str, *, kind: str) -> int:
-        try:
-            return os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
-        except FileNotFoundError:
-            raise
-        except OSError as exc:
-            if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
-                raise ValueError(f"artifact cache {kind} must be a real directory") from exc
-            raise
-
-    @staticmethod
-    def _write_private_file_at(parent_fd: int, name: str, payload: bytes) -> None:
-        descriptor = os.open(
-            name,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-            dir_fd=parent_fd,
-        )
-        try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-        except Exception:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-            raise
-
-    @staticmethod
-    def _read_file_at(parent_fd: int, name: str, *, limit: int) -> bytes:
-        descriptor = os.open(name, _FILE_FLAGS, dir_fd=parent_fd)
-        try:
-            info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
-                raise ValueError("artifact cache file is not a bounded regular file")
-            with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                return stream.read(limit + 1)
-        finally:
-            os.close(descriptor)
+    _open_directory_at = staticmethod(fs.open_directory)
+    _write_private_file_at = staticmethod(fs.write_file)
+    _read_file_at = staticmethod(fs.read_file)
 
     def _read_valid_entry_at(
         self,
-        shard_fd: int,
+        shard_fd: fs.Directory,
         entry_name: str,
         expected_key: ArtifactCacheKey,
     ) -> bytes | None:
@@ -390,7 +331,7 @@ class ArtifactCache:
                 return None
             return payload
         finally:
-            os.close(entry_fd)
+            close(entry_fd)
 
     def _scan(self, *, verify_payload: bool) -> ArtifactCacheReport:
         root_fd = self._open_root(create=False)
@@ -401,19 +342,19 @@ class ArtifactCache:
                 return ArtifactCacheReport(0, 0, 0, 0)
             return self._scan_at(root_fd, verify_payload=verify_payload)
         finally:
-            os.close(root_fd)
+            close(root_fd)
 
-    def _scan_at(self, root_fd: int, *, verify_payload: bool) -> ArtifactCacheReport:
+    def _scan_at(self, root_fd: fs.Directory, *, verify_payload: bool) -> ArtifactCacheReport:
         entry_count = 0
         valid_entries = 0
         corrupt_entries = 0
         payload_bytes = 0
-        for shard_name in os.listdir(root_fd):
+        for shard_name in listdir(root_fd):
             if shard_name == _CACHE_MARKER:
                 continue
             shard_fd = self._open_directory_at(root_fd, shard_name, kind="shard")
             try:
-                for entry_name in os.listdir(shard_fd):
+                for entry_name in listdir(shard_fd):
                     if entry_name.startswith(".") or not _DIGEST_RE.fullmatch(entry_name):
                         continue
                     entry_count += 1
@@ -436,10 +377,10 @@ class ArtifactCache:
                     valid_entries += 1
                     payload_bytes += payload_size
             finally:
-                os.close(shard_fd)
+                close(shard_fd)
         return ArtifactCacheReport(entry_count, valid_entries, corrupt_entries, payload_bytes)
 
-    def _key_from_metadata_at(self, shard_fd: int, entry_name: str) -> ArtifactCacheKey | None:
+    def _key_from_metadata_at(self, shard_fd: fs.Directory, entry_name: str) -> ArtifactCacheKey | None:
         try:
             entry_fd = self._open_directory_at(shard_fd, entry_name, kind="entry")
         except (FileNotFoundError, ValueError):
@@ -458,9 +399,9 @@ class ArtifactCache:
             except (OSError, TypeError, ValueError, json.JSONDecodeError):
                 return None
         finally:
-            os.close(entry_fd)
+            close(entry_fd)
 
-    def _declared_payload_size_at(self, shard_fd: int, entry_name: str) -> int | None:
+    def _declared_payload_size_at(self, shard_fd: fs.Directory, entry_name: str) -> int | None:
         try:
             entry_fd = self._open_directory_at(shard_fd, entry_name, kind="entry")
         except (FileNotFoundError, ValueError):
@@ -477,64 +418,40 @@ class ArtifactCache:
                     or payload_size > self.max_entry_bytes
                 ):
                     return None
-                payload_fd = os.open("payload.bin", _FILE_FLAGS, dir_fd=entry_fd)
-                try:
-                    payload_info = os.fstat(payload_fd)
-                finally:
-                    os.close(payload_fd)
+                payload_info = fs.regular_file_info(entry_fd, "payload.bin")
                 if not stat.S_ISREG(payload_info.st_mode) or payload_info.st_size != payload_size:
                     return None
                 return payload_size
             except (OSError, TypeError, ValueError, json.JSONDecodeError):
                 return None
         finally:
-            os.close(entry_fd)
+            close(entry_fd)
 
-    def _validate_purge_structure(self, root_fd: int) -> None:
-        for shard_name in os.listdir(root_fd):
+    def _validate_purge_structure(self, root_fd: fs.Directory) -> None:
+        for shard_name in listdir(root_fd):
             if shard_name == _CACHE_MARKER:
                 continue
             shard_fd = self._open_directory_at(root_fd, shard_name, kind="shard")
             try:
-                for entry_name in os.listdir(shard_fd):
+                for entry_name in listdir(shard_fd):
                     if not (_DIGEST_RE.fullmatch(entry_name) or entry_name.startswith(".tmp-")):
                         raise ValueError("artifact cache shard contains foreign content")
                     entry_fd = self._open_directory_at(shard_fd, entry_name, kind="entry")
                     try:
-                        names = set(os.listdir(entry_fd))
+                        names = set(listdir(entry_fd))
                         if not names.issubset({"metadata.json", "payload.bin"}):
                             raise ValueError("artifact cache entry contains foreign content")
                         for name in names:
-                            info = os.stat(name, dir_fd=entry_fd, follow_symlinks=False)
+                            info = fs.file_info(entry_fd, name)
                             if not stat.S_ISREG(info.st_mode):
                                 raise ValueError("artifact cache entry contains unsafe content")
                     finally:
-                        os.close(entry_fd)
+                        close(entry_fd)
             finally:
-                os.close(shard_fd)
+                close(shard_fd)
 
-    def _remove_tree_at(self, parent_fd: int, name: str) -> None:
-        info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        if not stat.S_ISDIR(info.st_mode):
-            os.unlink(name, dir_fd=parent_fd)
-            return
-        child_fd = self._open_directory_at(parent_fd, name, kind="entry")
-        try:
-            for child_name in os.listdir(child_fd):
-                self._remove_tree_at(child_fd, child_name)
-        finally:
-            os.close(child_fd)
-        os.rmdir(name, dir_fd=parent_fd)
-
-    @staticmethod
-    def _remove_empty_shard(root_fd: int, shard_fd: int, shard_name: str) -> None:
-        if os.listdir(shard_fd):
-            return
-        try:
-            os.rmdir(shard_name, dir_fd=root_fd)
-        except OSError as exc:
-            if exc.errno not in {errno.ENOTEMPTY, errno.ENOENT}:
-                raise
+    _remove_tree_at = staticmethod(fs.remove_tree)
+    _remove_empty_shard = staticmethod(fs.remove_empty)
 
 
 __all__ = [

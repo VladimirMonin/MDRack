@@ -82,6 +82,11 @@ ROOT_EXPORTS = (
     "canonical_json",
     "emit_event",
     "safe_fingerprint",
+    "ExpectedPublication",
+    "PublicationResult",
+    "PublicationState",
+    "ResourceSnapshot",
+    "PublicationPort",
 )
 
 DOMAIN_EXPORTS = (
@@ -147,6 +152,10 @@ DOMAIN_EXPORTS = (
     "VectorBranch",
     "VectorRecord",
     "canonical_json",
+    "ExpectedPublication",
+    "PublicationResult",
+    "PublicationState",
+    "ResourceSnapshot",
 )
 
 APPLICATION_EXPORTS = (
@@ -166,11 +175,12 @@ PORT_EXPORTS = (
     "ResourceWritePort",
     "SearchPort",
     "VectorSearchPort",
+    "PublicationPort",
 )
 
 
 def test_core_contract_version_and_ordered_public_exports_are_frozen() -> None:
-    assert mdrack_core.CORE_CONTRACT_VERSION == "1.0.0-rc.1"
+    assert mdrack_core.CORE_CONTRACT_VERSION == "1.0.0-rc.2"
     assert mdrack_core.__all__ == ROOT_EXPORTS
     assert core_domain.__all__ == DOMAIN_EXPORTS
     assert core_application.__all__ == APPLICATION_EXPORTS

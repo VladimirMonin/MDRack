@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 import pytest
+import toml
 from pydantic import ValidationError
 
 from mdrack.config.defaults import get_defaults
@@ -275,7 +276,7 @@ def test_config_debug_logs_redact_paths_endpoints_and_override_values(
     private_endpoint = "https://private.example.test/v1?tenant=customer-secret"
     cli_secret = "customer-private-model"
     private_config.write_text(
-        f'[paths]\nstore = "{private_store}"\n[embedding]\nendpoint = "{private_endpoint}"\n',
+        toml.dumps({"paths": {"store": str(private_store)}, "embedding": {"endpoint": private_endpoint}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("MDRACK_PATHS_ROOT", str(private_dir))

@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.manifest import MAX_MANIFEST_BYTES, ManifestError
 from mdrack.application.resource_catalog import ResourceCatalogError, ResourceCatalogErrorCode
 from mdrack.output.envelope import error as envelope_error
@@ -15,7 +16,7 @@ from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 from mdrack.public_api import MDRackEngine
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:

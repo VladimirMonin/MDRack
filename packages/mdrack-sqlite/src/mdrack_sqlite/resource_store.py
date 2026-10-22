@@ -7,10 +7,12 @@ import json
 import math
 import sqlite3
 import threading
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
+from mdrack_core.application.validation import validate_prepared_batch
 from mdrack_core.domain import (
     BranchExecutionError,
     CatalogExecutionError,
@@ -34,7 +36,14 @@ from mdrack_core.domain.common import (
     require_optional_non_empty,
     require_utf8_encodable,
 )
+from mdrack_core.domain.publication import (
+    ExpectedPublication,
+    PublicationResult,
+    PublicationState,
+    ResourceSnapshot,
+)
 from mdrack_sqlite.builtin_exact import BuiltinExactSearchCounters, BuiltinExactVectorBackend
+from mdrack_sqlite.errors import SQLiteCatalogError
 from mdrack_sqlite.fts import plain_query_fallback
 from mdrack_sqlite.vector_backends import (
     SQLiteVectorBackend,
@@ -181,7 +190,7 @@ class SQLiteResourceStore:
             if self.connection.in_transaction:
                 raise ValueError("caller transaction is active")
             with self._writer_lock:
-                self._replace(prepared)
+                self._publish(prepared, None)
         except CatalogExecutionError:
             raise
         except sqlite3.OperationalError as error:
@@ -191,6 +200,10 @@ class SQLiteResourceStore:
             raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
 
     def delete_resource(self, resource_id: str) -> None:
+        self._delete_resource(resource_id)
+
+    def _delete_resource(self, resource_id: str) -> bool:
+        self._refuse_external_transaction()
         try:
             resource_id = require_non_empty(resource_id, "resource_id")
             if self.connection.in_transaction:
@@ -198,15 +211,23 @@ class SQLiteResourceStore:
             with self._writer_lock:
                 self._begin()
                 self._point("after_begin")
+                state = self._read_state(resource_id) if self._publication_enabled() else None
+                existed = state.live if state is not None else self.connection.execute(
+                    "SELECT 1 FROM core_resources WHERE resource_id=?", (resource_id,)
+                ).fetchone() is not None
                 self._vector_backend.delete_vectors(self.connection, resource_id=resource_id)
                 self._delete_fts(resource_id)
                 self.connection.execute("DELETE FROM core_resources WHERE resource_id = ?", (resource_id,))
                 self._point("after_delete")
+                if state is not None and state.live:
+                    self._put_state(state, "deleted")
                 self._prune_facets()
                 self._vector_backend.verify(self.connection, generation=self._generation_context)
                 self._point("before_commit")
                 self.connection.commit()
+                return existed
         except CatalogExecutionError:
+            self._rollback()
             raise
         except sqlite3.OperationalError as error:
             self._rollback()
@@ -215,6 +236,9 @@ class SQLiteResourceStore:
         except Exception:
             self._rollback()
             raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+        except BaseException:
+            self._rollback()
+            raise
 
     def read_resource(self, resource_id: str) -> ResourceRecord | None:
         try:
@@ -438,14 +462,10 @@ class SQLiteResourceStore:
         except Exception:
             raise BranchExecutionError(ErrorCategory.ADAPTER_ERROR, branch_id=branch.branch_id) from None
 
-    def _replace(self, prepared: dict[str, Any]) -> None:
+    def _write_graph(self, prepared: dict[str, Any]) -> None:
         batch: PreparedResourceBatch = prepared["batch"]
         resource = batch.resource
         try:
-            self._check_source_identity(prepared)
-            self._check_spaces(prepared)
-            self._begin()
-            self._point("after_begin")
             self._check_source_identity(prepared)
             self._check_spaces(prepared)
             self._vector_backend.delete_vectors(self.connection, resource_id=resource.resource_id)
@@ -499,15 +519,202 @@ class SQLiteResourceStore:
             )
             self._verify(batch)
             self._vector_backend.verify(self.connection, generation=self._generation_context)
-            self._point("before_commit")
-            self.connection.commit()
-        except Exception:
+        except BaseException:
             self._rollback()
             raise
+
+    def _refuse_external_transaction(self) -> None:
+        if self.connection.in_transaction:
+            from .errors import SQLiteCatalogError, SQLiteErrorCode
+            raise SQLiteCatalogError(SQLiteErrorCode.ACTIVE_TRANSACTION)
+
+    def _publication_enabled(self) -> bool:
+        return self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='core_publication_states'"
+        ).fetchone() is not None
+
+    def _read_state(self, resource_id: str) -> PublicationState:
+        row = self.connection.execute(
+            "SELECT * FROM core_publication_states WHERE resource_id=?", (resource_id,)
+        ).fetchone()
+        if row is None:
+            return PublicationState(resource_id, "never_created")
+        _decode_mapping(row["source_metadata_json"], "source.metadata")
+        return PublicationState(
+            resource_id, row["status"], row["lifecycle_id"], row["state_token"], row["source_namespace"],
+            _decode_locator(row["source_locator_kind"], row["source_locator_json"], "source_locator"),
+        )
+
+    def _put_state(self, previous: PublicationState, status: str, batch: PreparedResourceBatch | None = None) -> None:
+        locator = previous.source_locator if batch is None else batch.resource.locator
+        namespace = previous.source_namespace if batch is None else batch.resource.source_namespace
+        assert locator is not None and namespace is not None
+        if previous.live and (namespace != previous.source_namespace or locator != previous.source_locator):
+            raise ValueError("live source binding cannot change")
+        lifecycle = previous.lifecycle_id if previous.live else uuid.uuid4().hex
+        if status == "deleted":
+            metadata = "{}"
+        elif batch is not None:
+            metadata = _encode_mapping(batch.resource.metadata, "source.metadata")
+        else:
+            metadata = self.connection.execute(
+                "SELECT source_metadata_json FROM core_publication_states WHERE resource_id=?",
+                (previous.resource_id,),
+            ).fetchone()[0]
+        self.connection.execute(
+            "INSERT INTO core_publication_states VALUES(?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(resource_id) DO UPDATE SET status=excluded.status,lifecycle_id=excluded.lifecycle_id,"
+            "state_token=excluded.state_token,source_namespace=excluded.source_namespace,"
+            "source_locator_kind=excluded.source_locator_kind,source_locator_json=excluded.source_locator_json,"
+            "source_metadata_json=excluded.source_metadata_json",
+            (previous.resource_id, status, lifecycle, uuid.uuid4().hex, namespace, locator.kind,
+             _encode_mapping(locator.payload, "source_locator"), metadata),
+        )
+        self._point("after_state")
+
+    def export_graph(self, resource_id: str) -> PreparedResourceBatch | None:
+        """Eager graph reader; joins an adapter-owned existing read session only."""
+        from .graph_reader import read_graph
+        owns = not self.connection.in_transaction
+        try:
+            if owns:
+                self.connection.execute("BEGIN")
+            return read_graph(self, resource_id)
+        finally:
+            if owns:
+                self.connection.rollback()
+
+    def read_snapshot(self, resource_id: str) -> ResourceSnapshot:
+        from .graph_reader import read_graph
+        require_non_empty(resource_id, "resource_id")
+        self._refuse_external_transaction()
+        try:
+            self.connection.execute("BEGIN")
+            state = self._read_state(resource_id)
+            self._point("after_snapshot_state")
+            return ResourceSnapshot(state, read_graph(self, resource_id))
+        except CatalogExecutionError:
+            raise
+        except Exception:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+        finally:
+            self.connection.rollback()
+
+    def _publish(self, prepared: dict[str, Any], expected: ExpectedPublication | None) -> PublicationResult | None:
+        batch: PreparedResourceBatch = prepared["batch"]
+        self._begin()
+        try:
+            self._point("after_begin")
+            enabled = self._publication_enabled()
+            if expected is not None and not enabled:
+                raise ValueError("publication schema required")
+            previous = self._read_state(batch.resource.resource_id) if enabled else None
+            if expected is not None and previous != expected.state:
+                self.connection.rollback()
+                assert previous is not None
+                return PublicationResult(False, previous)
+            self._write_graph(prepared)
+            if previous is not None:
+                self._put_state(previous, "published", batch)
+            self._point("before_commit")
+            state = self._read_state(batch.resource.resource_id) if enabled else None
+            self.connection.commit()
+            return None if state is None else PublicationResult(True, state)
+        except BaseException:
+            self._rollback()
+            raise
+
+    def compare_and_publish(self, batch: PreparedResourceBatch, expected: ExpectedPublication) -> PublicationResult:
+        prepared = self._preflight(batch)
+        if not isinstance(expected, ExpectedPublication) or expected.state.resource_id != batch.resource.resource_id:
+            raise ValueError("invalid expected state")
+        self._refuse_external_transaction()
+        try:
+            with self._writer_lock:
+                result = self._publish(prepared, expected)
+            assert result is not None
+            return result
+        except sqlite3.OperationalError as error:
+            category = ErrorCategory.ADAPTER_TIMEOUT if _is_busy(error) else ErrorCategory.CATALOG_ERROR
+            raise CatalogExecutionError(category) from None
+        except Exception:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+
+    def _remove_if_current(self, resource_id: str, expected: ExpectedPublication, *, delete: bool) -> PublicationResult:
+        if (not isinstance(expected, ExpectedPublication) or expected.create
+                or expected.state.resource_id != resource_id):
+            raise ValueError("live expected state required")
+        self._refuse_external_transaction()
+        with self._writer_lock:
+            self._begin()
+            try:
+                previous = self._read_state(resource_id)
+                if previous != expected.state:
+                    self.connection.rollback()
+                    return PublicationResult(False, previous)
+                self._vector_backend.delete_vectors(self.connection, resource_id=resource_id)
+                self._delete_fts(resource_id)
+                self.connection.execute("DELETE FROM core_resources WHERE resource_id=?", (resource_id,))
+                self._point("after_delete")
+                self._put_state(previous, "deleted" if delete else "live_without_projections")
+                self._prune_facets()
+                self._vector_backend.verify(self.connection, generation=self._generation_context)
+                state = self._read_state(resource_id)
+                self._point("before_commit")
+                self.connection.commit()
+                return PublicationResult(True, state)
+            except BaseException:
+                self._rollback()
+                raise
+
+    def _remove_safely(self, resource_id: str, expected: ExpectedPublication, *, delete: bool) -> PublicationResult:
+        try:
+            return self._remove_if_current(resource_id, expected, delete=delete)
+        except SQLiteCatalogError:
+            raise
+        except sqlite3.OperationalError as error:
+            category = ErrorCategory.ADAPTER_TIMEOUT if _is_busy(error) else ErrorCategory.CATALOG_ERROR
+            raise CatalogExecutionError(category) from None
+        except Exception:
+            raise CatalogExecutionError(ErrorCategory.CATALOG_ERROR) from None
+
+    def withdraw_if_current(self, resource_id: str, expected: ExpectedPublication) -> PublicationResult:
+        return self._remove_safely(resource_id, expected, delete=False)
+
+    def delete_if_current(self, resource_id: str, expected: ExpectedPublication) -> PublicationResult:
+        return self._remove_safely(resource_id, expected, delete=True)
+
+    def delete_live_resource(self, resource_id: str) -> bool:
+        """Atomically end a live lifecycle, including a withdrawn graph."""
+        return self._delete_resource(resource_id)
+
+    def rebuild_fts_index(self) -> tuple[int, int]:
+        """Serialize deterministic repair; no extraction and no semantic state change."""
+        self._refuse_external_transaction()
+        with self._writer_lock:
+            self._begin()
+            try:
+                self.connection.execute("DELETE FROM core_search_units_fts")
+                self.connection.executemany(
+                    "INSERT INTO core_search_units_fts(unit_id,content) VALUES(?,?)",
+                    (
+                        (row[0], row[1]) for row in self.connection.execute(
+                            "SELECT unit_id,text_content FROM core_search_units ORDER BY unit_id"
+                        ) if isinstance(row[1], str) and row[1].strip()
+                    ),
+                )
+                count = int(self.connection.execute("SELECT count(*) FROM core_search_units_fts").fetchone()[0])
+                self._point("before_commit")
+                self.connection.commit()
+                return count, count
+            except BaseException:
+                self._rollback()
+                raise
 
     def _preflight(self, batch: object) -> dict[str, Any]:
         if not isinstance(batch, PreparedResourceBatch):
             raise ValueError("batch must be PreparedResourceBatch")
+        validate_prepared_batch(batch)
         resource = batch.resource
         resource_locator_kind, resource_locator_json, resource_fingerprint = _locator_parts(
             resource.locator, "resource.locator"

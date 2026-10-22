@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import toml
 from click.testing import CliRunner
 
 from mdrack.cli import main
@@ -22,7 +23,7 @@ def _write_config(root: Path, relative_path: str, store: str) -> Path:
     config_path = root / relative_path
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
-        f"[paths]\nstore = \"{store}\"\n",
+        toml.dumps({"paths": {"store": store}}),
         encoding="utf-8",
     )
     return config_path
@@ -333,7 +334,7 @@ def test_scan_config_debug_logs_do_not_expose_private_values(
     config_path = root / ".mdrack" / "private-config.toml"
     config_path.parent.mkdir()
     config_path.write_text(
-        f'[paths]\nstore = "{store}"\n[embedding]\nendpoint = "{endpoint}"\n',
+        toml.dumps({"paths": {"store": str(store)}, "embedding": {"endpoint": endpoint}}),
         encoding="utf-8",
     )
     caplog.set_level(logging.DEBUG, logger="mdrack.config.loader")

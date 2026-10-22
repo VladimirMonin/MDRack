@@ -23,27 +23,22 @@ from mdrack.application.manifest import (
 from mdrack.application.metadata_filters import MetadataFilters, compile_metadata_filters
 from mdrack.application.metadata_projection import FACET_SCALAR_CODEC, MetadataScalar
 from mdrack.application.vector_values import canonicalize_for_space
+from mdrack.ports.search_sessions import SearchReadSessionFactory
 from mdrack_core.application.retrieval import RetrievalService
 from mdrack_core.domain import (
     TARGET_RESOURCE,
     TARGET_UNIT,
     BranchScopeOverride,
     EmbeddingSpaceRecord,
-    Facet,
     JSONValue,
     LexicalBranch,
-    Locator,
     PreparedResourceBatch,
-    RepresentationRecord,
-    ResourceFacet,
     SearchRequest,
     SearchScope,
     SearchUnitRecord,
     VectorBranch,
-    VectorRecord,
 )
 from mdrack_sqlite import SQLITE_CATALOG_SCHEMA_ID, SQLiteCatalog
-from mdrack_sqlite.vector_codecs import decode_vector_payload
 
 
 class ResourceCatalogErrorCode(StrEnum):
@@ -160,7 +155,7 @@ class UnitReadProjection:
     representation_id: str
     unit_kind: str
     modality: str
-    text: str
+    text: str | None
     evidence_locator: dict[str, object]
     ordinal: int
 
@@ -333,9 +328,13 @@ def _metadata_type(value: MetadataScalar) -> str:
 
 
 class MetadataCatalogService:
-    """Provider-free metadata inspection and resource-target lexical search."""
+    """Provider-free search; only a supplied session capability guarantees consistency."""
 
-    def __init__(self, catalog: object) -> None:
+    def __init__(self, catalog: object, *, read_sessions: SearchReadSessionFactory | None = None) -> None:
+        self._read_sessions = read_sessions or getattr(catalog, "search_read_sessions", None)
+        if self._read_sessions is not None:
+            self._catalog = catalog
+            return
         if not callable(getattr(catalog, "read_resource", None)):
             raise TypeError("catalog must support resource reads")
         if not callable(getattr(catalog, "search_lexical", None)):
@@ -419,6 +418,12 @@ class MetadataCatalogService:
         metadata_weight: float = 0.2,
         limit: int = 20,
     ) -> ResourceSearchResult:
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                return MetadataCatalogService(session.catalog).search(
+                    query, metadata_filters=metadata_filters, body_weight=body_weight,
+                    metadata_weight=metadata_weight, limit=limit,
+                )
         if not isinstance(query, str) or not query.strip():
             raise ValueError("query must be a non-empty string")
         if type(limit) is not int or limit < 1:
@@ -531,7 +536,7 @@ def _remove_owned_temporary(path: Path | None) -> None:
 def inspect_resource(catalog: object, resource_id: str) -> ResourceInspection:
     """Inspect one resource through the structural catalog contract used by the engine."""
     try:
-        reader = cast(object, catalog)
+        reader = catalog
         resource = reader.read_resource(resource_id)  # type: ignore[attr-defined]
         if resource is None:
             raise ResourceCatalogError(ResourceCatalogErrorCode.RESOURCE_NOT_FOUND)
@@ -613,10 +618,14 @@ def inspect_resource(catalog: object, resource_id: str) -> ResourceInspection:
 def delete_resource(catalog: object, resource_id: str) -> ResourceDeleteResult:
     """Delete one resource through the structural catalog contract used by the engine."""
     try:
-        reader = cast(object, catalog)
-        deleted = reader.read_resource(resource_id) is not None  # type: ignore[attr-defined]
-        if deleted:
-            reader.delete_resource(resource_id)  # type: ignore[attr-defined]
+        reader = catalog
+        delete_live = getattr(reader, "delete_live_resource", None)
+        if callable(delete_live):
+            deleted = bool(delete_live(resource_id))
+        else:
+            deleted = reader.read_resource(resource_id) is not None  # type: ignore[attr-defined]
+            if deleted:
+                reader.delete_resource(resource_id)  # type: ignore[attr-defined]
         return ResourceDeleteResult(resource_id=resource_id, deleted=deleted)
     except Exception:
         raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
@@ -633,131 +642,14 @@ class PreparedResourceExportService:
         self._catalog = catalog
 
     def export_batch(self, resource_id: str) -> PreparedResourceBatch:
-        connection = self._catalog.connection  # type: ignore[attr-defined]
-        owns_transaction = not connection.in_transaction
         try:
-            if owns_transaction:
-                connection.execute("BEGIN")
-            resource = self._catalog.read_resource(resource_id)  # type: ignore[attr-defined]
-            if resource is None:
+            batch = self._catalog.export_graph(resource_id)  # type: ignore[attr-defined]
+            if batch is None:
                 raise ResourceCatalogError(ResourceCatalogErrorCode.RESOURCE_NOT_FOUND)
-            representation_rows = connection.execute(
-                "SELECT * FROM core_representations WHERE resource_id=? "
-                "ORDER BY representation_id",
-                (resource_id,),
-            ).fetchall()
-            unit_rows = connection.execute(
-                "SELECT * FROM core_search_units WHERE resource_id=? "
-                "ORDER BY representation_id,ordinal,unit_id",
-                (resource_id,),
-            ).fetchall()
-            space_rows = connection.execute(
-                "SELECT DISTINCT s.* FROM core_embedding_spaces s "
-                "JOIN core_unit_embeddings e USING(space_id) "
-                "JOIN core_search_units u USING(unit_id) "
-                "WHERE u.resource_id=? ORDER BY s.space_id",
-                (resource_id,),
-            ).fetchall()
-            vector_rows = connection.execute(
-                "SELECT e.unit_id,e.space_id,e.embedding,s.dimensions,s.metadata_json "
-                "FROM core_unit_embeddings e JOIN core_embedding_spaces s USING(space_id) "
-                "JOIN core_search_units u USING(unit_id) "
-                "WHERE u.resource_id=? ORDER BY e.unit_id,e.space_id",
-                (resource_id,),
-            ).fetchall()
-            facet_rows = connection.execute(
-                "SELECT f.namespace,f.value,rf.origin,rf.producer_is_null,"
-                "rf.producer_value,rf.confidence_json "
-                "FROM core_resource_facets rf JOIN core_facets f USING(facet_id) "
-                "WHERE rf.resource_id=? "
-                "ORDER BY f.namespace,f.value,rf.origin,rf.producer_is_null,rf.producer_value",
-                (resource_id,),
-            ).fetchall()
-            batch = PreparedResourceBatch(
-                resource=resource,
-                representations=tuple(
-                    RepresentationRecord(
-                        representation_id=row["representation_id"],
-                        resource_id=row["resource_id"],
-                        representation_kind=row["representation_kind"],
-                        modality=row["modality"],
-                        text=row["text_content"],
-                        language=row["language"],
-                        producer_fingerprint=row["producer_fingerprint"],
-                        token_count=row["token_count"],
-                        token_count_kind=row["token_count_kind"],
-                        metadata=_decode_json_mapping(row["metadata_json"]),
-                    )
-                    for row in representation_rows
-                ),
-                units=tuple(
-                    SearchUnitRecord(
-                        unit_id=row["unit_id"],
-                        resource_id=row["resource_id"],
-                        representation_id=row["representation_id"],
-                        unit_kind=row["unit_kind"],
-                        modality=row["modality"],
-                        text=row["text_content"],
-                        evidence_locator=Locator(
-                            row["evidence_locator_kind"],
-                            _decode_json_mapping(row["evidence_locator_json"]),
-                        ),
-                        ordinal=row["ordinal"],
-                        token_count=row["token_count"],
-                        token_count_kind=row["token_count_kind"],
-                        metadata=_decode_json_mapping(row["metadata_json"]),
-                    )
-                    for row in unit_rows
-                ),
-                spaces=tuple(
-                    EmbeddingSpaceRecord(
-                        space_id=row["space_id"],
-                        dimensions=row["dimensions"],
-                        metric=row["metric"],
-                        fingerprint=row["fingerprint"],
-                        metadata=_decode_json_mapping(row["metadata_json"]),
-                    )
-                    for row in space_rows
-                ),
-                vectors=tuple(
-                    VectorRecord(
-                        unit_id=row["unit_id"],
-                        space_id=row["space_id"],
-                        vector=decode_vector_payload(
-                            row["embedding"],
-                            dimensions=row["dimensions"],
-                            metadata=_decode_json_mapping(row["metadata_json"]),
-                        ),
-                    )
-                    for row in vector_rows
-                ),
-                facets=tuple(
-                    ResourceFacet(
-                        resource_id=resource_id,
-                        facet=Facet(row["namespace"], row["value"]),
-                        origin=row["origin"],
-                        producer_fingerprint=(
-                            None if row["producer_is_null"] == 1 else row["producer_value"]
-                        ),
-                        confidence=(
-                            None
-                            if row["confidence_json"] is None
-                            else float(json.loads(row["confidence_json"].decode("utf-8", "strict")))
-                        ),
-                    )
-                    for row in facet_rows
-                ),
-            )
-            if owns_transaction:
-                connection.rollback()
-            return batch
+            return cast(PreparedResourceBatch, batch)
         except ResourceCatalogError:
-            if owns_transaction and connection.in_transaction:
-                connection.rollback()
             raise
         except Exception:
-            if owns_transaction and connection.in_transaction:
-                connection.rollback()
             raise ResourceCatalogError(ResourceCatalogErrorCode.OPERATION_FAILED) from None
 
     def export_bytes(

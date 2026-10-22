@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from mdrack.adapters.sqlite.canonical_catalog import (
+    ApplicationSearchReadSessions,
     ApplicationStoreError,
     canonical_catalog_path,
     open_application_catalog,
@@ -63,6 +64,7 @@ from mdrack_core.domain import (
     VectorRecord,
 )
 from mdrack_media import AggregationFingerprint, WholeResourceTextPolicy, weighted_centroid
+from mdrack_sqlite import SQLiteCatalog
 
 _DOCUMENT_LOCATOR = "document"
 _DOCUMENT_SPAN_LOCATOR = "document_span"
@@ -370,10 +372,10 @@ def prepared_file_to_resource_batch(
             if not whole_vector:
                 raise ValueError("whole_vector must be a non-empty vector")
             if spaces:
-                space = spaces[0]
-                if len(whole_vector) != space.dimensions:
+                persisted_space = spaces[0]
+                if len(whole_vector) != persisted_space.dimensions:
                     raise ValueError("whole_vector must match the chunk vector dimensions")
-                vectors = vectors + (VectorRecord(whole_unit_id, space.space_id, tuple(whole_vector)),)
+                vectors = vectors + (VectorRecord(whole_unit_id, persisted_space.space_id, tuple(whole_vector)),)
             else:
                 space = CanonicalTextEmbeddingSpace(prepared.embedding_profile)
                 spaces = (space.record,)
@@ -543,9 +545,14 @@ class CoreCompatibilityStorage:
         connection: sqlite3.Connection,
         *,
         metadata_policy: MetadataProjectionPolicy | None = None,
+        catalog: SQLiteCatalog | None = None,
     ) -> None:
+        if catalog is not None and catalog.connection is not connection:
+            raise ValueError("catalog connection mismatch")
+        self.catalog = catalog
         self.connection = connection
-        self.resource_store = SQLiteResourceStore(connection)
+        self.search_read_sessions: ApplicationSearchReadSessions | None = None
+        self.resource_store = catalog if catalog is not None else SQLiteResourceStore(connection)
         self.core_indexing = CoreIndexingService(self.resource_store)
         self.core_retrieval = CoreRetrievalService(self.resource_store)
         self.metadata_policy = metadata_policy or DEFAULT_METADATA_PROJECTION_POLICY
@@ -556,7 +563,7 @@ class CoreCompatibilityStorage:
         return str(uuid.uuid4())
 
     def plan_changes(self, scanned: list[Path], root: Path) -> Any:
-        indexed = self._document_records()
+        indexed = {**self._withdrawn_documents(), **self._document_records()}
         seen: set[str] = set()
         plan = ChangePlan()
         for path in scanned:
@@ -733,10 +740,25 @@ class CoreCompatibilityStorage:
             for row in rows
         )
 
+    def _withdrawn_documents(self) -> dict[str, dict[str, Any]]:
+        if not self.resource_store._publication_enabled():
+            return {}
+        records: dict[str, dict[str, Any]] = {}
+        for row in self.connection.execute(
+            "SELECT resource_id,source_namespace,source_metadata_json FROM core_publication_states "
+            "WHERE status='live_without_projections'"
+        ):
+            metadata = json.loads(row["source_metadata_json"])
+            ingestion = metadata.get("ingestion", {})
+            path = metadata.get("relative_path")
+            if isinstance(path, str) and ingestion.get("adapter") == "markdown":
+                records[path] = {"logical_id": row["resource_id"], "source_hash": ""}
+        return records
+
     def delete_file(self, relative_path: str) -> None:
-        current = self.get_file_by_path(relative_path)
+        current = self.get_file_by_path(relative_path) or self._withdrawn_documents().get(relative_path)
         if current is not None:
-            self.core_indexing.delete(str(current["logical_id"]))
+            self.resource_store.delete_live_resource(str(current["logical_id"]))
 
     def record_error(self, run_id: str, code: str, *, file_ref: str) -> None:
         del run_id, code, file_ref
@@ -752,27 +774,14 @@ class CoreCompatibilityStorage:
         del run_id, status, stats, error_codes
 
     def search_core(self, request: SearchRequest) -> SearchResult:
+        if self.search_read_sessions is not None:
+            with self.search_read_sessions.open() as session:
+                return session.storage.search_core(request)
         return self.core_retrieval.search(request)
 
     def rebuild_fts_index(self) -> tuple[int, int]:
         """Rebuild the active core FTS projection and return FTS/unit counts."""
-        with self.connection:
-            self.connection.execute("DELETE FROM core_search_units_fts")
-            self.connection.execute(
-                "INSERT INTO core_search_units_fts(unit_id, content) "
-                "SELECT unit_id, text_content FROM core_search_units "
-                "WHERE text_content IS NOT NULL AND trim(text_content) <> ''"
-            )
-        fts_count = int(
-            self.connection.execute("SELECT COUNT(*) FROM core_search_units_fts").fetchone()[0]
-        )
-        unit_count = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM core_search_units "
-                "WHERE text_content IS NOT NULL AND trim(text_content) <> ''"
-            ).fetchone()[0]
-        )
-        return fts_count, unit_count
+        return self.resource_store.rebuild_fts_index()
 
     def resolve_embedding_space(
         self,
@@ -817,6 +826,9 @@ class CoreCompatibilityStorage:
         limit: int,
         offset: int = 0,
     ) -> list[RetrievalCandidate]:
+        if self.search_read_sessions is not None:
+            with self.search_read_sessions.open() as session:
+                return session.storage.retrieve_text_candidates(query, limit=limit, offset=offset)
         result = self.search_core(
             SearchRequest(
                 lexical_branches=(
@@ -846,6 +858,11 @@ class CoreCompatibilityStorage:
         profile_fingerprint: str | None,
         limit: int,
     ) -> list[RetrievalCandidate]:
+        if self.search_read_sessions is not None:
+            with self.search_read_sessions.open() as session:
+                return session.storage.retrieve_semantic_candidates(
+                    query_vector, profile=profile, profile_fingerprint=profile_fingerprint, limit=limit,
+                )
         space_id = self.resolve_embedding_space(profile, profile_fingerprint)
         if space_id is None:
             return []
@@ -872,6 +889,9 @@ class CoreCompatibilityStorage:
         return self._retrieval_candidates(result, query="", mode="semantic", limit=limit)
 
     def search_text(self, query: str, *, limit: int, offset: int = 0) -> Any:
+        if self.search_read_sessions is not None:
+            with self.search_read_sessions.open() as session:
+                return cast(CoreCompatibilityStorage, session.storage).search_text(query, limit=limit, offset=offset)
         candidates = self.retrieve_text_candidates(query, limit=limit, offset=offset)
         return TextSearchResult(
             query=query,
@@ -970,7 +990,10 @@ class CoreCompatibilityStorage:
 
     def close(self) -> None:
         if not self._closed:
-            self.connection.close()
+            if self.catalog is not None:
+                self.catalog.close()
+            else:
+                self.connection.close()
             self._closed = True
 
 
@@ -982,10 +1005,13 @@ def create_application_storage(
 ) -> CoreCompatibilityStorage:
     """Open the only supported catalog; create it only for an explicit writer."""
     catalog = open_application_catalog(root.resolve(), config, create=create)
-    return CoreCompatibilityStorage(
+    storage = CoreCompatibilityStorage(
         catalog.connection,
         metadata_policy=metadata_projection_policy_from_config(config.metadata),
+        catalog=catalog,
     )
+    storage.search_read_sessions = ApplicationSearchReadSessions(root.resolve(), config)
+    return storage
 
 
 def resolve_application_database_path(root: Path, config: Any) -> Path:

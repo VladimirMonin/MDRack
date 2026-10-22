@@ -57,6 +57,17 @@ code, repair the instruction when in scope, and report the contradiction rather 
 - Architecture belongs in `ARCH`; persistence in `DATA`; docs truth/diagrams in `DOCS`;
   evidence in `TEST`; logging in `OBS`; execution process in `WORKFLOW`.
 
+## Maintenance boundary
+
+Before a substantive edit, name finite paths and actual downstream readers/commands;
+preserve manual additions and use one existing owner per responsibility. Synchronize
+accepted commands/locations/contracts, not access, spending, deletion, publication or
+independent-review policy. A link proves a manual route, not automatic client injection.
+A required consumer outside allowance is an exact handoff, not permission to edit it.
+Reapplication without a real knowledge delta is no-op, including dates. Do not create
+parallel final-v2 instructions, reports or a second governance stack. Follow the existing
+independent-review process; this instruction neither adds a layer nor waives it.
+
 ## Verification
 
 Check filename/frontmatter/name consistency, every AGENTS route target, unique ownership,

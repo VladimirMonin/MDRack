@@ -22,6 +22,10 @@ description: "When to use: implementation, bug fixes, refactors, tests, document
 3. Use one writer for each shared file/contract; parallelize only non-overlapping reads or workspaces.
 4. Make the smallest coherent change in the canonical architecture path.
 5. Add focused regressions for behavior changes and synchronize affected contracts/docs/instructions.
+   Find the existing knowledge owner and update it in the same logical result, or state
+   a concrete no-impact reason. Repair the nearest real navigation/consumer route;
+   structural checks do not author architectural truth. Preserve manual rules/dates on
+   no-op. Technical sync never grants access, policy changes or publication authority.
 6. Review the complete diff for scope, privacy, architecture, and accidental generated files.
 7. Run narrow checks while iterating, then the gates in `TEST.quality-gates.instructions.md`.
 8. Report changed paths, real command results, unverified boundaries, and residual risks.

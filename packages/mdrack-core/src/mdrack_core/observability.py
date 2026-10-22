@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import io
 import json
 import logging
 import math
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -81,6 +84,7 @@ SAFE_FIELD_NAMES = frozenset(
         "elapsed_ms",
         "validation_ms",
         "storage_ms",
+        "publication_applied",
     }
 )
 
@@ -185,8 +189,103 @@ class SafeEvent:
         return f"{self.name} {payload}"
 
 
+# Saturating, content-free diagnostic-loss signal. Never uses the failed sink.
+_diagnostic_loss_count = 0
+
+
+def _note_sink_loss() -> None:
+    global _diagnostic_loss_count
+    _diagnostic_loss_count = min(_diagnostic_loss_count + 1, 2**31 - 1)
+
+
+def _handle_sink_error(record: logging.LogRecord, *, closed_stream: bool = False) -> None:
+    error = sys.exception()
+    if isinstance(error, OSError) or (closed_stream and isinstance(error, ValueError)):
+        _note_sink_loss()
+    elif error is not None:
+        raise error
+
+
+def _deliver_record(handler: logging.Handler, record: logging.LogRecord) -> None:
+    # Filters and format/schema mistakes are not sink I/O failures.
+    decision = handler.filter(record)
+    if not decision:
+        return
+    if isinstance(decision, logging.LogRecord):
+        record = decision
+    handler.acquire()
+    try:
+        if isinstance(handler, logging.StreamHandler) and type(handler).emit in (
+            logging.StreamHandler.emit, logging.FileHandler.emit,
+        ):
+            # Stdlib emit catches I/O errors itself and handleError otherwise writes
+            # a raw traceback to stderr. A delivery-local copy replaces only that
+            # fallback, without mutating a host's handler or global logging policy.
+            rendered = handler.format(record)
+            guarded = copy.copy(handler)
+            guarded.format = lambda record: rendered  # type: ignore[method-assign]
+            def handle_error(record: logging.LogRecord) -> None:
+                known_closed_stream = (
+                    type(guarded.stream) in (io.StringIO, io.TextIOWrapper) and guarded.stream.closed is True
+                )
+                _handle_sink_error(record, closed_stream=known_closed_stream)
+
+            guarded.handleError = handle_error  # type: ignore[method-assign]
+            try:
+                guarded.emit(record)
+            except OSError:
+                _note_sink_loss()
+            finally:
+                # Transfer only a FileHandler stream newly acquired during emit.
+                # Ordinary StreamHandlers (notably lastResort) may expose a
+                # read-only stream property and never own a delayed file handle.
+                if isinstance(handler, logging.FileHandler) and handler.stream is None and guarded.stream is not None:
+                    handler.stream = guarded.stream
+        else:
+            try:
+                handler.emit(record)
+            except OSError:
+                _note_sink_loss()
+    finally:
+        handler.release()
+
+
+def _log_safely(
+    logger: logging.Logger,
+    level: int,
+    message: str,
+    *,
+    extra: Mapping[str, object] | None = None,
+) -> None:
+    """Deliver a pre-serialized safe message; isolate only sink I/O errors.
+
+    Keep stdlib logger/handler filters, levels, propagation and record factories.
+    No handler registration, root configuration, raw fallback or recursive logging.
+    """
+    if not logger.isEnabledFor(level):
+        return
+    record = logger.makeRecord(logger.name, level, "", 0, message, (), None, extra=extra)
+    decision = logger.filter(record)
+    if not decision:
+        return
+    if isinstance(decision, logging.LogRecord):
+        record = decision
+    current: logging.Logger | None = logger
+    found = False
+    while current is not None:
+        for handler in current.handlers:
+            found = True
+            if record.levelno >= handler.level:
+                _deliver_record(handler, record)
+        if not current.propagate:
+            break
+        current = current.parent
+    if not found and logging.lastResort is not None and record.levelno >= logging.lastResort.level:
+        _deliver_record(logging.lastResort, record)
+
+
 def emit_event(logger: logging.Logger, event: SafeEvent) -> None:
     """Emit one already-sanitized core lifecycle event through stdlib logging."""
     if not isinstance(event, SafeEvent):
         raise ValueError("event must be a SafeEvent")
-    logger.info("%s", event.to_log_message())
+    _log_safely(logger, logging.INFO, event.to_log_message())

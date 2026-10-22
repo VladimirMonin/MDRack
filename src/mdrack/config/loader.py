@@ -11,6 +11,7 @@ from typing import Any
 import toml
 from pydantic import BaseModel
 
+from mdrack._observability import AppEventLogger
 from mdrack.config.defaults import get_defaults
 from mdrack.config.models import (
     CacheConfig,
@@ -25,7 +26,7 @@ from mdrack.config.models import (
     SearchConfig,
 )
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 _ENV_PREFIX = "MDRACK_"
 _SECTION_MAP: dict[str, type[BaseModel]] = {

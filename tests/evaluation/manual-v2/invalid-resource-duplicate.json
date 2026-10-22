@@ -1,0 +1,68 @@
+{
+  "contract": "mdrack.quality-input",
+  "schema_version": 2,
+  "corpus_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "judgments_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "implementation_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "cases": [
+    {
+      "case_id": "resource-zero-before-positive",
+      "case_type": "positive",
+      "target": "resource",
+      "match": "identity",
+      "cutoffs": [
+        1,
+        2
+      ],
+      "scope": [
+        {
+          "resource_id": "a",
+          "source_revision": "v1"
+        },
+        {
+          "resource_id": "b",
+          "source_revision": "v1"
+        }
+      ],
+      "judgment_policy": "pooled",
+      "unjudged_policy": "nonrelevant",
+      "temporal_policy": null,
+      "judgments": [
+        {
+          "judgment_id": "zero",
+          "grade": 0,
+          "unit_id": null,
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        },
+        {
+          "judgment_id": "good",
+          "grade": 3,
+          "unit_id": null,
+          "resource_id": "b",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ],
+      "ranked": [
+        {
+          "unit_id": "one",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        },
+        {
+          "unit_id": "two",
+          "resource_id": "a",
+          "source_revision": "v1",
+          "intervals": [],
+          "timestamp_ms": null
+        }
+      ]
+    }
+  ]
+}

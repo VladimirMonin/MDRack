@@ -18,6 +18,8 @@ def create_embedding_provider(provider_name: str, config: Any) -> EmbeddingProvi
             dimensions=config.embedding.dimensions,
             provider_name="fake",
         )
+    if provider_name != "lmstudio":
+        raise ValueError("unsupported_embedding_provider")
     return LMStudioProvider(
         endpoint=config.embedding.endpoint,
         model=config.embedding.model,
@@ -41,6 +43,8 @@ def embedding_profile_from_config(
     model_name = str(
         getattr(provider, "model_name", getattr(provider, "_model_name", config.embedding.model))
     )
+    if provider_name not in {"lmstudio", "fake"}:
+        raise ValueError("unsupported_embedding_provider")
     dimensions = int(getattr(provider, "dimensions", config.embedding.dimensions))
     return EmbeddingProfile(
         name=profile_name,

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from mdrack.application.media_search import MediaSearchRequest, MediaSearchResult, StoredUnitInput
 from mdrack.application.metadata_filters import MetadataFilter, MetadataFilters
 from mdrack.application.resource_catalog import (
     MetadataFacetValue,
@@ -26,6 +27,14 @@ from mdrack.application.transcript_ingestion import (
     TranscriptIngestionResult,
 )
 from mdrack.application.video_composition import VideoCompositionResult
+from mdrack.domain.embedding_inputs import (
+    EmbeddingResult,
+    EncodingRole,
+    ImageInput,
+    InputCapability,
+    RouteCapabilities,
+    TextInput,
+)
 from mdrack.domain.indexing import IndexingResult, SourceLocator
 from mdrack.domain.profiles import EmbeddingCapabilities, EmbeddingProfile
 from mdrack.domain.retrieval import RetrievalCandidate, RetrievalItem, RetrievalResult
@@ -52,6 +61,8 @@ class UnifiedTextSimilarityResult:
         }
 
 __all__ = [
+    "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput",
+    "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability", "RouteCapabilities", "TextInput",
     "EmbeddingCapabilities",
     "EmbeddingProfile",
     "IndexingResult",

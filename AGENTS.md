@@ -101,6 +101,10 @@ root plans are historical unless explicitly marked active for the current task.
 - Update current documentation when architecture, public contracts, limitations,
   or verification commands change.
 - Do not claim live, external, or full-suite evidence that was not actually run.
+- Maintain affected knowledge with its existing owner in the same logical change or
+  explain no impact; see `instructions/DOCS.architecture.instructions.md`.
+  Navigation/checker commands and their explicit limits are in
+  [bounded documentation maintenance](docs/development.md#bounded-documentation-maintenance).
 
 ## Git boundary
 

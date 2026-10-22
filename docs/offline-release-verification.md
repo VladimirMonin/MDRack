@@ -4,6 +4,27 @@ This page is the contributor-facing runbook for the MDRack 1.3 offline release
 contract. The historical [v0.4 W5-CI contract](contracts/v0.4-w5-ci-contract.md)
 is retained for audit history and is not a current release gate.
 
+## Native-image source candidate (1.4.0rc1)
+
+The app-owned prepared/native API advances only `mdrack` to `1.4.0rc1`; local
+core/media/SQLite pins remain as below. See [ADR-0013](decisions/0013-native-image-contract.md)
+and the [closed native contract](contracts/native-image-v1.md). The lock uses the
+same uv 0.11.15 and third-party versions. Do not repurpose the historical 1.3
+packet or loosen its strict validator for this candidate. Development verification
+is not release acceptance. The affected installed oracle additionally runs
+`_check_installed_native_image` (synthetic/local, not live pixels). Windows 3.14.2
+execution is a separate evidence cell, not the declared older Python/Linux matrix.
+
+## Publication candidate (1.4.0rc2)
+
+[ADR-0014](decisions/0014-conditional-publication-and-v2-upgrade.md) advances core
+and metadata-only media to 1.0.0rc2, SQLite distribution to 1.0.0rc3 (API rc2),
+app to 1.4.0rc2 and app-v2 schema to 0005. Pinned uv0.11.15 changes only coherent
+first-party lock nodes, not third-party versions. Historical 1.3 packet remains
+historical and strict; development/author gates do not declare full release PASS.
+Build current affected wheels and run installed publication/maintenance/reopen,
+CLI/engine/native-synthetic and exact dependency/export/origin checks outside checkout.
+
 ## Non-negotiable default
 
 The release verification commands are local and offline after the environment
@@ -43,6 +64,28 @@ export UV_OFFLINE=1
 On Windows, use the equivalent environment-variable syntax for the selected
 shell. The commands below are the contract commands; a non-zero exit is a
 failure, and a partial run must list every skipped command and its reason.
+
+## Development versus strict release
+
+For a changed development checkout, run `bash scripts/verify.sh --development`
+or `./scripts/verify.ps1 --development`. Default/no flag remains strict. Both modes
+first run the bounded `scripts/check_documentation.py --check` gate and preserve its
+raw failure; every native PowerShell exit is explicitly checked. Both keep the existing
+lint/type/test/privacy/boundary/compile/package build and installed-smoke gates.
+Only historical packet identity is SKIPPED in development, reported as NOT_RUN release
+acceptance, never a release PASS. The validator itself is unchanged and still rejects
+a dirty or wrong candidate.
+
+PR CI uses the explicitly labelled development boundary. Manual `workflow_dispatch`
+retains strict packet gates (Windows still uses its declared quality-replay boundary).
+Documentation and whitespace gates run on both routes; documentation failure fails
+CI. Build artifacts alone do not authenticate historical release identity.
+
+Each local wrapper reserves a unique owned temporary artifact output and passes the
+same path to matrix and strict packet. The matrix deletes its output before build:
+never point it at an existing shared directory. Retained outputs belong to their task;
+provision dependencies separately, then run offline. The standalone examples below
+must likewise use a newly owned output, not a guessed shared folder.
 
 ## Supported distribution/install cells
 
@@ -195,11 +238,12 @@ only to make a gate green.
 ### 7. Offline build and installed smoke
 
 ```bash
+release_artifacts="$(mktemp -d "${TMPDIR:-/tmp}/mdrack-release-artifacts.XXXXXX")"
 uv run python scripts/offline_release_matrix.py \
-  --output-dir "${TMPDIR:-/tmp}/mdrack-release-artifacts" \
+  --output-dir "$release_artifacts" \
   --smoke
 uv run python scripts/check_v13_release_packet.py \
-  --artifacts-dir "${TMPDIR:-/tmp}/mdrack-release-artifacts"
+  --artifacts-dir "$release_artifacts"
 ```
 
 The harness builds and audits all four distributions as wheel and sdist, verifies
@@ -220,6 +264,7 @@ fresh two-build packet/review cycle before an external release stage.
 ### 8. Documentation and whitespace
 
 ```bash
+uv run --no-sync --offline python scripts/check_documentation.py --check
 uv run python scripts/check_v13_release_packet.py
 git diff --check
 ```

@@ -14,6 +14,9 @@ from mdrack.eval.privacy import scan_privacy
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CURRENT_DOCS = REPO_ROOT / "docs" / "current-architecture"
 EXPECTED_PUBLIC_API_EXPORTS = (
+    "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput", "SourceResolver",
+    "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability",
+    "RouteCapabilities", "TextInput", "LegacyTextEmbeddingAdapter", "PreparedEmbeddingProvider",
     "EmbeddingCapabilities",
     "EmbeddingProfile",
     "DuplicateResourceItem",

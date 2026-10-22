@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.vector_values import (
     canonicalize_for_space,
     validate_vector_value_policy,
@@ -32,6 +34,7 @@ from mdrack.ingestion.raw_source_provenance import (
     validate_source_ref,
 )
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
+from mdrack.ports.search_sessions import SearchReadSessionFactory
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_core.domain import (
@@ -57,9 +60,11 @@ from mdrack_core.domain import (
     VectorBranch,
     VectorRecord,
 )
+from mdrack_core.domain.publication import ExpectedPublication, PublicationResult, ResourceSnapshot
+from mdrack_core.ports.publication import PublicationPort
 from mdrack_media import weighted_centroid
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 _SUPPORTED_MEDIA_TYPES = frozenset({"image/gif", "image/jpeg", "image/png", "image/webp"})
 _TEXT_REPRESENTATION_KINDS = frozenset({REPRESENTATION_CAPTION_TEXT, REPRESENTATION_OCR_TEXT})
@@ -93,13 +98,36 @@ class _GuardedWritePort:
         self._budget = budget
         self.source_error: RawSourceError | None = None
 
-    def replace_resource(self, batch: PreparedResourceBatch) -> None:
+    def _check_source(self) -> None:
         try:
             check_source_after(self._snapshot, self._source_path, self._budget)
         except RawSourceError as error:
             self.source_error = error
-            return
+            raise
+
+    def replace_resource(self, batch: PreparedResourceBatch) -> None:
+        self._check_source()
         self._delegate.replace_resource(batch)  # type: ignore[attr-defined]
+
+    def _publication(self) -> PublicationPort:
+        if not isinstance(self._delegate, PublicationPort):
+            raise TypeError("publication capability required")
+        return self._delegate
+
+    def read_snapshot(self, resource_id: str) -> ResourceSnapshot:
+        return self._publication().read_snapshot(resource_id)
+
+    def compare_and_publish(self, batch: PreparedResourceBatch, expected: ExpectedPublication) -> PublicationResult:
+        self._check_source()
+        return self._publication().compare_and_publish(batch, expected)
+
+    def withdraw_if_current(self, resource_id: str, expected: ExpectedPublication) -> PublicationResult:
+        self._check_source()
+        return self._publication().withdraw_if_current(resource_id, expected)
+
+    def delete_if_current(self, resource_id: str, expected: ExpectedPublication) -> PublicationResult:
+        self._check_source()
+        return self._publication().delete_if_current(resource_id, expected)
 
     def delete_resource(self, resource_id: str) -> None:
         self._delegate.delete_resource(resource_id)  # type: ignore[attr-defined]
@@ -133,6 +161,7 @@ class ImageEmbeddingSpace:
     metric: str = METRIC_COSINE
     profile_name: str | None = None
     vector_value_policy: str | None = None
+    canonical_record: EmbeddingSpaceRecord | None = None
 
     def __post_init__(self) -> None:
         EmbeddingSpaceRecord(
@@ -144,6 +173,13 @@ class ImageEmbeddingSpace:
         validate_vector_value_policy(self.vector_value_policy)
 
     def core_record(self, *, modality: str) -> EmbeddingSpaceRecord:
+        if self.canonical_record is not None:
+            record = self.canonical_record
+            if (record.space_id, record.dimensions, record.metric, record.fingerprint) != (
+                self.space_id, self.dimensions, self.metric, self.fingerprint,
+            ):
+                raise ValueError("incompatible_embedding_space")
+            return record
         metadata = (
             {"profile": self.profile_name}
             if modality == MODALITY_TEXT and self.profile_name is not None
@@ -254,7 +290,23 @@ class ImageIngestionService:
         profile: str = "default",
         max_image_bytes: int = 32 * 1024 * 1024,
         max_text_tokens: int = 8_000,
+        read_sessions: SearchReadSessionFactory | None = None,
+        prepared_texts: tuple[ExtractedImageText, ...] | None = None,
+        derived_lexical: bool = True,
+        derived_dense: bool = True,
+        _publication_observer: Callable[[float, bool], None] | None = None,
     ) -> None:
+        self._read_sessions = read_sessions
+        self._publication_observer = _publication_observer
+        if type(derived_lexical) is not bool or type(derived_dense) is not bool:
+            raise ValueError("invalid_derived_text_policy")
+        if prepared_texts is not None and (
+            type(prepared_texts) is not tuple or any(not isinstance(i, ExtractedImageText) for i in prepared_texts)
+        ):
+            raise ValueError("invalid_prepared_text")
+        self._prepared_texts = prepared_texts
+        self._derived_lexical = derived_lexical
+        self._derived_dense = derived_dense
         if max_image_bytes < 1 or max_text_tokens < 1:
             raise ValueError("image and text limits must be positive")
         if (text_embedding_provider is None) != (text_space is None):
@@ -262,7 +314,8 @@ class ImageIngestionService:
         if (visual_embedding_provider is None) != (visual_space is None):
             raise ValueError("visual provider and visual space must be supplied together")
         if text_space is not None and visual_space is not None and text_space.space_id == visual_space.space_id:
-            raise ValueError("text and visual embedding spaces must be distinct")
+            if text_space.core_record(modality=MODALITY_TEXT) != visual_space.core_record(modality=MODALITY_IMAGE):
+                raise ValueError("incompatible_embedding_space")
         self._catalog = catalog
         self._indexing = CoreIndexingService(catalog)  # type: ignore[arg-type]
         self._retrieval = CoreRetrievalService(catalog)  # type: ignore[arg-type]
@@ -284,6 +337,7 @@ class ImageIngestionService:
         source_ref: str,
         title: str | None = None,
         media_type: str | None = None,
+        _snapshot: RawSourceSnapshot | None = None,
     ) -> ImageIngestionResult:
         """Read one bounded local image and atomically replace its complete graph."""
         self._require_non_empty(resource_id, "resource_id")
@@ -294,7 +348,7 @@ class ImageIngestionService:
             max_source_bytes=self._max_image_bytes,
             max_whole_resource_tokens=self._max_text_tokens,
         )
-        snapshot = capture_source(
+        snapshot = _snapshot if _snapshot is not None else capture_source(
             path,
             source_ref,
             RawMediaKind.IMAGE,
@@ -308,7 +362,12 @@ class ImageIngestionService:
             if media_type is not None and media_type != resolved_media_type:
                 snapshot.cleanup()
                 raise RawSourceError(RawSourceErrorCode.MIME_SIGNATURE_MISMATCH)
-            extracted = await self._extract(content, resolved_media_type)
+            extracted = (
+                self._prepared_texts if self._prepared_texts is not None
+                else await self._extract(content, resolved_media_type)
+            )
+            if not self._derived_lexical and not self._derived_dense:
+                extracted = ()
             token_counts = tuple(self._estimated_tokens(item.text) for item in extracted)
             aggregate_text = "\n\n".join(item.text for item in extracted)
             validate_budget(
@@ -350,7 +409,7 @@ class ImageIngestionService:
             vectors: list[VectorRecord] = []
 
             text_vectors: Sequence[Sequence[float]] = ()
-            if extracted and self._text_provider is not None:
+            if extracted and self._derived_dense and self._text_provider is not None:
                 try:
                     text_vectors = await self._text_provider.embed(
                         [item.text for item in extracted],
@@ -382,7 +441,7 @@ class ImageIngestionService:
                         resource_id,
                         item.kind,
                         MODALITY_TEXT,
-                        item.text,
+                        item.text if self._derived_lexical else None,
                         item.language,
                         item.producer_fingerprint,
                         token_count,
@@ -397,7 +456,7 @@ class ImageIngestionService:
                         representation_id,
                         UNIT_WHOLE_RESOURCE,
                         MODALITY_TEXT,
-                        item.text,
+                        item.text if self._derived_lexical else None,
                         Locator("whole_image", {"source_ref": source_ref}),
                         0,
                         token_count,
@@ -444,7 +503,7 @@ class ImageIngestionService:
                         resource_id,
                         _TEXT_AGGREGATE_REPRESENTATION,
                         MODALITY_TEXT,
-                        aggregate_text,
+                        aggregate_text if self._derived_lexical else None,
                         producer_fingerprint=aggregate_fingerprint,
                         token_count=aggregate_tokens,
                         token_count_kind="estimated",
@@ -458,7 +517,7 @@ class ImageIngestionService:
                         aggregate_representation_id,
                         UNIT_WHOLE_RESOURCE,
                         MODALITY_TEXT,
-                        aggregate_text,
+                        aggregate_text if self._derived_lexical else None,
                         Locator("whole_image", {"source_ref": source_ref}),
                         0,
                         aggregate_tokens,
@@ -572,10 +631,19 @@ class ImageIngestionService:
                 },
             )
             guarded_port = _GuardedWritePort(self._catalog, snapshot, path, budget)
-            indexing = CoreIndexingService(guarded_port)  # type: ignore[arg-type]
-            indexing.index(batch)
-            if guarded_port.source_error is not None:
-                raise guarded_port.source_error
+            indexing = CoreIndexingService(guarded_port)
+            publication_started = time.perf_counter()
+            published = False
+            try:
+                indexing.index(batch)
+                published = True
+            except Exception:
+                if guarded_port.source_error is not None:
+                    raise guarded_port.source_error from None
+                raise
+            finally:
+                if self._publication_observer is not None:
+                    self._publication_observer((time.perf_counter() - publication_started) * 1000, published)
             logger.info(
                 "image.ingest.completed",
                 extra={
@@ -612,22 +680,32 @@ class ImageIngestionService:
             mode="text",
             limit=limit,
         )
-        return self._map_search("text", self._retrieval.search(request))
+        return self._execute_search("text", request)
 
     async def search_semantic(self, query: str, *, limit: int = 20) -> ImageSearchResult:
         vector, reason = await self._query_vector(query)
         if vector is None:
             return ImageSearchResult("semantic", (), True, reason)
         request = self._request(query=None, vector=vector, mode="semantic", limit=limit)
-        return self._map_search("semantic", self._retrieval.search(request))
+        return self._execute_search("semantic", request)
 
     async def search_hybrid(self, query: str, *, limit: int = 20) -> ImageSearchResult:
         vector, reason = await self._query_vector(query)
         request = self._request(query=query, vector=vector, mode="hybrid", limit=limit)
-        result = self._map_search("hybrid", self._retrieval.search(request))
+        result = self._execute_search("hybrid", request)
         if reason is None:
             return result
         return ImageSearchResult("hybrid", result.results, True, reason)
+
+    def _execute_search(
+        self, mode: Literal["text", "semantic", "hybrid"], request: SearchRequest,
+    ) -> ImageSearchResult:
+        if self._read_sessions is not None:
+            with self._read_sessions.open() as session:
+                result = CoreRetrievalService(session.catalog).search(request)
+                return self._map_search(mode, result)
+        # Explicit injected/standalone boundary: no session consistency guarantee.
+        return self._map_search(mode, self._retrieval.search(request))
 
     async def _extract(self, content: bytes, media_type: str) -> tuple[ExtractedImageText, ...]:
         if self._extractor is None:

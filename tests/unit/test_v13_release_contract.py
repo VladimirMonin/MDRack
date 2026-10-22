@@ -14,9 +14,7 @@ import pytest
 import mdrack
 from mdrack_sqlite.contract_v2 import (
     SQLITE_CATALOG_V2_SCHEMA_ID,
-    SQLITE_CATALOG_V2_SCHEMA_VERSION,
     SQLITE_V2_MIGRATION_MANIFEST,
-    SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -40,11 +38,12 @@ def test_v13_runtime_and_distribution_metadata_are_synchronized() -> None:
         (REPO_ROOT / "tests" / "fixtures" / "future_host" / "pyproject.toml").read_text(encoding="utf-8")
     )
 
-    assert app_project["project"]["version"] == APP_VERSION
-    assert mdrack.__version__ == APP_VERSION
-    assert app_project["project"]["dependencies"].count(f"mdrack-sqlite=={SQLITE_VERSION}") == 1
-    assert sqlite_project["project"]["version"] == SQLITE_VERSION
-    assert f"mdrack-sqlite=={SQLITE_VERSION}" in future_host_project["project"]["dependencies"]
+    # The immutable packet below remains 1.3.0; current app continues independently.
+    assert app_project["project"]["version"] == "1.4.0rc2"
+    assert mdrack.__version__ == "1.4.0rc2"
+    assert app_project["project"]["dependencies"].count("mdrack-sqlite==1.0.0rc3") == 1
+    assert sqlite_project["project"]["version"] == "1.0.0rc3"
+    assert "mdrack-sqlite==1.0.0rc3" in future_host_project["project"]["dependencies"]
 
 
 def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
@@ -103,11 +102,11 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
 
     assert packet["clean_v2_schema"] == {
         "schema_id": SQLITE_CATALOG_V2_SCHEMA_ID,
-        "schema_version": SQLITE_CATALOG_V2_SCHEMA_VERSION,
+        "schema_version": "0004",
         "migration_manifest": [
-            {"name": name, "sha256": digest} for name, digest in SQLITE_V2_MIGRATION_MANIFEST
+            {"name": name, "sha256": digest} for name, digest in SQLITE_V2_MIGRATION_MANIFEST[:5]
         ],
-        "manifest_digest": SQLITE_V2_MIGRATION_MANIFEST_DIGEST,
+        "manifest_digest": "353facc85a46cfc30fea8511993e06aa49910b09d60fe7750cb1855df120dd98",
     }
 
     evidence = packet["evidence"]
@@ -138,11 +137,38 @@ def test_v13_release_packet_covers_only_the_base_builtin_distribution() -> None:
     assert any("No existing v1 or 0007 database" in item for item in packet["non_claims"])
 
 
-def test_v13_packet_rejects_source_identity_from_another_revision() -> None:
+def _historical_metadata_root(tmp_path: Path, packet: dict) -> Path:
+    """Exercise the historical validator on historical-version metadata, not RC1."""
+    paths = ['pyproject.toml', 'packages/mdrack-sqlite/pyproject.toml', packet['source_plan']['path']]
+    paths += [packet['evidence'][name]['path'] for name in ('storage_analyzer', 'benchmark')]
+    for name in paths:
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = (REPO_ROOT / name).read_bytes()
+        if name == 'pyproject.toml':
+            payload = payload.replace(b'version = "1.4.0rc2"', b'version = "1.3.0"', 1)
+            payload = payload.replace(b'mdrack-core==1.0.0rc2', b'mdrack-core==1.0.0rc1')
+            payload = payload.replace(b'mdrack-media==1.0.0rc2', b'mdrack-media==1.0.0rc1')
+            payload = payload.replace(b'mdrack-sqlite==1.0.0rc3', b'mdrack-sqlite==1.0.0rc2')
+        elif name == 'packages/mdrack-sqlite/pyproject.toml':
+            payload = payload.replace(b'version = "1.0.0rc3"', b'version = "1.0.0rc2"', 1)
+            payload = payload.replace(b'mdrack-core==1.0.0rc2', b'mdrack-core==1.0.0rc1')
+        target.write_bytes(payload)
+    return tmp_path
+
+
+def test_v13_packet_rejects_new_native_candidate_metadata() -> None:
+    validator = runpy.run_path(str(REPO_ROOT / 'scripts/check_v13_release_packet.py'))
+    with pytest.raises(ValueError, match='application_metadata_version_invalid'):
+        validator['_validate_packet'](json.loads(PACKET.read_text(encoding='utf-8')))
+
+
+def test_v13_packet_rejects_source_identity_from_another_revision(tmp_path: Path) -> None:
     packet = json.loads(PACKET.read_text(encoding="utf-8"))
     baseline = packet["source_snapshot"].copy()
     packet["source_snapshot"]["aggregate_sha256"] = "0" * 64
     validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
+    validator["_validate_packet"].__globals__["REPO_ROOT"] = _historical_metadata_root(tmp_path, packet)
     validator["_validate_packet"].__globals__["_source_snapshot"] = lambda: baseline
     with pytest.raises(ValueError, match="source_snapshot_mismatch"):
         validator["_validate_packet"](packet)
@@ -192,11 +218,11 @@ def test_v13_source_identity_excludes_only_the_packet(tmp_path: Path) -> None:
     assert first == second
 
 
-def test_v13_packet_rejects_stale_full_pytest_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v13_packet_rejects_stale_full_pytest_evidence(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     packet = json.loads(PACKET.read_text(encoding="utf-8"))
     packet["evidence"]["quality"]["pytest"] = "1643 passed, 5 skipped"
     validator = runpy.run_path(str(REPO_ROOT / "scripts" / "check_v13_release_packet.py"))
-    packet["source_snapshot"] = packet["source_snapshot"]
+    validator["_validate_packet"].__globals__["REPO_ROOT"] = _historical_metadata_root(tmp_path, packet)
     monkeypatch.setitem(
         validator["_validate_packet"].__globals__,
         "_source_snapshot",

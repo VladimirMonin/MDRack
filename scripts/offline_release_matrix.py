@@ -34,8 +34,8 @@ PACKAGE_SPECS = (
 )
 EXPECTED_LOCAL_DEPENDENCIES = {
     "mdrack-core": (),
-    "mdrack-media": ("mdrack-core==1.0.0rc1",),
-    "mdrack-sqlite": ("mdrack-core==1.0.0rc1",),
+    "mdrack-media": ("mdrack-core==1.0.0rc2",),
+    "mdrack-sqlite": ("mdrack-core==1.0.0rc2",),
 }
 VERSION_RE = re.compile(r"^Version: (?P<version>.+)$", re.MULTILINE)
 NAME_RE = re.compile(r"^Name: (?P<name>.+)$", re.MULTILINE)

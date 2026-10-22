@@ -8,7 +8,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from mdrack.domain.indexing import SourceLocator
-from mdrack.storage.sqlite.fts import FTSQueryError, search_fts
+from mdrack.storage.sqlite.fts import FTSQueryError, _FTSSearchRow, search_fts
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ def _search_fts_with_offset(
     conn: sqlite3.Connection,
     query: str,
     limit: int,
-) -> list[dict]:
+) -> list[_FTSSearchRow]:
     """Run FTS5 search returning up to *limit* rows.
 
     Delegates to the existing ``search_fts`` helper so we stay compatible

@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from mdrack.ports.search_sessions import SearchReadSession
 from mdrack_sqlite import SQLiteCatalog, SQLiteCatalogError, SQLiteErrorCode
 from mdrack_sqlite.contract_v2 import SQLITE_CATALOG_V2_SCHEMA_ID
 
@@ -73,6 +77,19 @@ def open_application_catalog(
     return _open_verified_v2(catalog_path)
 
 
+def upgrade_application_catalog(root: Path, config: Any, backup_path: Path, *, maintenance: bool) -> bool:
+    """Host-confirmed offline maintenance, never invoked by normal open."""
+    store_dir = application_store_dir(root, config)
+    catalog_path = store_dir / CATALOG_FILENAME
+    _reject_forbidden_store_topology(store_dir, catalog_path)
+    if backup_path.resolve().is_relative_to(store_dir.resolve()):
+        raise ApplicationStoreError("backup_inside_store")
+    try:
+        return SQLiteCatalog.upgrade_v2(catalog_path, backup_path, maintenance=maintenance)
+    except SQLiteCatalogError:
+        raise ApplicationStoreError("catalog_upgrade_failed") from None
+
+
 def open_application_catalog_readonly(root: Path, config: Any) -> SQLiteCatalog:
     """Open the fixed catalog read-only after the same topology/v2 checks."""
     store_dir = application_store_dir(root, config)
@@ -83,6 +100,29 @@ def open_application_catalog_readonly(root: Path, config: Any) -> SQLiteCatalog:
             raise ApplicationStoreError("catalog_path_invalid")
         raise ApplicationStoreError("catalog_missing")
     return _open_verified_v2(catalog_path, readonly=True)
+
+
+@dataclass(frozen=True)
+class ApplicationSearchReadSessions:
+    """Open/verify and close one independent readonly v2 reader per search."""
+
+    root: Path
+    config: Any
+
+    @contextmanager
+    def open(self) -> Iterator[SearchReadSession]:
+        # Local import keeps the compatibility mapper out of lifecycle initialization.
+        from mdrack.application.compatibility import CoreCompatibilityStorage
+        from mdrack.application.metadata_projection import metadata_projection_policy_from_config
+
+        with open_application_catalog_readonly(self.root, self.config) as catalog:
+            with catalog._read_snapshot():
+                storage = CoreCompatibilityStorage(
+                    catalog.connection,
+                    metadata_policy=metadata_projection_policy_from_config(self.config.metadata),
+                    catalog=catalog,
+                )
+                yield SearchReadSession(catalog, storage)
 
 
 def _reject_forbidden_store_topology(store_dir: Path, catalog_path: Path) -> None:
@@ -125,6 +165,8 @@ def _open_verified_v2(catalog_path: Path, *, readonly: bool = False) -> SQLiteCa
                 else SQLiteCatalog.open(catalog_path)
             )
         except SQLiteCatalogError as exc:
+            if exc.code is SQLiteErrorCode.UPGRADE_REQUIRED:
+                raise ApplicationStoreError("catalog_upgrade_required") from None
             if time.monotonic() >= deadline:
                 raise ApplicationStoreError("catalog_open_after_create_failed") from exc
             time.sleep(_RACE_OPEN_INTERVAL_SECONDS)

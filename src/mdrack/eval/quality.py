@@ -168,7 +168,7 @@ def evaluate_quality(
             for item in case.judgments
             if item.unit_id is not None or resource_target
         }
-        positive = set(grades)
+        positive = {key for key, grade in grades.items() if grade > 0}
         ranked_keys = [item.resource_id if resource_target else item.unit_id for item in ranked]
         metrics: dict[str, float | int] = {}
         for cutoff in case.cutoffs:

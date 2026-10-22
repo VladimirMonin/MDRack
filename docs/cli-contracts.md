@@ -1,5 +1,29 @@
 # MDRack CLI Contracts
 
+## Explicit recognized app-v2 maintenance (1.4.0rc2)
+
+`mdrack --root ./notes rebuild upgrade --backup ../catalog-backup.sqlite3 --maintenance`
+requires ALL consumers stopped and handles closed, plus an absent backup path outside
+store. It upgrades only exact completed clean v2/0004 to current 0005; normal open
+never migrates. Success data is `{"upgraded": true}` (false for verified target),
+refusal is safe `CATALOG_UPGRADE_FAILED`, exit1. No model/source extraction.
+See [ADR-0014](decisions/0014-conditional-publication-and-v2-upgrade.md).
+Resource deletion's existing boolean is true for a live lifecycle including no graph
+after withdrawal, false for never-created/already-deleted. Keys remain unchanged.
+
+
+## Native image v1 (1.4.0rc1 source candidate)
+
+`image native-ingest PATH --resource-id ID --source-namespace NS --source-ref REF`
+and `image native-search --text TEXT|--image-file PATH|--unit-id ID` call the same
+engine use case. Candidate scope is independent (`--candidates image|text|all`),
+as are target, strict/partial policy, final limit and candidate budget. Exact fields
+and limitations: [native-image-v1](contracts/native-image-v1.md).
+Default `--provider lmstudio` refuses unsupported native images before source/DB
+side effects; `--provider synthetic` is explicit offline testing, not a model.
+No OCR, caption, filename-as-text or hidden provider substitution is performed.
+Old `image ingest/search` and text search envelopes remain unchanged.
+
 ## Scope
 
 This document is the current S2 contract for the normal local MDRack CLI. All

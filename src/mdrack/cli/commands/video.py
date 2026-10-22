@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from mdrack._observability import AppEventLogger
 from mdrack.application.compatibility import ApplicationStoreError, create_application_storage
 from mdrack.application.manifest import MAX_MANIFEST_BYTES
 from mdrack.application.video_composition import VideoCompositionService
@@ -22,7 +23,7 @@ from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
 
-logger = logging.getLogger(__name__)
+logger = AppEventLogger(logging.getLogger(__name__))
 
 
 def _output(ctx: click.Context, payload: dict[str, Any]) -> None:

@@ -4,9 +4,10 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from mdrack.cli import main
+from tests.python_tool_fixture import install_python_tool_launcher
 
 
-def test_ingest_raw_video_emits_private_success(tmp_path: Path) -> None:
+def test_ingest_raw_video_emits_private_success(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "root"
     root.mkdir()
     source = tmp_path / "private.mp4"
@@ -23,6 +24,7 @@ def test_ingest_raw_video_emits_private_success(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     extractor.chmod(0o755)
+    install_python_tool_launcher(monkeypatch, extractor)
     result = CliRunner().invoke(main, [
         "--root", str(root), "ingest", "raw-video", str(source),
         "--source-ref", "videos/private.mp4", "--allow-external-video-extractor",

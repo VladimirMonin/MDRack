@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0rc2
+
+- Metadata-only repackaging pins core 1.0.0rc2; media API/builders remain unchanged.
+
 ## 1.0.0rc1
 
 - Publish provider-, persistence-, and filesystem-neutral timed-media records.

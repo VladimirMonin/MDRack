@@ -5,14 +5,14 @@ kernel used by MDRack. It accepts already prepared resources and ready lexical o
 vector branches. It does not parse source documents, open locators, access a
 filesystem or network, call model providers, or persist data itself.
 
-Distribution version `1.0.0rc1` publishes core contract version
-`1.0.0-rc.1`. The release candidate freezes ordered public exports while leaving
+Distribution version `1.0.0rc2` publishes core contract version
+`1.0.0-rc.2` with optional neutral publication capability; minimal ports remain unchanged. The release candidate freezes ordered public exports while leaving
 final `1.0.0` stability explicitly unclaimed.
 
 ## Install
 
 ```bash
-python -m pip install mdrack-core==1.0.0rc1
+python -m pip install mdrack-core==1.0.0rc2
 ```
 
 Python 3.11 or newer is required. There are no runtime dependencies.

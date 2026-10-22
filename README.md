@@ -1,6 +1,14 @@
 # MDRack
 
-MDRack 1.3.0 is a local Python 3.11+ command-line and embedded retrieval rack for
+> 1.4.0rc2 source candidate: [conditional publication and explicit v2 maintenance](docs/decisions/0014-conditional-publication-and-v2-upgrade.md).
+> Core/media pin 1.0.0rc2, SQLite 1.0.0rc3 and app-v2 schema 0005.
+> Existing [prepared/native image API](docs/contracts/native-image-v1.md)
+> and [ADR-0013](docs/decisions/0013-native-image-contract.md). Native CLI/engine
+> orchestration is available for explicit offline providers; selected production
+> LM Studio pixels remain unsupported. This is not live/quality/release acceptance.
+
+
+The retained MDRack 1.3.0 base is a local Python 3.11+ command-line and embedded retrieval rack for
 Markdown, typed metadata, timed transcripts, frame-caption text, and explicitly
 supplied images. Its primary operational user is an agent working under a human
 operator's explicit authority over locally held data.
@@ -80,6 +88,7 @@ LM Studio model-management commands. Host applications can use
 - [Operations, diagnostics, privacy, and troubleshooting](docs/operations.md)
 - [Development guide for humans and coding agents](docs/development.md)
 - [Current architecture index](docs/current-architecture/README.md)
+- [Proposed native-media / late-enrichment programme](docs/proposals/native-media/README.md) — full design, not implemented media capabilities
 - [System overview](docs/current-architecture/system-overview.md)
 - [Indexing and structural chunking](docs/current-architecture/indexing-and-chunking.md)
 - [SQLite persistence and current schema](docs/current-architecture/sqlite-persistence.md)
@@ -148,7 +157,11 @@ See the complete [limitations ledger](docs/current-architecture/limitations.md).
 ## Verification and recovery
 
 Run the complete offline verification suite with `scripts/verify.sh` on Linux or
-`scripts/verify.ps1` on Windows. The release-specific cells and strict gates are
+`scripts/verify.ps1` on Windows. For a changed development checkout use
+`bash scripts/verify.sh --development` or `./scripts/verify.ps1 --development`:
+only historical release-packet identity is SKIPPED, not a release PASS. Default
+invocation remains strict. Documentation maintenance is described in the
+[development guide](docs/development.md#bounded-documentation-maintenance). The release-specific cells and strict gates are
 documented in [offline release verification](docs/offline-release-verification.md):
 they cover `mdrack`, `mdrack-core`, `mdrack-media`, and `mdrack-sqlite` as wheel
 and sdist, Linux/Windows × Python 3.11/3.12 evidence, offline E2E/privacy lanes,
