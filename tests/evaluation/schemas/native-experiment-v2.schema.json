@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "native-experiment-v2.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "mdrack.native-experiment"
+    },
+    "schema_version": {
+      "const": 2
+    },
+    "split": {
+      "enum": [
+        "dev",
+        "held_out"
+      ]
+    },
+    "scenarios": {
+      "enum": [
+        [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        [
+          "A",
+          "B",
+          "C",
+          "D",
+          "E"
+        ]
+      ]
+    },
+    "candidate_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "lexical_weight": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "vector_weight": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "mode_ab": {
+      "enum": [
+        "semantic",
+        "hybrid"
+      ]
+    },
+    "video_kind": {
+      "enum": [
+        "video",
+        "frames"
+      ]
+    },
+    "policy": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "critical_slices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1
+            },
+            "max_regression": {
+              "type": "number",
+              "minimum": 0
+            },
+            "min_gain": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max_search_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max_index_bytes": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max_provider_calls": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max_false_positives": {
+              "type": "number",
+              "minimum": 0
+            },
+            "min_independent_groups": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          },
+          "required": [
+            "critical_slices",
+            "max_regression",
+            "min_gain",
+            "max_search_ms",
+            "max_index_bytes",
+            "max_provider_calls",
+            "max_false_positives",
+            "min_independent_groups"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "contract",
+    "schema_version",
+    "split",
+    "scenarios",
+    "candidate_budget",
+    "lexical_weight",
+    "vector_weight",
+    "mode_ab",
+    "video_kind",
+    "policy"
+  ]
+}

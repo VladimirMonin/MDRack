@@ -1,0 +1,583 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "native-corpus-v2.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "mdrack.native-corpus"
+    },
+    "schema_version": {
+      "const": 2
+    },
+    "state": {
+      "enum": [
+        "draft",
+        "frozen"
+      ]
+    },
+    "evidence": {
+      "enum": [
+        "acquisition",
+        "synthetic",
+        "real_reviewed"
+      ]
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "document",
+              "image",
+              "audio",
+              "video"
+            ]
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "artifact": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 33554432
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "bytes",
+              "sha256"
+            ]
+          },
+          "attribution": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 33554432
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "bytes",
+              "sha256"
+            ]
+          },
+          "group": {
+            "type": "string",
+            "minLength": 1
+          },
+          "split": {
+            "enum": [
+              "dev",
+              "held_out"
+            ]
+          },
+          "media_license": {
+            "enum": [
+              "CC0-1.0",
+              "CC-BY-2.0",
+              "CC-BY-3.0",
+              "CC-BY-4.0",
+              "MIT"
+            ]
+          },
+          "annotation_license": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CC0-1.0",
+                  "CC-BY-2.0",
+                  "CC-BY-3.0",
+                  "CC-BY-4.0",
+                  "MIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "local_reviewed": {
+            "type": "boolean"
+          },
+          "publishable": {
+            "type": "boolean"
+          },
+          "projection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "text",
+                      "ocr",
+                      "asr",
+                      "caption",
+                      "class_description"
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "origin": {
+                    "enum": [
+                      "human",
+                      "synthetic",
+                      "agent_draft"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text",
+                  "sha256",
+                  "origin"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enrichment": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "text",
+                      "ocr",
+                      "asr",
+                      "caption",
+                      "class_description"
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "origin": {
+                    "enum": [
+                      "human",
+                      "synthetic",
+                      "agent_draft"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text",
+                  "sha256",
+                  "origin"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "media_type",
+          "source",
+          "artifact",
+          "attribution",
+          "group",
+          "split",
+          "media_license",
+          "annotation_license",
+          "local_reviewed",
+          "publishable",
+          "projection",
+          "enrichment"
+        ]
+      },
+      "minItems": 1
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "group": {
+            "type": "string",
+            "minLength": 1
+          },
+          "split": {
+            "enum": [
+              "dev",
+              "held_out"
+            ]
+          },
+          "parents": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0
+          },
+          "content_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "group",
+          "split",
+          "parents",
+          "content_ref",
+          "kind"
+        ]
+      },
+      "minItems": 1
+    },
+    "queries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "split": {
+            "enum": [
+              "dev",
+              "held_out"
+            ]
+          },
+          "slice": {
+            "type": "string",
+            "minLength": 1
+          },
+          "group": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "modality": {
+                "enum": [
+                  "text",
+                  "image",
+                  "audio",
+                  "video"
+                ]
+              },
+              "text": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "resource_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "modality",
+              "text",
+              "resource_id"
+            ]
+          },
+          "eligible": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "case_type": {
+            "enum": [
+              "positive",
+              "negative"
+            ]
+          },
+          "target": {
+            "enum": [
+              "resource",
+              "unit"
+            ]
+          },
+          "match": {
+            "enum": [
+              "identity",
+              "temporal"
+            ]
+          },
+          "cutoffs": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "judgment_policy": {
+            "enum": [
+              "complete",
+              "pooled"
+            ]
+          },
+          "temporal_policy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "interval_iou": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1
+                  },
+                  "timestamp_tolerance_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "interval_iou",
+                  "timestamp_tolerance_ms"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "judgments": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "judgment_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "grade": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "resource_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "source_revision": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "unit_id": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "intervals": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        ],
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "minItems": 0
+                    },
+                    "timestamp_ms": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "judgment_id",
+                    "grade",
+                    "resource_id",
+                    "source_revision",
+                    "unit_id",
+                    "intervals",
+                    "timestamp_ms"
+                  ]
+                },
+                "minItems": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "adjudicated": {
+            "type": "boolean"
+          },
+          "origin": {
+            "enum": [
+              "human",
+              "synthetic",
+              "agent_draft"
+            ]
+          },
+          "task": {
+            "enum": [
+              "cross_source",
+              "instance",
+              "localization"
+            ]
+          },
+          "intent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_node": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "split",
+          "slice",
+          "group",
+          "input",
+          "eligible",
+          "case_type",
+          "target",
+          "match",
+          "cutoffs",
+          "judgment_policy",
+          "temporal_policy",
+          "judgments",
+          "adjudicated",
+          "origin"
+        ]
+      },
+      "minItems": 0
+    },
+    "provenance_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "selection_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "contract",
+    "schema_version",
+    "state",
+    "evidence",
+    "resources",
+    "groups",
+    "queries"
+  ]
+}

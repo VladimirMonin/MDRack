@@ -1,7 +1,7 @@
 ---
 id: "MDRACK-NATIVE-03"
 kind: "plan"
-updated: "2026-10-22"
+updated: "2026-10-23"
 areas: ["retrieval", "native-media", "late-enrichment"]
 summary: "Полная программа реализации, перехода и проверки совместимости."
 title: "MDRack: план внедрения, совместимость и переход"
@@ -202,6 +202,19 @@ flowchart TB
 
 ### M03-04. Подготовить оценщик до сравнения моделей 📏
 
+Программная семья [native input-side corpus v2 и общего public runner](../../evaluation/native-corpus-v2.md)
+независимо принята на Windows/CPython 3.14.2 в actual Root/source-local и свежей
+noneditable installed границах; M03-04-R1 CLOSED. Версионированные входы, provenance,
+source-group partitions, frozen policy/profile/gold, A–D/optional E, paired enrichment
+и planned/blocked accounting проверены через настоящий public engine/SQLite со
+scripted providers. Штатный embedding-port failure сохраняет BLOCKED-ячейки и
+исполнение независимых сценариев, без подставных оценок или raw provider text.
+Retained acquisition остаётся draft: 7 media, zero query grades/speech,
+local_reviewed=false/publishable=false. Это приёмка программного контура, **не
+завершение M03-04/W5**: реальный размеченный RU/EN/cross-language корпус, независимый
+held-out, model quality/cost и полные global/live/W6/release gates остаются OPEN.
+Whole strict сохраняет exact103 inherited diagnostics/new0, не waiver.
+
 Работа идёт параллельно с provider и storage. Её владельцы — `src/mdrack/eval/`, соответствующие `tests/unit/test_eval_*`, контракт и validator публичного корпуса, сценарии в `scripts/`. Сначала закрываются арифметические и смысловые ошибки, перечисленные в №04: grade 0, повторный gain ресурса, принадлежность временных координат, отсутствие совпадения и единица cutoff.
 
 После прохождения ручного эталона `M04-M01–M02` фиксируется новая версия оценочного набора. В неё входят реальные медиавходы, русский и английский, независимые dev/held-out группы и необходимые отрицательные примеры. Старые frozen bytes не переписываются ради новой модели. Матрица направлений отражает заявленные capabilities.
@@ -284,9 +297,10 @@ noneditable installed-synthetic границах; W5-R1 CLOSED. Разрешён
 кандидаты определяются текущими ролью и входом и ограничивают actual Core retrieval
 до candidate limit; unrelated capabilities не расширяют маршрут. Affected31 strict
 GREEN, exact103 inherited whole-static diagnostics RED, new0/missing0. Это не
-live-native, real-corpus/quality-cost, whole W5 или W6/release PASS. Исходные M03-04
-RU/EN/cross-language, source-group dev/held-out, public A–D/optional-E runner,
-paired enrichment и policy расходов остаются следующими обязательствами без сокращения.
+live-native, real-corpus/quality-cost, whole W5 или W6/release PASS. Программный
+контур M03-04 принят отдельно, как описано выше. Реальные RU/EN/cross-language,
+source-group dev/held-out, модельные A–D/optional-E и paired quality/cost прогоны
+остаются OPEN без сокращения исходных обязательств.
 
 Следующие срезы используют те же provider, planner и publication service. Практический порядок начинается с доступного повторного использования: кадры видео могут кодироваться уже работающим image adapter; audio segments требуют собственной подтверждённой audio capability. Прямой video input является отдельной возможностью и не следует из поддержки кадров.
 

@@ -99,8 +99,19 @@ This entry tracks execution, not another roadmap or evidence registry.
   GREEN; exact103 inherited whole-static diagnostics remain RED, new0/missing0.
   This is source/local and installed-synthetic acceptance, not live inference, whole
   W5/W6 or release acceptance. See [native contract](../../docs/contracts/native-temporal-v1.md).
-  Original M03-04 obligations remain: real versioned RU/EN/cross-language corpus,
-  held-out source groups, A–D/optional E, paired enrichment and quality/cost policy.
+  Original real M03-04 obligations remain: versioned RU/EN/cross-language corpus,
+  held-out source groups and actual model A–D/optional E/paired quality-cost runs.
+- M03-04 software: the complete [native input-side corpus/provenance/query adapter
+  and common-public runner](../../docs/evaluation/native-corpus-v2.md) is independently
+  ACCEPTED on Windows/CPython3.14.2 actual Root/source-local and fresh noneditable
+  installed boundaries; M03-04-R1 CLOSED. Frozen inputs/policy/profile/gold,
+  pre-limit eligibility, real engine/SQLite/FTS, paired C–D–E enrichment with native
+  vector preservation, safe declared port failures and planned/blocked denominators
+  are qualified with scripted providers. This is software mechanics, not real-model
+  quality. The retained 73-artifact/seven-media acquisition stays draft, with zero
+  query grades/speech and reviewed=false/publishable=false. Whole-static103 remains
+  inherited FAIL/new0; original M03-04/W5 real-data/model-cost, global/full/expanded-
+  installed/live/W6/operational/release obligations remain OPEN.
 - W6: all declared release-scope families → exact candidate, installed CLI/engine,
   actual OS/Python cells, migration/reopen, G01/R01–R04/T01–T02 and three separate
   contract/runtime/quality-cost verdicts. Image release includes late enrichment;
