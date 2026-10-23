@@ -48,7 +48,7 @@ tags:
 > [!important] Статус плана
 > **CURRENT** обозначает проверенные особенности указанной ревизии. **TARGET** обозначает предлагаемое изменение. Условие завершения этапа не является утверждением, что этот этап уже выполнен. Названия новых операций и модулей не следует использовать как готовые команды установленного MDRack.
 >
-> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-execution-status). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
+> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-result-qualification). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
 
 ## Исходная точка и границы работ 🔎
 
@@ -710,6 +710,10 @@ Real corpus/model/native-pixel quality-cost, W6/operational/release не зак�
 
 ## Текущий исполнительный статус и ближайшие проверки
 
+Этот поставленный repair checkpoint и первоначальный порядок следующих работ сохранены
+исторически. [Последующий срез результатов](#current-result-qualification) задаёт текущий
+остаток; уже принятые OCR/W3/W4 не открываются заново по прежнему списку.
+
 Финальный coherent PUBLIC30 software/fixture repair независимо ACCEPTED. Принятые
 14 source-файлов и закрытые103 diagnostics сохранены; strict0/213, Ruff/boundaries,
 четыре wheels/233 exact payloads и настоящие Windows PE checks переиспользованы по
@@ -752,4 +756,41 @@ text-model pilot и caller-caption CPU baseline остаются огранич�
 Эти последующие исполнения не выполнены данным software review и не блокируют его
 scoped publication. Входы, runtime, model/media permissions и новый бюджет для них
 проверяются отдельно; W6/operational/release не объявлены завершёнными.
+
+<a id="current-result-qualification"></a>
+
+## Следующий принятый срез: API-отказ и измерения каталога
+
+Текущая source-опора `37cb7d39f03c152c64ee9100560ee2fe19c7be75` включает независимо
+принятые old-OCR producer/manual/material consistency fixes; их full2411 PASS /
+6 historical SKIP сохраняется отдельно, без нового full-прогона для result review.
+Принятые W2/W3/W4/W5/corpus/fixture/static семьи не переоценивались.
+
+**LM Studio: принят отрицательный API-результат**, не native-quality verdict.
+На установленном LM Studio0.4.26+4 загруженная модель дала text200/finite768, но typed
+PNG content получил400 от string-only input guard до embedding. Worker и проверенный
+SDK wire используют `embedString(inputString)`; выбранный runtime2.63.0 — metadata,
+не доказанный GPU kernel. Шесть дальнейших cells NOT_RUN. Это не отрицание Vision
+модели, generic prepared Core/host-provider capability или будущих реализаций.
+[Точная граница](../../contracts/native-image-v1.md#lm-studio-input-qualification)
+остаётся prerequisite настоящего image-vector/text-query/openable-image результата;
+blind update, иной runtime, caption/base64-as-text и случайные новые payloads из него
+не следуют.
+
+**Catalog-open/search: принята корректность MEASUREMENTS_ONLY.** Четыре заранее заданных
+синтетических768d tiers прошли normal public store/import/engine пути; отдельно измерены
+verified open, already-open injection и default per-operation read sessions.
+[Обезличенный отчёт](../../evaluation/catalog-search-scaling-2026-10-23.md) содержит
+пересчитанные таблицы и пределы. Большая default/open стоимость сохранена как наблюдение,
+не скрыта дешёвым constructor или warm injected query. Не установлены applicable SLO,
+причинная стоимость отдельных стадий, regression против прежней ревизии или безопасность
+injection при concurrent writers. Schema/integrity/FK/graph/FTS/vector/snapshot guards
+не ослаблялись.
+
+Следующий незакрытый runtime prerequisite — конкретно поддержанный LM Studio typed-image
+embedding контракт с совместимым query space. Затем сохраняются enrichment того же
+материала и существующий runner с независимыми похожими distractors, RU/EN/negative
+cases и заранее заданными criteria. Отдельный запрос catalog/search scaling получил
+проверенные измерения, но не автоматически performance PASS. Бюджеты не продлены;
+whole native/semantic/fitness/W6/release из этих двух результатов не объявляются.
 

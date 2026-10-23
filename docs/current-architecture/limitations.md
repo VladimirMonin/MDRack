@@ -25,10 +25,16 @@ This page is a current-state boundary, not a roadmap promise.
   are explicit existing local tools, not an STT/VLM/model or general format guarantee.
   V1 supports WAVE/ISO-BMFF with matching tracks, zero stream origins and bounded
   integer-ms coordinates; unsupported formats/timelines/ranges fail closed.
-- Production selected LM Studio embeddings remain textual: no live native pixel/image,
-  audio or video transport/semantic quality is qualified. Explicit synthetic native
-  providers prove local orchestration only, never model availability or relevance.
-  The original real corpus/held-out/public A–D/quality-cost and W6 release gates remain open.
+- Production selected LM Studio embeddings remain textual. In the scoped loaded-model
+  qualification, LM Studio 0.4.26+4 `/v1/embeddings` returned text200/finite768 but refused
+  typed PNG content400 at its string-only input guard before embedding. Runtime2.63.0
+  is selection metadata, not an observed GPU-kernel identity. Model Vision metadata
+  does not establish API pixel admission; this is not a negative claim about the model,
+  generic prepared-provider capabilities or all future LM Studio implementations.
+  See the [input qualification](../contracts/native-image-v1.md#lm-studio-input-qualification).
+  No live native pixel/image, audio or video transport/semantic quality is qualified.
+  Explicit synthetic native providers prove local orchestration only. Original real
+  corpus/held-out/public A–D/quality-cost and W6 release gates remain separate.
 - Local capture, source guards, CPU decoding and child cleanup remain app-owned.
   `mdrack_core` and `mdrack_media` never open sources or run processes. Pure media
   builders now accept native ready observations separately from genuine textual
@@ -68,10 +74,15 @@ This page is a current-state boundary, not a roadmap promise.
   similarity reads its basis, candidates and hydration together without a provider.
   A future consumer needing a basis before HTTP must capture immutable values,
   close, perform HTTP and revalidate in a new session, not keep a borrowed reader.
-- Each operation opens and fully verifies a readonly catalog. Verification preflight
-  and the subsequent search use separate snapshots; opening/verification cost is
-  not zero. Retained small synthetic warm timings are not a dense/native benchmark
-  or portable latency/CPU/RSS guarantee.
+- Each ordinary uninjected operation opens and fully verifies a readonly catalog.
+  Verification preflight and the subsequent search use separate snapshots. The
+  [current synthetic scaling measurements](../evaluation/catalog-search-scaling-2026-10-23.md)
+  separate verified open from already-open search and default repeated queries. On
+  the measured Windows source boundary at 8192 units/vectors, median verified open
+  was 6748.172 ms and default repeated selective lexical search 5547.531 ms; already-open
+  injected selective search 0.997 ms is a different read-session composition. No applicable
+  SLO, portable latency guarantee or concurrent-write safety of that injection was
+  established. Do not weaken verification or snapshot policy to adopt a warm timing.
 - Deterministic published-catalog interleavings were checked on Windows/CPython
   3.14.2 with a writer-ready barrier. A retained Windows SHM/topology bootstrap
   `PermissionError` observation is not claimed fixed; arbitrary simultaneous

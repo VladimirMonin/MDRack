@@ -42,6 +42,13 @@ and any skipped gate with a concrete reason.
   missing/inaccessible-path failures across CLI and `MDRackEngine`.
 - Documentation: relative links, heading anchors, Mermaid syntax/rendering or waiver,
   instruction routing/frontmatter, and `git diff --check`.
+- Performance: distinguish verified catalog open, lazy engine construction, already-open
+  injected search and normal per-operation read sessions; retain per-call connection
+  counts, encoding absence/cost and separate serialization timing. An injected warm
+  result does not qualify the default route or concurrent snapshot safety. State sample
+  count and cache definition; small-series percentiles are descriptive, not production
+  tail bounds. Without an applicable predeclared workload/profile SLO, retain measurements
+  only rather than inventing a performance PASS or subtracting unpaired stage medians.
 - Packaging/public CLI: use installed-package or live CLI checks when the claim crosses
   beyond unit-level source behavior. Keep normal PEP 517 build isolation; offline builds
   need an explicitly provisioned, identity-checked backend wheelhouse, not a switch that

@@ -5,6 +5,7 @@
 - [Frozen public corpus/query/benchmark v1](public-corpus-contract-v1.md) — immutable historical fixture, not migrated by v2.
 - [v1.1 fixture contract](v1.1-fixture-contract.md).
 - [Privacy evidence oracle](privacy-evidence-oracle.md).
+- [Catalog-open and public-search scaling, 2026-10-23](catalog-search-scaling-2026-10-23.md) — independently checked synthetic Windows measurements, separate default/open and already-open boundaries; no declared SLO or performance/model-quality PASS.
 
 Evaluation correctness, provider usefulness, production search latency and installed
 release readiness are separate evidence boundaries. The v2 manual oracle proves
@@ -18,7 +19,7 @@ unchanged original generator checks that view; exactly four separately versioned
 schema additions are admitted in the shared schema directory, not added to the v1
 freeze. This read-only check does not regenerate labels, input hashes or results.
 
-## Current bounded verification
+## Historical suite qualification
 
 The strict repair and connected suite K1–K7 are independently accepted on Windows /
 CPython 3.14.2. The full pre-taxonomy-correction checkout selected 2412 cases:
@@ -32,5 +33,16 @@ whole user-dirty skill content is not part of this repository delivery.
 These are software/fixture/installed-boundary results, not pixel, acoustic, OCR/model
 quality or fitness acceptance. The tiny paired-instance text-model pilot and separate
 caller-caption CPU baseline remain limited results, not competing-model or full-corpus
-proof. Next execution order is maintained in the
-[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-acceptance-and-next-execution).
+proof.
+
+## Current result boundary
+
+The accepted OCR successor source is `37cb7d39f03c152c64ee9100560ee2fe19c7be75`;
+its separate 2411-pass/six-historical-skip qualification remains retained. No new full
+suite was run for the result review. The linked catalog/open/search report is checked
+**MEASUREMENTS_ONLY**, not a latency SLO or native-model decision. Separately, the loaded
+model's typed PNG request was refused by the tested LM Studio 0.4.26+4 embedding wrapper;
+text200/768 does not establish pixel admission. See the
+[scoped input limitation](../contracts/native-image-v1.md#lm-studio-input-qualification).
+Next execution order is maintained in the
+[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-result-qualification).

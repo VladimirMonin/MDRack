@@ -101,6 +101,29 @@ model identity, output dimensions, and profile match the running LM Studio
 instance. Do not paste provider bodies or raw endpoint details into an issue.
 Changing model or dimensions requires an explicit embedding rebuild.
 
+A loaded model or Vision label is not proof that an embedding endpoint accepts pixels.
+The checked LM Studio 0.4.26+4 `/v1/embeddings` wrapper accepted text but rejected typed
+PNG content at its string-only guard before embedding. See the
+[native input qualification](contracts/native-image-v1.md#lm-studio-input-qualification).
+Do not substitute filenames, captions or base64-as-text for image vectors, remove
+capability refusals, or assume that reloading/updating a model repairs an API/worker
+contract. A concrete supported image-embedding input/output contract must be qualified
+before using that route; no replacement runtime is implied.
+
+### Search is slow although an engine is already constructed
+
+Normal uninjected search opens and fully verifies its own readonly catalog per operation.
+Engine construction is lazy; a surviving engine object does not make later requests
+already-open searches. The
+[scoped catalog/search measurements](evaluation/catalog-search-scaling-2026-10-23.md)
+report verified-open, already-open and default repeated timings separately. They use
+synthetic stored vectors, not model/query-encoding or CLI process-startup latency.
+
+Preserve schema, integrity/FK, graph/FTS/vector and operation-owned snapshot checks.
+An injected open catalog is a different consistency boundary, not a general production
+speed fix. The measurements do not establish concurrent-write safety or an applicable
+latency SLO; retain the actual route, counts, runtime and warm/cold definition in diagnosis.
+
 ### Text search or FTS is inconsistent
 
 Preserve the store first, stop writers, and inspect diagnostics. If the SQLite

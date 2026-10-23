@@ -5,7 +5,7 @@ Read [bundle](../../docs/proposals/native-media/README.md) in order 01 → 02 �
 This entry tracks execution, not another roadmap or evidence registry.
 
 Current software acceptance and the next bounded execution are recorded in
-[the latest status](#current-acceptance-and-next-execution). Earlier per-family OPEN /
+[the latest status](#current-result-qualification). Earlier per-family OPEN /
 FAIL statements below retain their original acceptance boundary; they do not reopen
 findings explicitly closed by a later qualified result.
 
@@ -158,6 +158,10 @@ programme/W6/operational/release obligations are not inferred closed.
 
 ## Current acceptance and next execution
 
+This delivered repair checkpoint and its original next-order list are retained below.
+The [later result qualification](#current-result-qualification) governs the current
+remaining work; the completed OCR checks are not reopened by the historical list.
+
 The connected PUBLIC30 repair is independently ACCEPTED, including the final exact
 one-fixture taxonomy correction. Host-only artifact reads stay registered but are not
 catalog-backed; actual engine/public CLI-callable access without a catalog and the
@@ -195,3 +199,39 @@ The next execution order is finite and does not reopen accepted W3/W4:
 These follow-ons are not gates for this repair. No inference/acquisition allowance is
 renewed; real model/media work requires its own concrete authorized inputs/runtime and
 budget. W6/operational/release and broader quality remain separate from scoped delivery.
+
+## Current result qualification
+
+Source `37cb7d39f03c152c64ee9100560ee2fe19c7be75` includes the separately accepted old-OCR
+producer/manual/material consistency fixes. Their 2411-pass/six-historical-skip source
+qualification remains retained; this result review changed no product source/tests and
+ran no new full suite. W2/W3/W4/W5/corpus/fixture/static acceptance stays within its
+existing scope.
+
+Two subsequent result objects are independently accepted, without merging their claims:
+
+- **Negative LM Studio API qualification:** the loaded existing model returned text200 /
+  finite768, but LM Studio0.4.26+4 `/v1/embeddings` refused typed PNG input at its string-
+  only wrapper guard before embedding. Runtime2.63.0 is selection metadata. Six later
+  discriminator cells are NOT_RUN; model Vision and generic prepared-provider capability
+  are not disproved. See [input qualification](../../docs/contracts/native-image-v1.md#lm-studio-input-qualification).
+- **Catalog-open/search measurements only:** four predeclared synthetic768d tiers through
+  normal public stores/engine, separate verified-open/default and already-open injection,
+  312 searches and code-recomputed distributions. The
+  [sanitized scaling report](../../docs/evaluation/catalog-search-scaling-2026-10-23.md)
+  preserves the large default/open costs and method limits. No applicable latency SLO,
+  performance-regression verdict, concurrent injection-safety or model-quality PASS follows.
+
+The genuine image-vector → text-query → correct openable-image route remains OPEN.
+The next unresolved prerequisite is a concrete supported LM Studio typed image-embedding
+input plus compatible text-query vector output through its public API/worker/backend.
+Reloading a model, a Vision label, caption/base64-as-text or speculative endpoint retries
+are not substitutes. No alternative runtime or blind update is implied; production
+embeddings remain LM Studio HTTP and prior operation budgets are not renewed.
+
+After that prerequisite is actually qualified, retain same-material lexical enrichment
+and the existing runner's independent materials/similar distractors/RU/EN/negative cases /
+predeclared quality-cost criteria. The separate catalog scaling request now has usable
+measurements; choosing an applicable workload SLO for a future performance decision is
+still distinct. These result acceptances do not reopen accepted software or close native /
+semantic fitness, W6/operational/release.

@@ -99,3 +99,24 @@ model-quality benchmark.
 
 Native LM Studio pixels, real-source quality/cost and full release acceptance are
 unverified/blocked separately from deterministic local component tests.
+
+## LM Studio input qualification
+
+The source contract above remains generic; the selected production adapter remains
+text-only. A separate loaded-model test on LM Studio **0.4.26+4** with EmbeddingGemma2
+Q8_0 returned HTTP200 and one finite normalized 768d vector for text. Actual typed PNG
+content sent to `/v1/embeddings` returned HTTP400 at the wrapper's string/array-of-strings
+input guard, after model selection but before `model.embed`. The installed worker and
+inspected official SDK wire contract use `embedString(inputString)`.
+
+This qualifies that concrete API/input refusal, not absence of model Vision, rejection
+of generic prepared providers, or impossibility in future versions. Selected runtime
+2.63.0 metadata is not a trace of the executed GPU kernel. The six subsequent repeat,
+lossless/changed-pixel, shared-space and invalid-image discriminator cells were NOT_RUN;
+text200 is not image-vector or semantic-quality success.
+
+A supported LM Studio typed image input and compatible text-query embedding output
+remain unmet prerequisites for the genuine image-vector/search/openable-image route.
+Removing only the HTTP guard is insufficient while the worker/backend remains string-
+only. No speculative payload, caption/base64-as-text substitution, blind app/runtime
+update or alternative production embedding boundary is established by this result.
