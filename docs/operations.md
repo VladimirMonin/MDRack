@@ -110,12 +110,33 @@ capability refusals, or assume that reloading/updating a model repairs an API/wo
 contract. A concrete supported image-embedding input/output contract must be qualified
 before using that route; no replacement runtime is implied.
 
-The separate [external-host CUDA canary](evaluation/native-image-cuda-canary-2026-10-23.md)
-qualified existing native components outside MDRack, not HTTP image admission or an
-installed product provider. Do not copy its vectors into a legacy space, weaken guards,
-or infer a new CLI provider option. Host-owned encoding still needs explicit prepared-
-provider injection, normal catalog/engine/read/reopen and installed CLI proof. Existing
-app defaults and model/server state are not changed by that diagnostic result.
+The earlier [external-host canary](evaluation/native-image-cuda-canary-2026-10-23.md)
+and later [normal product qualification](evaluation/native-image-product-2026-10-23.md)
+are separate. The latter actually qualifies explicit prepared-provider injection and
+normal engine/catalog/read/reopen plus installed PE. It does not repair HTTP input.
+
+### Explicit caller-owned native image encoder
+
+Use only trusted qualified artifacts and an existing private work directory, following
+[the caller recipe](../examples/native_cuda/README.md). From the checkout, configure
+with `uv run --offline --no-sync python examples/native_cuda/configure.py --help`;
+then explicitly select `image native-ingest` / `image native-search --provider external
+--host-config CONFIG`. CONFIG is private caller composition, never indexed content or
+a profile certificate. Default/other commands still use their existing providers.
+
+This bounded route accepts fixed 224×224 RGB PNG documents and text queries for images,
+not text-document/image-query/similarity. Do not mix its full space with legacy vectors,
+change pins silently, weaken refusals or infer general quality/latency. Python/Core /
+application/default providers do not load weights/vendor DLLs. The caller owns the
+separate process, resource availability and close/reap; no new service/model is implied.
+
+Public `read unit` intentionally redacts source coordinates. Join its logical ID and
+whole-image kind with the PUBLIC search evidence locator/revision, resolve only through
+an explicit caller allowlist and hash/decode the original. Do not invent a path from
+an ID/filename or widen read redaction. Manual prepared lexical enrichment can retain
+the same native vector without encoding; any later semantic query is separately counted.
+Temporary producer files/cache are removed after reap. Optional bounded PRIVATE native
+diagnostics may contain sensitive paths/details: default off, never logs/support/Git.
 
 ### Search is slow although an engine is already constructed
 

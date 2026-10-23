@@ -36,7 +36,13 @@ explicitly changes that architecture.
 ## Invariants
 
 - SQLite remains the only persistent database.
-- LM Studio HTTP is the only production embedding boundary; Python never loads embedding models directly.
+- Default production embeddings remain LM Studio text HTTP, with legacy identity unchanged.
+  The explicit trusted outer `mdrack.hosts.cuda_encoder` / CLI composition may inject a
+  caller-owned `PreparedEmbeddingProvider` backed by a separately selected bounded process.
+  It is never implicit fallback or indexed configuration. Core/application/default providers
+  do not load weights/vendor DLLs; host Win32 process/job calls are OS ownership, not model
+  loading. Keep producer qualification, complete space identity and lifecycle at that outer
+  edge; see `docs/decisions/0018-caller-owned-native-encoder.md`.
 - The default parser is the markdown-it adapter and produces parser-independent domain blocks.
 - Parser injection still uses the `MarkdownParser` port; do not broaden the concrete
   default-parser exception or describe it as edge-only composition. Moving that default
@@ -89,8 +95,9 @@ explicitly changes that architecture.
 ## Explicit non-goals
 
 Do not add a GUI, web server, MCP server, specialized vector database, cloud
-embedding provider, direct model runtime, or network asset fetcher without an
-approved architecture/specification change.
+embedding provider, in-process model runtime, or network asset fetcher without an
+approved architecture/specification change. The named bounded caller-process composition
+above is the explicit additive exception, not authority for another runtime/default.
 
 ## Safe change process
 

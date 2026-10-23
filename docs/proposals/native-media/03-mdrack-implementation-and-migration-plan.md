@@ -48,7 +48,7 @@ tags:
 > [!important] Статус плана
 > **CURRENT** обозначает проверенные особенности указанной ревизии. **TARGET** обозначает предлагаемое изменение. Условие завершения этапа не является утверждением, что этот этап уже выполнен. Названия новых операций и модулей не следует использовать как готовые команды установленного MDRack.
 >
-> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-cuda-canary-and-product-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
+> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-native-product-and-fitness-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
 
 ## Исходная точка и границы работ 🔎
 
@@ -801,6 +801,9 @@ whole native/semantic/fitness/W6/release из этих двух результа
 
 ## Принят внешний CUDA canary; product integration остаётся открытой
 
+Это исторический canary cutoff. [Последующая product-приёмка](#current-native-product-and-fitness-remainder)
+закрывает его следующий integration slice, не расширяя прежнее доказательство задним числом.
+
 На documentation baseline `4623abf4c86c647d3f096703c6d4b31ad2da8484` независимо принят
 [bounded synthetic external-host CUDA canary](../../evaluation/native-image-cuda-canary-2026-10-23.md):
 точные frozen host/ABI/runtime/weights, новый seven-cell run, шесть learned768 vectors,
@@ -826,4 +829,34 @@ runner с независимо оценёнными RU/EN/similar distractor/neg
 заранее заданными quality/cost/latency критериями. Новый runtime/server/model или blind
 update из результата не следует; завершённые live-бюджеты закрыты. Полная native-media /
 semantic fitness/W6/operational/release цель остаётся OPEN.
+
+<a id="current-native-product-and-fitness-remainder"></a>
+
+## Принят normal native product; independent fitness остаётся открытой
+
+На baseline `d5476653a4da80ab4082b47ce47a0e4ffc90c973` exact source8 независимо ACCEPTED
+как bounded normal image product slice. [ADR-0018](../../decisions/0018-caller-owned-native-encoder.md)
+фиксирует точное additive exception: default LM Studio text HTTP/legacy space сохранены;
+явный доверенный OUTER host/CLI инъецирует caller-owned prepared provider на отдельном
+bounded процессе. Core/application/default providers не загружают weights/vendor DLLs.
+
+[Реальное product evidence](../../evaluation/native-image-product-2026-10-23.md): три
+canonical catalogs, embedded/source CLI/installed PE/installed SDK reopen,17 новых learned
+native calls /184 sampled post-eval CUDA outputs, public read и allowlisted original
+hash/decode opening, exact DTO/f32/full-space parity. SAME-resource manual lexical gain
+дал0 encoding с сохранением native projection; следующий semantic query учтён отдельно.
+Current full2428 /2422 PASS /0 FAIL /six historical SKIP включает шесть ORIGINAL current
+real-SKILL consumers без edit/skip/xfail/substitution; прежний RED остаётся историей.
+Изолированные четыре builds/236 payloads, strict216/Ruff/boundaries квалифицированы;
+Source software/W3/W4/W5/M03–04/OCR и прошлые limits не переоткрываются. Caller source
+opening не отменяет redaction read-unit и не выводит authority из имени файла.
+
+**Следующий конечный artifact/trial:** approved независимо оценённый native-corpus-v2
+с RU/EN/near distractors/negative/held-out/source groups, provenance/rights/allowlist;
+заранее замороженные experiment/policy/cutoffs и quality/cost/latency criteria. Использовать
+существующий runner и явные no-argument factories; textual A квалифицируется отдельно.
+Native/lexical cells исполняются лишь по реальным capabilities; prepared-text B и dense
+E честно BLOCKED до text-document qualification, без подмены labels/CPU/old vectors.
+Catalog measurements остаются MEASUREMENTS_ONLY, не выдуманным SLO. Бюджеты завершённого
+run не продлены; whole real-corpus/fitness/W6/operational/release остаётся OPEN.
 

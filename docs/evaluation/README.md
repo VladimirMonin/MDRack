@@ -6,7 +6,8 @@
 - [v1.1 fixture contract](v1.1-fixture-contract.md).
 - [Privacy evidence oracle](privacy-evidence-oracle.md).
 - [Catalog-open and public-search scaling, 2026-10-23](catalog-search-scaling-2026-10-23.md) — independently checked synthetic Windows measurements, separate default/open and already-open boundaries; no declared SLO or performance/model-quality PASS.
-- [Native-image CUDA external-host canary, 2026-10-23](native-image-cuda-canary-2026-10-23.md) — independently reproduced real vision/backbone CUDA and six learned vectors; synthetic external host, not normal engine/catalog/CLI or quality/SLO acceptance.
+- [Native-image CUDA external-host canary, 2026-10-23](native-image-cuda-canary-2026-10-23.md) — independently reproduced real vision/backbone CUDA and six learned vectors; its original external-only cutoff is preserved.
+- [Normal native-image product, 2026-10-23](native-image-product-2026-10-23.md) — independently accepted explicit caller host through normal engine/catalog/source CLI/installed PE, full DTO/f32/space parity and zero-encode same-resource lexical gain; not real-corpus fitness/SLO.
 
 Evaluation correctness, provider usefulness, production search latency and installed
 release readiness are separate evidence boundaries. The v2 manual oracle proves
@@ -45,8 +46,10 @@ suite was run for the result review. The linked catalog/open/search report is ch
 model's typed PNG request was refused by the tested LM Studio 0.4.26+4 embedding wrapper;
 text200/768 does not establish pixel admission. See the
 [scoped input limitation](../contracts/native-image-v1.md#lm-studio-input-qualification).
-A later independent external-host CUDA canary used actual native pixel/query forwards;
-it neither repairs that HTTP wrapper nor qualifies MDRack integration. The existing
-2411-pass/six-skip software gate and catalog measurements remain unchanged.
-Next execution order is maintained in the
-[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-cuda-canary-and-product-remainder).
+The later canary and normal product result have distinct boundaries: the latter now
+qualifies actual opt-in prepared-provider integration with unchanged default HTTP.
+Current actual full is 2428 collected /2422 PASS /six historical SKIP /zero FAIL;
+the six original real-current-skill consumers passed read-only without body changes /
+substitution. Earlier RED remains historical; no private skill content is delivered.
+Catalog measurements remain MEASUREMENTS_ONLY. Next execution is maintained in the
+[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-native-product-and-fitness-remainder).

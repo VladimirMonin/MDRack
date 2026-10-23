@@ -2,8 +2,13 @@
 
 This package describes the checked-out MDRack 1.4.0rc3 source candidate.
 The app-owned [native image contract](../contracts/native-image-v1.md) adds typed
-routes; production pixels remain unsupported, with runtime/quality acceptance
-separate from deterministic offline contract evidence. It is the
+routes. Default LM Studio HTTP remains text-only; an explicit trusted outer
+[caller-process composition](../decisions/0018-caller-owned-native-encoder.md) now has
+bounded real image product qualification, not independent real-quality/SLO acceptance.
+Per-component evidence sections below retain original cutoffs; the
+[latest product/software result](../evaluation/native-image-product-2026-10-23.md)
+records current full/static/installed qualification without reopening historical debt.
+It is the
 maintainer entry point for current module boundaries, indexing, persistence,
 retrieval, asset handling, public interfaces, and known limitations.
 
@@ -28,6 +33,9 @@ When sources disagree, use this order:
 - [Limitations](limitations.md) — explicit unsupported or asymmetric behavior, including raw-adapter and external-process limits.
 
 ## Supporting current contracts
+
+- [Native image / explicit caller host](../contracts/native-image-v1.md) — default text HTTP, opt-in image native external process, honest roles/space/lifecycle and original-opening authority.
+- [ADR-0018: caller-owned native encoder](../decisions/0018-caller-owned-native-encoder.md)
 
 - [Native temporal/media v1](../contracts/native-temporal-v1.md) — actual bounded CPU preparation and pure frames/audio/direct-video builders, async engine, conditional publication and explicit synthetic-only component boundary.
 - [ADR-0017: native temporal preparation](../decisions/0017-native-temporal-preparation.md)
@@ -123,10 +131,10 @@ vectors do not establish model transport, relevance or durable original-media cu
 ## Future / proposed
 
 [Native media and late enrichment](../proposals/native-media/README.md) remains the
-full proposed 01–04 programme. The accepted components do not close live native
-routes, real RU/EN/cross-language/source-group corpora, A–D/optional-E and paired
-enrichment quality/cost, global full/expanded-installed or W6/operational/release
-qualification.
+full proposed 01–04 programme. The bounded accepted image product route does not close
+real RU/EN/cross-language/source-group corpora, A–D/optional-E and paired enrichment
+quality/cost/latency fitness, wider platform/operational or W6/release qualification.
+Current full and finite installed product PASS stay scoped to their recorded results.
 
 ## Historical material
 

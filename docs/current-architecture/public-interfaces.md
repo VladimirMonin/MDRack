@@ -25,8 +25,16 @@ effective modes, nullable evidence and explicit score_kind. CLI adapters are
 `image native-ingest` and `image native-search`. See the exact
 [native image contract](../contracts/native-image-v1.md) and
 [ADR-0013](../decisions/0013-native-image-contract.md).
-Production LM Studio pixels are unsupported; explicit synthetic selection tests
-local orchestration only. This does not change the legacy methods below.
+The default LM Studio HTTP adapter still refuses pixels; explicit synthetic selection
+tests orchestration only. Explicit trusted outer `CUDAEncoderProvider` injection and
+`image native-* --provider external --host-config CONFIG` now have a bounded real
+source/installed product qualification: image documents/text-query-for-image only,
+normal catalog/search/public read/reopen and zero-encode manual lexical enrichment.
+See [ADR-0018](../decisions/0018-caller-owned-native-encoder.md) and
+[product evidence](../evaluation/native-image-product-2026-10-23.md). Original opening
+joins read identity/whole_image with PUBLIC search locator/revision and caller allowlist;
+read-unit coordinates remain redacted. No text-document/image-query/similarity, legacy
+space, audio/video model quality, default or legacy method change follows.
 
 ## Prepared OCR enrichment
 

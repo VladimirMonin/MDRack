@@ -5,7 +5,7 @@ Read [bundle](../../docs/proposals/native-media/README.md) in order 01 â†’ 02 â†
 This entry tracks execution, not another roadmap or evidence registry.
 
 Current software acceptance and the next bounded execution are recorded in
-[the latest status](#current-cuda-canary-and-product-remainder). Earlier per-family OPEN /
+[the latest status](#current-native-product-and-fitness-remainder). Earlier per-family OPEN /
 FAIL statements below retain their original acceptance boundary; they do not reopen
 findings explicitly closed by a later qualified result.
 
@@ -242,6 +242,9 @@ semantic fitness, W6/operational/release.
 
 ## Current CUDA canary and product remainder
 
+This is the canary checkpoint; [later normal product acceptance](#current-native-product-and-fitness-remainder)
+supersedes its unexecuted integration queue without rewriting the canary cutoff.
+
 On the documentation baseline `4623abf4c86c647d3f096703c6d4b31ad2da8484`, the
 [external-host CUDA canary](../../docs/evaluation/native-image-cuda-canary-2026-10-23.md)
 is independently ACCEPTED within its synthetic scope. Exact frozen vendor ABI/host /
@@ -268,3 +271,30 @@ existing-runner independently judged RU/EN/similar-distractor/negative/held-out 
 and cost/latency criteria. No new server/runtime/model or blind update follows. Completed
 live budgets are closed; this result does not itself grant further execution. Whole
 native-media/fitness/W6/operational/release remains OPEN.
+
+## Current native product and fitness remainder
+
+The exact source8 on baseline `d5476653a4da80ab4082b47ce47a0e4ffc90c973` is independently
+ACCEPTED as a bounded normal image product slice; see [product result](../../docs/evaluation/native-image-product-2026-10-23.md)
+and [ADR-0018](../../docs/decisions/0018-caller-owned-native-encoder.md). The explicit trusted
+outer host/CLI injects a caller-owned prepared provider backed by a selected bounded process.
+Default LM Studio text HTTP/legacy identity stays unchanged; Core/application/default
+providers do not load weights/vendor DLLs. This is the approved additive boundary.
+
+Fresh independent proof: three normal catalogs; embedded/source CLI/actual installed PE /
+installed SDK reopen;17 learned native calls,184 sampled CUDA outputs, correct public read /
+locator-to-allowlisted-original hash/decode opens, exact DTO/f32/full-space parity. SAME
+resource manual lexical enrichment encoded0 and retained native projection; later semantic
+query counted anew. Current full2428 /2422 PASS /0 FAIL /six historical SKIP includes all
+six real-current-skill consumers without edits/waivers/substitution. Four isolated builds /
+236 exact installed payloads, strict216/Ruff/boundaries and prior software scopes are
+qualified; foreign whole skill/reference/private evidence remain excluded from delivery.
+
+Next concrete artifact: independently judged approved native-corpus-v2 materials with
+RU/EN/near distractors/negative/held-out/source groups and rights/allowlist/provenance,
+plus frozen experiment/policy/cutoffs and predeclared quality/cost/latency criteria.
+Use the existing runner and explicit caller factory; separately qualify textual A.
+Only supported native/lexical routes may execute; prepared-text B/dense-text E stay
+blocked pending text-document qualification, not caption/CPU fallback or invented labels.
+Catalog scaling remains MEASUREMENTS_ONLY, not an applicable SLO. Completed budgets stay
+closed without renewal. Whole independent native fitness/W6/operational/release is OPEN.

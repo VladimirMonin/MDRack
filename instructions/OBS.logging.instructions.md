@@ -57,6 +57,16 @@ privacy exception. They must use safe references/categories and must not emit ra
 queries, source/generated text, paths, IDs derived from private locations, endpoint
 parts, metadata/facet values, vectors, provider bodies, or raw exception strings.
 
+### Caller-private producer retention
+
+The opt-in outer encoder may retain bounded producer stdout/stderr and native-exit/job
+receipts only in an explicitly selected caller-private diagnostic directory; default
+retains none. Those bytes may contain sensitive native details/paths and are not sanitized
+logs, CLI/event output, support exports or Git material. Do not copy inputs/vectors there
+or promote capture to vector admission. Keep the declared retention boundary separate
+from public diagnostics; sink `OSError` must preserve successful encoding and increment
+its content-free loss counter. Unrelated sink/programming errors are not blanket-waived.
+
 ## v0.3 privacy oracle
 
 For success, empty, degradation, validation/storage/provider failure, and cleanup

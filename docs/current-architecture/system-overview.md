@@ -5,7 +5,10 @@ the `mdrack` app. `mdrack_core` is the stdlib-only provider- and
 persistence-neutral kernel. `mdrack_sqlite` depends only on core and stdlib and is
 the single generic resource catalog/search adapter owner. `mdrack` owns
 Click/engine composition, Markdown scanning, explicit local-file ingestion
-adapters, the fixed application catalog lifecycle, and LM Studio HTTP integration.
+adapters, the fixed application catalog lifecycle, and default LM Studio HTTP integration.
+Explicit trusted outer host/CLI composition can also inject a prepared provider backed
+by a separately selected bounded process; [ADR-0018](../decisions/0018-caller-owned-native-encoder.md)
+defines this additive exception, not an in-process model loader or a changed default.
 
 ## Dependency direction
 
@@ -81,6 +84,7 @@ The current bounded exception is `IndexingService`: it imports and constructs
 | `packages/mdrack-sqlite/` | Generic `core_*` catalog/search adapter, FTS fallback, context-managed bridge lifecycle, and safe verification. |
 | `cli/` | Click argument handling, service composition, error mapping, and JSON envelopes. |
 | `public_api/` | `MDRackEngine` and public DTO access without a Click dependency. |
+| `hosts/` | Explicit caller-owned bounded process composition into the prepared port; Win32 Job/lifetime and private prepared files, no Python vendor/model loading or global default registration. |
 | `mdrack_core/domain/` | Immutable generic resource, locator, vector, facet, request/result, error, and degradation records. |
 | `mdrack_core/ports/` | Logical-ID-only catalog and lexical/vector search protocols. |
 | `mdrack_core/application/` | Complete-graph validation, provider-free indexing, grouping, weighted RRF, and discovery. |
@@ -127,8 +131,10 @@ the atomic logical-resource replacement.
 
 - SQLite is the only persistent database; there is no vector database or
   `sqlite-vec` dependency.
-- Production embeddings use the LM Studio HTTP boundary. MDRack does not load
-  model weights through Python ML libraries.
+- Default embeddings use LM Studio text HTTP. Explicit outer caller-host composition
+  may select the bounded native process through prepared-provider injection; Core,
+  application services and default providers never load weights/vendor DLLs, and
+  Python ML model loading is not introduced. See [ADR-0018](../decisions/0018-caller-owned-native-encoder.md).
 - The default parser is `markdown_it`; `legacy` remains selectable for baseline
   comparisons.
 - Markdown image syntax is projected only into eligible prose; Markdown indexing

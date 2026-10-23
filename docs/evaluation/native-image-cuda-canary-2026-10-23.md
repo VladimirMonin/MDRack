@@ -101,9 +101,13 @@ bytes are known; weight upstream revision and exact arithmetic of every executed
 kernel are not. Text-document role and compatibility with old CPU/HTTP vector
 spaces are **not qualified**; equal 768 dimensions do not merge spaces.
 
-## Concrete product remainder
+## Product remainder at the canary cutoff
 
-The next slice is host-owned encoding through explicit existing
+The later [normal product result](native-image-product-2026-10-23.md) qualifies the
+actual integration/installed/enrichment slice. The list below preserves what this
+canary itself had not executed; it is not the current remaining-work router.
+
+The next slice at this cutoff is host-owned encoding through explicit existing
 `PreparedEmbeddingProvider` / `MDRackEngine(prepared_embedding_provider=...)`
 injection, with honest capabilities and a complete canonical space. Prove normal
 catalog image ingest → text-query semantic search → public read → hash/decode of

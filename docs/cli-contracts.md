@@ -40,6 +40,14 @@ as are target, strict/partial policy, final limit and candidate budget. Exact fi
 and limitations: [native-image-v1](contracts/native-image-v1.md).
 Default `--provider lmstudio` refuses unsupported native images before source/DB
 side effects; `--provider synthetic` is explicit offline testing, not a model.
+Only these image native commands additionally accept `--provider external --host-config CONFIG`:
+trusted outer composition of a caller-owned bounded CUDA process with the normal engine /
+catalog. Missing config or config with another provider refuses with the normal one-envelope
+error; there is no implicit fallback/default or other-command factory change. Current
+roles are image-document and text-query-for-image, not text-document/image-query/similarity.
+Exact private setup, lifecycle and limits: [caller recipe](../examples/native_cuda/README.md),
+[ADR-0018](decisions/0018-caller-owned-native-encoder.md). Source and actual installed PE
+product execution is qualified separately from independent real-corpus quality/SLO.
 No OCR, caption, filename-as-text or hidden provider substitution is performed.
 Old `image ingest/search` and text search envelopes remain unchanged.
 

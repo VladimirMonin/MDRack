@@ -38,7 +38,9 @@ Public exports from `mdrack.public_api`:
   text provider, refusing images before file/DB/provider side effects.
 - CLI registered group `image native-ingest` and `image native-search` select
   `lmstudio` by default; unsupported images fail closed. An explicit `synthetic`
-  provider is an offline test tool, never automatic production fallback.
+  provider is an offline test tool, never automatic production fallback. Explicit
+  `--provider external --host-config CONFIG` instead composes a trusted caller-owned
+  bounded encoder process, as specified below; no other/default route changes.
 
 One vector and one lexical family bound weights regardless of representation
 count. Candidate budget is per applicable family, not final K. Image hybrid has
@@ -97,9 +99,9 @@ serialized-byte growth is bounded by finite numeric widths of that fixed schema,
 not by payloads or vector count. This is a logging bound, not a throughput/SLA or
 model-quality benchmark.
 
-Normal MDRack native-pixel integration, real-source quality/cost and full release
-acceptance remain unverified separately from deterministic local component tests.
-The external-host CUDA canary below is a different execution boundary.
+The original component tests and external-host CUDA canary below retain their own
+cutoffs. A later normal product slice is qualified below; independent real-source
+quality/cost/latency fitness and full release acceptance remain separate.
 
 ## LM Studio input qualification
 
@@ -131,9 +133,37 @@ readbacks and hash/decode-checked original opens. WIC PNG decoding and L2 normal
 remain CPU work. This does not make the normal HTTP adapter image-capable, register a
 production provider or qualify all GPU operators, document role or legacy vector spaces.
 
-The next product slice must explicitly inject a host-owned `PreparedEmbeddingProvider`
-with bounded honest roles/input capabilities and complete canonical space identity.
-Prove real `ingest_native_image` / `search_media`, normal catalog/public read/original
-open/close-reopen and installed CLI parity; same-resource lexical enrichment must retain
-the native vector without re-encoding. Core/application/default providers gain no model
-loader. Independent RU/EN/distractor/negative quality/cost/latency gates remain separate.
+Those next-product obligations at the canary cutoff are addressed by the separately
+qualified implementation below, not retroactive expansion of the canary's evidence.
+
+## Opt-in caller-host product composition
+
+`mdrack.hosts.cuda_encoder.CUDAEncoderProvider(Path(CONFIG))` implements the existing
+prepared port at the trusted OUTER composition edge. Engine injection and actual
+`image native-ingest` / `image native-search --provider external --host-config CONFIG`
+use the normal catalog/Core/public DTO path. Default LM Studio text HTTP and legacy
+space remain unchanged; Core/application/default providers do not load weights/vendor
+DLLs. See [ADR-0018](../decisions/0018-caller-owned-native-encoder.md) and the
+[qualified caller recipe](../../examples/native_cuda/README.md).
+
+The explicit protocol admits only DOCUMENT image/png (224×224 noninterlaced 8-bit RGB,
+≤1MiB) and QUERY UTF-8 text for image candidates (≤65536 bytes including the host prefix).
+There is no text-document/image-query/similarity or document-vector reuse capability.
+Full canonical space binds exact producer/profile, decoder/prefix/pooling/L2/f32 codec;
+equal dimensions do not permit old-space vector reuse. Configuration is caller-selected
+trusted composition, not resource metadata or a certificate for an unqualified producer.
+
+Every call drift-checks pins/config and uses exclusive private prepared files, a fresh
+shell-free process, suspended→owned Job→resume, bounded timeout/output, actual evaluated
+CUDA evidence and exact raw-to-normalized f32 validation. Wait/reap/temp cleanup also
+apply to error/cancel. Optional bounded PRIVATE producer diagnostics are default-off,
+not logs/CLI/events/support exports and never input/vector-file retention.
+
+The [independent product result](../evaluation/native-image-product-2026-10-23.md)
+qualifies real normal engine/catalog/source CLI/installed PE, public read/original open,
+close/reopen and exact DTO/vector/full-space parity. Public read remains redacted:
+join its logical identity/whole_image with PUBLIC search evidence locator/revision and
+an explicit caller allowlist before opening/hash/decode of an original. A DB locator
+or filename alone grants nothing. Same-resource manual lexical enrichment encoded zero,
+retained the native projection and used existing CAS; later semantic query counted anew.
+Independent RU/EN/near-distractor/negative/held-out quality/cost/latency remains OPEN.

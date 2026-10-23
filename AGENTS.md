@@ -69,8 +69,11 @@ the stale instruction in the same documentation slice when allowed.
 - SQLite is the only persistent database. Do not add a vector database.
 - `packages/mdrack-sqlite/` is the single generic resource catalog/search adapter
   owner; app compatibility paths delegate/re-export and package code never imports `mdrack`.
-- Embeddings use LM Studio over HTTP. Do not add `torch`, `transformers`,
-  `sentence-transformers`, or direct model loading.
+- Default embeddings use LM Studio text HTTP. The opt-in trusted outer host/CLI
+  may compose `CUDAEncoderProvider` through `PreparedEmbeddingProvider`, backed by
+  a separately selected bounded process; see `docs/decisions/0018-caller-owned-native-encoder.md`.
+  Core, application services and default providers never load weights/vendor DLLs.
+  Do not add `torch`, `transformers` or `sentence-transformers`.
 - Indexing must not modify source Markdown or fetch external assets.
 - Public retrieval uses logical identities and portable source locators. Do not
   expose new SQLite record IDs as public contracts.

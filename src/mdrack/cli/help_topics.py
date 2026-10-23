@@ -27,8 +27,11 @@ evidence.
     "configuration": """Configuration
 
 MDRack reads <root>/.mdrack/config.toml when --config-file is not supplied.
-Relative paths resolve from --root. The production embedding boundary is the
-LM Studio HTTP endpoint; no model weights are loaded by Python.
+Relative paths resolve from --root. The default production embedding boundary is
+the LM Studio text HTTP endpoint; no model weights are loaded by Python.
+Explicit image native commands can instead select a caller-owned external CUDA
+encoder with --provider external --host-config CONFIG. This is not a default or
+an HTTP image payload. The outer host owns its process/runtime/model lifecycle.
 
 Inspect the current lifecycle options with:
 
@@ -77,6 +80,19 @@ not modified.
     --allow-external-video-extractor --video-extractor-command COMMAND
   mdrack --root ./notes image ingest IMAGE_PATH --resource-id ID \\
     --source-namespace local --source-ref images/example.png --caption "A caption"
+
+Opt-in native images (no caption/OCR) use the normal engine and catalog:
+
+  mdrack --root ./notes image native-ingest IMAGE_PATH --resource-id ID \\
+    --source-namespace local --source-ref images/example.png \\
+    --provider external --host-config CONFIG
+  mdrack --root ./notes image native-search --text QUERY --mode semantic \\
+    --candidates image --provider external --host-config CONFIG
+
+CONFIG is trusted caller-owned encoder configuration, not indexed content. Only
+qualified image-document and text-query-for-image roles are admitted. No image
+query/similarity, text-document role, legacy-space compatibility or general
+quality/SLO follows. Default lmstudio still refuses native image ingestion.
 
 Review `mdrack ingest --help` and `mdrack image --help` before using a recipe;
 these operations are separate from Markdown scanning.

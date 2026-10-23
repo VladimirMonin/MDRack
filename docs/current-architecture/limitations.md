@@ -15,8 +15,10 @@ This page is a current-state boundary, not a roadmap promise.
   [non-promotion packet](../evidence/v1.3.0-sqlite-vec-nonpromotion.json) records
   the fail-closed decision. MDRack provides no sqlite-vec application extra,
   production backend, or partial-write fallback.
-- Production embeddings require a reachable LM Studio HTTP endpoint. The Python
-  package does not load embedding model weights itself.
+- Default production embeddings require a reachable LM Studio text HTTP endpoint.
+  Explicit trusted outer host/CLI composition may instead select a caller-owned bounded
+  native process via prepared-provider injection; see [ADR-0018](../decisions/0018-caller-owned-native-encoder.md).
+  Core/application/default providers and Python do not load model weights/vendor DLLs.
 - Legacy raw audio/video textual paths still consume supplied transcripts/frame captions
   or explicit local STT/extractor output. The separate 1.4.0rc3
   [native temporal component](../contracts/native-temporal-v1.md) performs bounded
@@ -32,14 +34,17 @@ This page is a current-state boundary, not a roadmap promise.
   does not establish API pixel admission; this is not a negative claim about the model,
   generic prepared-provider capabilities or all future LM Studio implementations.
   See the [input qualification](../contracts/native-image-v1.md#lm-studio-input-qualification).
-  Normal MDRack pixel/image, audio or video transport/semantic quality is not qualified.
-  A separate [external-host CUDA canary](../evaluation/native-image-cuda-canary-2026-10-23.md)
-  used actual installed native components: six fresh learned image/query vectors, sampled
-  completed CUDA outputs in both vision and backbone, and correct synthetic original
-  opens. It bypasses HTTP outside MDRack, not a new provider/default/CLI integration.
-  CPU PNG decoding/normalization, unqualified text-document role and distinct vector-space
-  identity remain explicit. Fake synthetic providers still prove local orchestration
-  only. Original real corpus/held-out/public A–D/quality-cost and W6 gates remain separate.
+  The prior [external-host canary](../evaluation/native-image-cuda-canary-2026-10-23.md)
+  and later [normal product qualification](../evaluation/native-image-product-2026-10-23.md)
+  are distinct: the latter actually exercises engine/catalog/source CLI/installed PE,
+  public original opens/reopen and zero-encode same-resource lexical enrichment with
+  an explicitly selected external provider. It does not repair the HTTP wrapper.
+  CPU PNG decoding/L2, sampled rather than all-operator CUDA proof, separate full-space
+  identity and unqualified text-document/image-query/similarity remain explicit.
+  Only bounded fixed-size RGB PNG and text-query-for-image roles are qualified; no audio /
+  video inference, independent semantic quality or portable latency/SLO follows. Fake
+  synthetic providers still prove orchestration only. Real-corpus/held-out/public A–D /
+  quality-cost/W6 gates remain separate.
 - Local capture, source guards, CPU decoding and child cleanup remain app-owned.
   `mdrack_core` and `mdrack_media` never open sources or run processes. Pure media
   builders now accept native ready observations separately from genuine textual
