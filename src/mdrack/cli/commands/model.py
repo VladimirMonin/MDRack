@@ -6,9 +6,10 @@ import asyncio
 import dataclasses
 import logging
 import re
+from collections.abc import Awaitable
 from inspect import isawaitable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import click
 
@@ -92,6 +93,9 @@ def _command_name(ctx: click.Context) -> str:
 
 def _to_jsonable(value: Any) -> Any:
     if dataclasses.is_dataclass(value):
+        # is_dataclass accepts classes too; asdict has always rejected them.
+        if isinstance(value, type):
+            raise TypeError("asdict() should be called on dataclass instances")
         return dataclasses.asdict(value)
     if isinstance(value, list):
         return [_to_jsonable(item) for item in value]
@@ -155,12 +159,20 @@ def _handle_error(ctx: click.Context, cmd: str, exc: Exception) -> None:
     ctx.exit(1)
 
 
+_Result = TypeVar("_Result")
+
+
+async def _await_client_result(result: Awaitable[_Result]) -> _Result:
+    """asyncio.run requires a coroutine on the supported Python 3.11 surface."""
+    return await result
+
+
 def _invoke_client_method(client: object, method_name: str, *args: Any) -> Any:
     alias_name = "loaded_models" if method_name == "list_loaded_models" else method_name
     method = getattr(client, method_name, None) or getattr(client, alias_name)
     result = method(*args)
     if isawaitable(result):
-        return asyncio.run(result)
+        return asyncio.run(_await_client_result(result))
     return result
 
 
@@ -298,7 +310,8 @@ def _resolve_model_key(models: list[Any], requested_name: str) -> str | None:
 
 async def _wait_for_model_download(client: object, model_name: str) -> list[dict[str, Any]]:
     for _ in range(1800):
-        result = client.get_download_status()
+        # Control clients and injected sync/async doubles share this dynamic method.
+        result = getattr(client, "get_download_status")()
         downloads = await result if isawaitable(result) else result
         download_items = [_provider_to_jsonable(item) for item in downloads]
         for item in downloads:
@@ -321,12 +334,12 @@ async def _wait_for_model_download(client: object, model_name: str) -> list[dict
 
 async def _wait_for_model_visibility(client: object, model_name: str) -> list[Any]:
     for _ in range(1800):
-        list_result = client.list_models()
-        models = await list_result if isawaitable(list_result) else list_result
+        list_result = getattr(client, "list_models")()
+        models: list[object] = await list_result if isawaitable(list_result) else list_result
         if _resolve_model_key(models, model_name) is not None:
             return models
 
-        status_result = client.get_download_status()
+        status_result = getattr(client, "get_download_status")()
         downloads = await status_result if isawaitable(status_result) else status_result
         for item in downloads:
             key = getattr(item, "key", None)

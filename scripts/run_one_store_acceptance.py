@@ -249,6 +249,14 @@ def _run_controlled_stages(logger: logging.Logger, execution_id: str) -> list[di
     return evidence
 
 
+def _uv_executable() -> str:
+    # Resolve against this caller's PATH, including isolated Windows fault fixtures.
+    executable = shutil.which("uv")
+    if executable is None:
+        raise FileNotFoundError("uv")
+    return executable
+
+
 def _build_wheels(output_dir: Path) -> list[Path]:
     package_dirs = (
         REPOSITORY_ROOT / "packages" / "mdrack-core",
@@ -258,7 +266,7 @@ def _build_wheels(output_dir: Path) -> list[Path]:
     )
     for package_dir in package_dirs:
         result = subprocess.run(
-            ["uv", "build", "--wheel", "--out-dir", str(output_dir)],
+            [_uv_executable(), "build", "--wheel", "--out-dir", str(output_dir)],
             cwd=package_dir,
             capture_output=True,
             check=False,
@@ -287,7 +295,7 @@ def _check_installed_package_origin() -> dict[str, object]:
         wheels = _build_wheels(wheel_dir)
         installed = subprocess.run(
             [
-                "uv",
+                _uv_executable(),
                 "pip",
                 "install",
                 "--python",

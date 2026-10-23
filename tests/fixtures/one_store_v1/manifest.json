@@ -45,7 +45,10 @@
       "eval", "eval retrieval", "files", "files list", "files info",
       "model", "model list", "model loaded", "model download", "model download-status",
       "model load", "model unload", "model switch",
-      "status", "doctor", "rebuild", "rebuild fts", "rebuild embeddings", "benchmark", "storage-analyze"
+      "status", "doctor", "rebuild", "rebuild fts", "rebuild embeddings", "benchmark", "storage-analyze",
+      "native", "native capabilities", "native ingest", "native query", "native search", "rebuild upgrade",
+      "resource enrich-ocr", "resource enrich-prepared", "resource enrichment-binding", "resource ocr-binding",
+      "resource publication-binding", "resource read-artifact", "resource reindex", "resource withdraw"
     ],
     "removed_cli_paths": [
       "sections", "storage", "storage rebuild-fresh", "storage verify", "storage activate"
@@ -56,19 +59,30 @@
       "get_chunk", "get_chunk_source_locator", "get_file_by_path", "get_file_outline", "get_resource_metadata", "read_unit",
       "import_resource_manifest", "inspect_resource", "ingest_image", "ingest_transcript", "ingest_video", "list_metadata_facets",
       "ingest_native_image", "search_media", "scan", "search_hybrid", "search_images_hybrid", "search_images_semantic", "search_images_text",
-      "search_resource_content", "search_resources_text", "search_semantic", "search_text", "search_transcripts", "search_unified"
+      "search_resource_content", "search_resources_text", "search_semantic", "search_text", "search_transcripts", "search_unified",
+      "enrich_prepared", "enrich_ready_ocr", "ingest_native_media", "native_media_capabilities", "prepare_enrichment",
+      "prepare_ready_ocr", "prepare_reindex_file", "prepared_enrichment_binding", "publication_binding", "publish_enrichment",
+      "publish_ready_ocr", "publish_reindex", "read_enrichment_artifact", "ready_ocr_binding", "reindex_resource_file",
+      "search_native_media", "upgrade_catalog", "withdraw_resource"
     ],
     "removed_engine_methods": [],
     "catalog_backed_cli_paths": [
       "status", "doctor", "search", "files list", "files info", "read file", "read chunk", "read unit", "read outline",
       "resource import", "resource export", "resource inspect", "resource delete", "eval retrieval", "metadata show", "metadata facets", "resources duplicates", "resources search", "resources facets",
-      "find-similar", "image search", "rebuild fts", "benchmark", "storage-analyze"
+      "find-similar", "image search", "rebuild fts", "benchmark", "storage-analyze",
+      "native ingest", "native query", "native search", "rebuild upgrade", "resource enrich-ocr", "resource enrich-prepared",
+      "resource enrichment-binding", "resource ocr-binding", "resource publication-binding",
+      "resource reindex", "resource withdraw"
     ],
     "catalog_backed_engine_methods": [
       "search_text", "search_semantic", "search_hybrid", "search_unified", "get_file_by_path", "get_file_outline", "get_chunk", "read_unit",
       "get_chunk_source_locator", "get_resource_metadata", "import_resource_manifest", "export_resource_manifest",
       "export_resource_manifest_file", "inspect_resource", "delete_resource", "list_metadata_facets", "search_resources_text",
-      "find_resource_duplicates", "find_similar_resource", "analyze_storage"
+      "find_resource_duplicates", "find_similar_resource", "analyze_storage",
+      "enrich_prepared", "enrich_ready_ocr", "ingest_native_media", "prepare_enrichment", "prepare_ready_ocr",
+      "prepare_reindex_file", "prepared_enrichment_binding", "publication_binding", "publish_enrichment", "publish_ready_ocr",
+      "publish_reindex", "ready_ocr_binding", "reindex_resource_file", "search_native_media",
+      "upgrade_catalog", "withdraw_resource"
     ],
     "normal_application_forbidden_options": ["--catalog"],
     "normal_application_forbidden_storage_subcommands": ["rebuild-fresh", "verify", "activate"]

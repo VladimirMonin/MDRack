@@ -152,15 +152,20 @@ def test_failed_rerun_replaces_older_success_with_bounded_failure_evidence(tmp_p
 
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
-    fake_uv = fake_bin / "uv"
-    fake_uv.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
-    fake_uv.chmod(0o755)
+    marker = tmp_path / "fake-uv-called"
+    fake_uv = fake_bin / ("uv.cmd" if os.name == "nt" else "uv")
+    if os.name == "nt":
+        fake_uv.write_text(f'@echo called>"{marker}"\n@exit /b 1\n', encoding="utf-8")
+    else:
+        fake_uv.write_text(f'#!/bin/sh\nprintf called > "{marker}"\nexit 1\n', encoding="utf-8")
+        fake_uv.chmod(0o755)
     known_failed, _, _ = _run_runner(
         evidence_root,
         skip_installed_package=False,
-        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"},
+        env={**os.environ, "PATH": str(fake_bin) + os.pathsep + os.environ["PATH"]},
     )
     assert known_failed.returncode == 1
+    assert marker.read_text(encoding="utf-8").strip() == "called"
     known_failure_summary = json.loads((latest / "summary.json").read_text(encoding="utf-8"))
     assert known_failure_summary["checks"]["acceptance"]["reason"] == "dependency_failed"
     assert known_failure_summary["checks"]["acceptance"]["previous_latest_invalidated"] is True

@@ -73,6 +73,36 @@ from mdrack_core.domain import SearchScope, VectorBranch
 from mdrack_sqlite import SQLiteCatalog
 
 
+def peak_rss_kib():
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        class Counters(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+                (name, ctypes.c_size_t) for name in (
+                    "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage",
+                    "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage")]
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GetCurrentProcess.restype = wintypes.HANDLE
+        api = ctypes.WinDLL("psapi", use_last_error=True).GetProcessMemoryInfo
+        api.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+        api.restype = wintypes.BOOL
+        counters = Counters()
+        counters.cb = ctypes.sizeof(counters)
+        if not api(kernel.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+            raise ctypes.WinError(ctypes.get_last_error())
+        value = counters.PeakWorkingSetSize / 1024
+    elif resource is not None and sys.platform in {"linux", "darwin"}:
+        value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            value /= 1024
+    else:
+        raise RuntimeError("peak RSS measurement unsupported on this platform")
+    if value <= 0:
+        raise RuntimeError("peak RSS measurement invalid")
+    return value
+
+
 def sample(catalog, branch):
     started_cpu = time.process_time()
     started = time.perf_counter()
@@ -85,7 +115,7 @@ def sample(catalog, branch):
     return {
         "wall_ms": wall_ms,
         "cpu_ms": cpu_ms,
-        "rss_kib": None if resource is None else resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        "rss_kib": peak_rss_kib(),
         "candidate_rows": counters.candidate_rows,
         "decoded_vectors": counters.decoded_vectors,
         "skipped_vectors": counters.skipped_vectors,
@@ -192,68 +222,36 @@ def _vector_payload(values: tuple[float, ...], codec: CodecSpec) -> bytes:
 
 
 def make_catalog(path: Path, count: int, dimensions: int, codec: CodecSpec) -> None:
+    """Materialize the synthetic graph through its canonical writer, outside timing."""
+    locator = Locator("synthetic", {})
+    space = EmbeddingSpaceRecord(
+        "space", dimensions, "cosine", "offline-envelope-v1", json.loads(_space_metadata(codec))
+    )
+    units = tuple(
+        SearchUnitRecord(f"unit-{i:08d}", "resource", "representation", "whole_resource", "text", None, locator, i)
+        for i in range(count)
+    )
+    vectors = tuple(
+        VectorRecord(unit.unit_id, "space", _vector_for_codec(f"benchmark-unit-{i}", dimensions, codec))
+        for i, unit in enumerate(units)
+    )
+    batch = PreparedResourceBatch(
+        ResourceRecord("resource", "synthetic", "application/x.synthetic", "offline-envelope", locator),
+        (RepresentationRecord("representation", "resource", "whole_resource", "text"),),
+        units, (space,), vectors,
+    )
     with SQLiteCatalog.create_v2(path) as catalog:
-        connection = catalog.connection
-        now = "2026-07-24T00:00:00+00:00"
-        connection.execute(
-            "INSERT INTO core_resources VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                "resource",
-                "synthetic",
-                "application/x.synthetic",
-                "offline-envelope",
-                "synthetic",
-                "{}",
-                "sha256:" + "0" * 64,
-                None,
-                None,
-                "{}",
-                now,
-            ),
-        )
-        connection.execute(
-            "INSERT INTO core_representations VALUES(?,?,?,?,?,?,?,?,?,?)",
-            ("representation", "resource", "whole_resource", "text", None, None, None, None, None, "{}"),
-        )
-        connection.execute(
-            "INSERT INTO core_embedding_spaces VALUES(?,?,?,?,?)",
-            ("space", dimensions, "cosine", "offline-envelope-v1", _space_metadata(codec)),
-        )
-        for start in range(0, count, 1_000):
-            stop = min(count, start + 1_000)
-            connection.executemany(
-                "INSERT INTO core_search_units VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    (
-                        f"unit-{index:08d}",
-                        "resource",
-                        "representation",
-                        "whole_resource",
-                        "text",
-                        None,
-                        "synthetic",
-                        "{}",
-                        index,
-                        None,
-                        None,
-                        "{}",
-                    )
-                    for index in range(start, stop)
-                ),
+        catalog.replace_resource(batch)
+        catalog.verify()
+        if codec.name == "legacy-json":
+            # Diagnostic read-only baseline only: substitute the codec on an already
+            # valid graph. This is deliberately not a production JSON writer.
+            catalog.connection.executemany(
+                "UPDATE core_unit_embeddings SET embedding=? WHERE unit_id=? AND space_id='space'",
+                ((_vector_payload(v.vector, codec), v.unit_id) for v in vectors),
             )
-            connection.executemany(
-                "INSERT INTO core_unit_embeddings VALUES(?,?,?,?)",
-                (
-                    (
-                        f"unit-{index:08d}",
-                        "space",
-                        _vector_payload(_vector_for_codec(f"benchmark-unit-{index}", dimensions, codec), codec),
-                        now,
-                    )
-                    for index in range(start, stop)
-                ),
-            )
-        connection.commit()
+            catalog.connection.commit()
+            catalog.verify()
 
 
 def _run_child(

@@ -4,7 +4,12 @@ Full programme and obligations: [canonical 03](../../docs/proposals/native-media
 Read [bundle](../../docs/proposals/native-media/README.md) in order 01 → 02 → 04 → 03.
 This entry tracks execution, not another roadmap or evidence registry.
 
-## Status and dependencies
+Current software acceptance and the next bounded execution are recorded in
+[the latest status](#current-acceptance-and-next-execution). Earlier per-family OPEN /
+FAIL statements below retain their original acceptance boundary; they do not reopen
+findings explicitly closed by a later qualified result.
+
+## Historical family scopes and dependencies
 
 - W1-A: scoped documentation/tooling/setup independently ACCEPTED, including R3 BOM
   normalization; R1/R2 remain closed. No media/runtime/evaluator/CAS implementation
@@ -134,3 +139,59 @@ Knowledge stays with [DOCS](../../instructions/DOCS.architecture.instructions.md
 [current architecture](../../docs/current-architecture/README.md), package API/ADR/CLI
 contracts and [release runbook](../../docs/offline-release-verification.md).
 Programme completion is not inferred from completion of W1-A.
+
+## 2026-10-23 bounded successor status (historical pre-final cutoff)
+
+Finite14/all103 strict repair is independently ACCEPTED: actual Root strict0/213,
+Ruff0; source and fresh installed affected190 PASS/1 POSIX SKIP overlap, not380 unique
+cases;233 exact payloads and7 contract groups. Earlier exact103 RED entries remain
+historical observations, not current static debt.
+
+Suite K1–K7 author owning checks:77 PASS, including actual isolated offline four-wheel
+consumers and unchanged historical66 input checks. This is not independent acceptance
+of that successor or a full-suite/release claim. Historical full raw1/2371 PASS/18 FAIL/
+6 SKIP remains unchanged. Current named semantic skill input yielded actual4 PASS/
+2 semantic FAIL; these two read-only content contracts remain OPEN, not read refusals
+or skips. Final full gates, coherent-candidate independent review and explicit scoped
+Git authority are still mandatory. Model/native-pixel/full-corpus quality-cost,
+programme/W6/operational/release obligations are not inferred closed.
+
+## Current acceptance and next execution
+
+The connected PUBLIC30 repair is independently ACCEPTED, including the final exact
+one-fixture taxonomy correction. Host-only artifact reads stay registered but are not
+catalog-backed; actual engine/public CLI-callable access without a catalog and the
+true catalog sibling are qualified. Fresh final affected selection:28 PASS, no skips /
+deselection. Retained pre-correction independent full:2412 selected /2406 PASS /
+6 historical SKIP /0 FAIL. Original18, owning77/new17, strict0/213, Ruff/boundaries,
+four-wheel233 payloads and actual Windows PE controls retain their stated boundaries.
+Current-skill six and the committed-input six are different inputs; the whole user-dirty
+skill is excluded from this scoped publication. Earlier full18 and skill2 FAIL observations
+are historical, not current blockers. W3/W4 and native/corpus software acceptance remain
+closed; full pytest does not establish native-model or programme fitness.
+
+Necessary documentation/instruction and verified-retrospective integration follows this
+software PASS. Scoped commit/ordinary branch delivery is separate from tag/package /
+release approval; the actual commit and GitHub readback belong to delivery receipts.
+
+The next execution order is finite and does not reopen accepted W3/W4:
+
+1. **Old OCR correctness, next task:** change an existing OCR text under the same
+   revision while a dependent vector exists; verify dependency invalidation/replacement
+   and actual subsequent search/read state. Separately apply an automatic result over a
+   manual edit and verify the declared conflict/precedence behavior and retained text /
+   vector state. These are bounded current-boundary checks, not another architecture audit.
+2. **One genuine image route:** explicitly supported provider/API/runtime, image without
+   OCR → actual image vector → text query → the correct openable image. Then add text
+   enrichment to that same material and verify additional lexical retrieval without
+   losing the native projection. Production embeddings remain LM Studio HTTP; selecting
+   another route requires coherent authorized architecture/code/tests/instruction changes
+   first. No caption proxy for pixels, inherited budget or implied private-media permission.
+3. **Quality and scale through existing owners:** existing runner with independent
+   materials, similar distractors, RU/EN/negative queries and predeclared criteria;
+   separately measure catalog-open and search latency over increasing chunk counts.
+   Keep original source-group/held-out, quality-cost and observability obligations.
+
+These follow-ons are not gates for this repair. No inference/acquisition allowance is
+renewed; real model/media work requires its own concrete authorized inputs/runtime and
+budget. W6/operational/release and broader quality remain separate from scoped delivery.

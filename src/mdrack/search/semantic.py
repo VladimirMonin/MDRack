@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
+from typing import cast
 
 from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.application.retrieval import RetrievalService
 from mdrack.domain.indexing import SourceLocator
 from mdrack.ports.embeddings import EmbeddingProvider
+from mdrack.ports.storage import RetrievalStorage
 
 
 @dataclass
@@ -30,7 +33,7 @@ class SemanticSearchResult:
 
 
 async def semantic_search(
-    conn,
+    conn: sqlite3.Connection,
     query: str,
     provider: EmbeddingProvider,
     profile: str = "default",
@@ -40,7 +43,10 @@ async def semantic_search(
     if not query.strip():
         return SemanticSearchResult(query=query.strip(), results=[], total_count=0)
     result = await RetrievalService(
-        SQLiteIndexStorage(conn),
+        # The service's callable(search_core) guard deliberately selects its
+        # legacy retrieve_* branch for this adapter. The frozen broad port also
+        # lists Core-only methods; this cast is limited to that dynamic boundary.
+        cast(RetrievalStorage, SQLiteIndexStorage(conn)),
         embedding_provider=provider,
         profile=profile,
     ).search_semantic(query, limit=limit)

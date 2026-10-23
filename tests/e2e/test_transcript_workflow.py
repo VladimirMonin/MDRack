@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 from typing import Any
 
@@ -38,16 +39,26 @@ def test_installed_cli_and_engine_timed_transcript_parity(tmp_path: Path) -> Non
     assert len(wheels) == 4
     virtualenv = tmp_path / "venv"
     _run([uv, "venv", "--python", sys.executable, virtualenv], cwd=tmp_path, environment=environment)
-    python = virtualenv / "bin" / "python"
-    source_site_packages = (
-        Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-    )
-    target_site_packages = (
-        virtualenv / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-    )
+    python = virtualenv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    source_site_packages = Path(sysconfig.get_path("purelib"))
+    layout = json.loads(_run(
+        [python, "-I", "-B", "-S", "-c",
+         "import json,sysconfig;print(json.dumps({k:sysconfig.get_path(k) for k in ('purelib','scripts')}))"],
+        cwd=tmp_path, environment=environment,
+    ).stdout)
+    target_site_packages = Path(layout["purelib"])
     assert source_site_packages.is_dir()
-    (target_site_packages / "mdrack-test-dependencies.pth").write_text(
-        f"{source_site_packages}\n",
+    # Explicit isolated dependency overlay; never .pth/source fallback for project imports.
+    entry = tmp_path / "installed_entry.py"
+    entry.write_text(
+        "import importlib.metadata,json,sys\nfrom pathlib import Path\n"
+        f"sys.path[:0]=[{str(target_site_packages)!r},{str(source_site_packages)!r}]\n"
+        "import mdrack,mdrack_core,mdrack_media,mdrack_sqlite\n"
+        "origins={m.__name__:m.__file__ for m in (mdrack,mdrack_core,mdrack_media,mdrack_sqlite)}\n"
+        f"assert all(Path(p).is_relative_to(Path({str(target_site_packages)!r})) for p in origins.values())\n"
+        f"Path({str(tmp_path / 'installed-origins.json')!r}).write_text(json.dumps(origins))\n"
+        "next(e for e in importlib.metadata.distribution('mdrack').entry_points "
+        "if e.group=='console_scripts' and e.name=='mdrack').load()()\n",
         encoding="utf-8",
     )
     _run(
@@ -70,12 +81,14 @@ def test_installed_cli_and_engine_timed_transcript_parity(tmp_path: Path) -> Non
             separators=(",", ":"),
         )
     )
-    executable = virtualenv / "bin" / "mdrack"
-    _run([executable, "--root", root, "init"], cwd=root, environment=environment)
+    executable = Path(layout["scripts"]) / ("mdrack.exe" if os.name == "nt" else "mdrack")
+    assert executable.is_file()
+    cli = [python, "-I", "-B", "-S", entry]
+    _run([*cli, "--root", root, "init"], cwd=root, environment=environment)
     canonical_resource = resource_id("fixture", "installed-audio")
     ingested = _run(
         [
-            executable,
+            *cli,
             "--root",
             root,
             "ingest",
@@ -100,7 +113,7 @@ def test_installed_cli_and_engine_timed_transcript_parity(tmp_path: Path) -> Non
     cli_results: dict[str, Any] = {}
     for mode in ("text", "semantic", "hybrid"):
         command: list[str | Path] = [
-            executable,
+            *cli,
             "--root",
             root,
             "search",
@@ -116,10 +129,14 @@ def test_installed_cli_and_engine_timed_transcript_parity(tmp_path: Path) -> Non
     probe = _run(
         [
             python,
-            "-c",
+            "-I", "-B", "-S", "-c",
             (
-                "import asyncio,json\n"
+                "import asyncio,json,sys\n"
                 "from pathlib import Path\n"
+                f"sys.path[:0]=[{str(target_site_packages)!r},{str(source_site_packages)!r}]\n"
+                "import mdrack,mdrack_core,mdrack_media,mdrack_sqlite\n"
+                f"assert all(Path(m.__file__).is_relative_to(Path({str(target_site_packages)!r})) "
+                "for m in (mdrack,mdrack_core,mdrack_media,mdrack_sqlite))\n"
                 "from mdrack.config.models import MDRackConfig\n"
                 "from mdrack.embeddings.fake import FakeEmbeddingProvider\n"
                 "from mdrack.public_api.engine import MDRackEngine\n"
@@ -136,6 +153,9 @@ def test_installed_cli_and_engine_timed_transcript_parity(tmp_path: Path) -> Non
         environment=environment,
     )
 
+    origins = json.loads((tmp_path / "installed-origins.json").read_text())
+    assert set(origins) == {"mdrack", "mdrack_core", "mdrack_media", "mdrack_sqlite"}
+    assert all(Path(p).is_relative_to(target_site_packages) for p in origins.values())
     ingest_data = json.loads(ingested.stdout)["data"]
     engine_results = json.loads(probe.stdout)
     assert ingest_data["resource_id"] == canonical_resource

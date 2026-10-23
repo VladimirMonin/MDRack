@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import runpy
 import subprocess
 import sys
 import tomllib
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET_PATH = REPO_ROOT / "docs" / "evidence" / "v1.3.0-sqlite-vec-nonpromotion.json"
@@ -88,6 +91,39 @@ def test_sqlite_vec_nonpromotion_packet_records_the_tie_boundary_blocker() -> No
         "backend_id": "builtin-exact-v1",
         "accelerator_release": "not_authorized",
     }
+
+
+@pytest.mark.parametrize("damage", ["path", "windows_spelling", "hash", "promotion", "tie"])
+def test_nonpromotion_validator_refuses_packet_drift(damage: str) -> None:
+    validator = runpy.run_path(str(REPO_ROOT / "scripts/check_v13_sqlite_vec_nonpromotion.py"))
+    packet = json.loads(PACKET_PATH.read_text(encoding="utf-8"))
+    if damage == "path":
+        packet["source_plan"]["path"] = "../wrong.md"
+    elif damage == "windows_spelling":
+        packet["source_plan"]["path"] = packet["source_plan"]["path"].replace("/", "\\\\")
+    elif damage == "hash":
+        packet["source_plan"]["sha256"] = "0" * 64
+    elif damage == "promotion":
+        packet["probe_evidence"]["report"]["decision"]["promotion_allowed"] = True
+    else:
+        next(x for x in packet["probe_evidence"]["report"]["outcomes"]
+             if x["name"] == "tie_boundary")["status"] = "pass"
+    with pytest.raises(ValueError):
+        validator["_validate_packet"](packet)
+
+
+def test_nonpromotion_locator_uses_posix_packet_grammar_on_windows(monkeypatch) -> None:
+    validate = runpy.run_path(str(REPO_ROOT / "scripts/check_v13_sqlite_vec_nonpromotion.py"))["_validate_packet"]
+
+    class WindowsPlan:
+        def relative_to(self, root):
+            return PureWindowsPath("docs/plans/2026-07-24-v1.3-compact-storage-sqlite-vec.md")
+
+        def read_bytes(self):
+            return PLAN_PATH.read_bytes()
+
+    monkeypatch.setitem(validate.__globals__, "PLAN_PATH", WindowsPlan())
+    validate(json.loads(PACKET_PATH.read_text(encoding="utf-8")))
 
 
 def test_sqlite_vec_nonpromotion_packet_validator_passes() -> None:

@@ -43,7 +43,7 @@ def start_index_run(conn: sqlite3.Connection) -> str:
 def complete_index_run(
     conn: sqlite3.Connection,
     run_id: str,
-    stats: dict,
+    stats: dict[str, int],
     success: bool = True,
     error_message: Optional[str] = None,
 ) -> None:
@@ -88,7 +88,7 @@ def record_diagnostic(
     severity: str,
     code: str,
     message: str,
-    details: Optional[dict] = None,
+    details: Optional[dict[str, object]] = None,
 ) -> None:
     """Insert a diagnostic record for an index run.
 

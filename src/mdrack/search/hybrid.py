@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from typing import cast
 
 from mdrack.adapters.sqlite.index_storage import SQLiteIndexStorage
 from mdrack.application.retrieval import RetrievalService
 from mdrack.config.models import MDRackConfig
 from mdrack.domain.indexing import SourceLocator
 from mdrack.ports.embeddings import EmbeddingProvider
+from mdrack.ports.storage import RetrievalStorage
 
 
 @dataclass
@@ -51,7 +53,10 @@ async def hybrid_search(
     if not query.strip():
         return HybridSearchResult(query=query.strip(), results=[], total_count=0)
     result = await RetrievalService(
-        SQLiteIndexStorage(conn),
+        # Frozen broad port includes Core-only methods; RetrievalService's
+        # callable(search_core) guard selects this adapter's real retrieve_*
+        # legacy methods. No Core capability is added or asserted at runtime.
+        cast(RetrievalStorage, SQLiteIndexStorage(conn)),
         embedding_provider=provider,
         profile="default",
         rrf_k=config.search.rrf_k,

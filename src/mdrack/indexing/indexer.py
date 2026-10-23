@@ -7,6 +7,7 @@ from pathlib import Path
 
 from mdrack.application.compatibility import create_application_storage
 from mdrack.application.indexing import IndexingService
+from mdrack.config.models import MDRackConfig
 
 
 @dataclass
@@ -27,7 +28,7 @@ class IndexerResult:
 
 def run_indexer(
     root: Path,
-    config,
+    config: MDRackConfig,
     provider: object | None = None,
     profile: str = "default",
     force_reindex: bool = False,

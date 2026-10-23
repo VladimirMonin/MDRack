@@ -46,6 +46,9 @@ sys.exit(0)
     bash_env.write_text(f'export PATH="{bin_dir.as_posix()}:$PATH"\n', encoding="utf-8")
     env = {**os.environ, "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
            "BASH_ENV": str(bash_env), "CALLS": str(tmp_path / "calls.jsonl")}
+    # Only this disposable shell/native boundary needs ordinary MSYS path conversion.
+    env.pop("MSYS2_ARG_CONV_EXCL", None)
+    env.pop("MSYS_NO_PATHCONV", None)
     return root, env
 
 

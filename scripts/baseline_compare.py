@@ -317,10 +317,12 @@ def _run_checkout(
         env = os.environ.copy()
         env["PYTHONPATH"] = str(checkout / "src")
         env["PYTHONDONTWRITEBYTECODE"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
         try:
             completed = subprocess.run(
                 [sys.executable, "-c", _WORKER_SOURCE],
                 input=request,
+                encoding="utf-8",
                 cwd=checkout,
                 env=env,
                 capture_output=True,
@@ -350,6 +352,7 @@ def _run_checkout(
                     "environment": {
                         "PYTHONPATH": "<checkout>/src",
                         "PYTHONDONTWRITEBYTECODE": "1",
+                        "PYTHONIOENCODING": "utf-8",
                     },
                     "stdin_contract": "fixed-corpus-and-query-set",
                     "worker_sha256": hashlib.sha256(_WORKER_SOURCE.encode("utf-8")).hexdigest(),

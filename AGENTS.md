@@ -26,11 +26,13 @@ through an LM Studio HTTP endpoint, and returning stable JSON retrieval results.
 uv sync --all-extras
 uv run pytest
 uv run ruff check src/ tests/
-uv run ruff check packages/mdrack-core/src/ packages/mdrack-sqlite/src/
-uv run mypy packages/mdrack-core/src/mdrack_core packages/mdrack-sqlite/src/mdrack_sqlite
+uv run ruff check packages/mdrack-core/src/ packages/mdrack-media/src/ packages/mdrack-sqlite/src/
+uv run mypy src/mdrack packages/mdrack-core/src/mdrack_core packages/mdrack-media/src/mdrack_media packages/mdrack-sqlite/src/mdrack_sqlite scripts/run_native_evaluation.py --no-incremental --show-error-codes
 uv run python scripts/check_no_forbidden_deps.py
 uv run python scripts/check_core_boundaries.py
+uv run python scripts/check_media_boundaries.py
 uv run python scripts/check_sqlite_boundaries.py
+uv run python scripts/check_documentation.py --check
 git diff --check
 ```
 

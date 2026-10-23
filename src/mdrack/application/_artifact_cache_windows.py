@@ -126,7 +126,9 @@ def validate_private(handle: Handle) -> None:
         for index in range(acl.count):
             ace = c.c_void_p()
             _bool(a.GetAce(dacl, index, c.byref(ace)))
-            header = (w.BYTE * 4).from_address(ace.value)
+            # Successful GetAce supplies a non-null ACE address owned by sd.
+            ace_address = cast(int, ace.value)
+            header = (w.BYTE * 4).from_address(ace_address)
             ace_type, flags = header[0], header[1]
             if ace_type == 1:  # deny ACE cannot grant access
                 continue
@@ -134,7 +136,7 @@ def validate_private(handle: Handle) -> None:
                 raise ValueError("artifact cache ACL type unsupported")
             if flags & 8:  # inherit-only does not grant on this object
                 continue
-            sid_ptr = ace.value + 8
+            sid_ptr = ace_address + 8
             if not any(a.EqualSid(sid_ptr, allowed) for allowed in [owner, *sids]):
                 raise ValueError("artifact cache ACL is not private")
     finally:
@@ -174,7 +176,8 @@ def _open(parent: Handle | None, name: str, *, directory: bool | None = True,
         options = 0x200000 | 0x20 | (1 if directory is True else 0x40 if directory is False else 0)
         _nt(n.NtCreateFile(c.byref(raw), access, c.byref(attrs), c.byref(ios), None,
                            0x80, 7, disposition, options, None, 0))
-        handle = Handle(raw.value)
+        # Successful NtCreateFile initializes the returned HANDLE.
+        handle = Handle(cast(int, raw.value))
         try:
             if validate and directory is not None:
                 _real(handle, directory=directory, private=private)
@@ -197,7 +200,7 @@ def open_root(path: Path, *, create: bool) -> Handle | None:
     prefix = "\\??\\UNC\\" + drive[2:] if drive.startswith("\\\\") else "\\??\\" + drive
     # Walk every ancestor without dereferencing reparse points. Ancestors are
     # not cache-owned; only newly created components and the final root are private.
-    parent = _open(None, prefix + "\\", private=False)
+    parent: Handle | None = _open(None, prefix + "\\", private=False)
     try:
         parts = [p for p in tail.split("\\") if p]
         for index, part in enumerate(parts):
@@ -207,6 +210,8 @@ def open_root(path: Path, *, create: bool) -> Handle | None:
                               private=final)
             except FileNotFoundError:
                 return None
+            # The prior acquisition remains owned until this child succeeds.
+            assert parent is not None
             close(parent)
             parent = child
         if not parts:
@@ -297,7 +302,8 @@ def regular_file_info(parent: Handle, name: str) -> os.stat_result:
 def _stream(handle: Handle, mode: str) -> BinaryIO:
     flags = os.O_BINARY | (os.O_WRONLY if mode == "wb" else os.O_RDONLY)
     try:
-        fd = msvcrt.open_osfhandle(handle.value, flags)
+        # Only _open-acquired, not-yet-transferred handles reach this boundary.
+        fd = msvcrt.open_osfhandle(cast(int, handle.value), flags)
     except BaseException:
         close(handle)
         raise

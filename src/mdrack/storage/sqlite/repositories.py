@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
 
-def _row_to_dict(row: sqlite3.Row | None) -> dict | None:
+def _row_to_dict(row: sqlite3.Row | None) -> dict[str, object] | None:
     """Convert a sqlite3.Row to a plain dict, or return None."""
     if row is None:
         return None
     return dict(row)
 
 
-def list_files(conn: sqlite3.Connection, offset: int = 0, limit: int = 20) -> list[dict]:
+def list_files(conn: sqlite3.Connection, offset: int = 0, limit: int = 20) -> list[dict[str, object]]:
     """Return a paginated list of files ordered by relative_path.
 
     Args:
@@ -33,7 +34,7 @@ def list_files(conn: sqlite3.Connection, offset: int = 0, limit: int = 20) -> li
     return [dict(row) for row in cursor.fetchall()]
 
 
-def get_file(conn: sqlite3.Connection, file_id: str) -> dict | None:
+def get_file(conn: sqlite3.Connection, file_id: str) -> dict[str, object] | None:
     """Return a single file by its ID, or None if not found.
 
     Args:
@@ -47,7 +48,7 @@ def get_file(conn: sqlite3.Connection, file_id: str) -> dict | None:
     return _row_to_dict(cursor.fetchone())
 
 
-def get_file_by_path(conn: sqlite3.Connection, relative_path: str) -> dict | None:
+def get_file_by_path(conn: sqlite3.Connection, relative_path: str) -> dict[str, object] | None:
     """Return a single file by its relative path, or None if not found.
 
     Args:
@@ -64,7 +65,7 @@ def get_file_by_path(conn: sqlite3.Connection, relative_path: str) -> dict | Non
     return _row_to_dict(cursor.fetchone())
 
 
-def list_sections(conn: sqlite3.Connection, file_id: str) -> list[dict]:
+def list_sections(conn: sqlite3.Connection, file_id: str) -> list[dict[str, object]]:
     """Return all sections for a file, ordered by start_line.
 
     Args:
@@ -81,7 +82,7 @@ def list_sections(conn: sqlite3.Connection, file_id: str) -> list[dict]:
     return [dict(row) for row in cursor.fetchall()]
 
 
-def list_chunks_by_section(conn: sqlite3.Connection, section_id: str) -> list[dict]:
+def list_chunks_by_section(conn: sqlite3.Connection, section_id: str) -> list[dict[str, object]]:
     """Return all chunks for a section, ordered by chunk_index.
 
     Args:
@@ -98,7 +99,7 @@ def list_chunks_by_section(conn: sqlite3.Connection, section_id: str) -> list[di
     return [dict(row) for row in cursor.fetchall()]
 
 
-def get_section(conn: sqlite3.Connection, section_id: str) -> dict | None:
+def get_section(conn: sqlite3.Connection, section_id: str) -> dict[str, object] | None:
     """Return a single section by its ID, or None if not found.
 
     Args:
@@ -112,7 +113,7 @@ def get_section(conn: sqlite3.Connection, section_id: str) -> dict | None:
     return _row_to_dict(cursor.fetchone())
 
 
-def get_chunk(conn: sqlite3.Connection, chunk_id: str) -> dict | None:
+def get_chunk(conn: sqlite3.Connection, chunk_id: str) -> dict[str, object] | None:
     """Return a single chunk by its ID, or None if not found.
 
     Args:
@@ -126,7 +127,7 @@ def get_chunk(conn: sqlite3.Connection, chunk_id: str) -> dict | None:
     return _row_to_dict(cursor.fetchone())
 
 
-def get_neighbors(conn: sqlite3.Connection, chunk_id: str, count: int = 2) -> list[dict]:
+def get_neighbors(conn: sqlite3.Connection, chunk_id: str, count: int = 2) -> list[dict[str, object]]:
     """Return previous and next chunks relative to the given chunk.
 
     Uses the ``previous_chunk_id`` and ``next_chunk_id`` columns in the
@@ -146,8 +147,9 @@ def get_neighbors(conn: sqlite3.Connection, chunk_id: str, count: int = 2) -> li
     if anchor is None:
         return []
 
-    prev_chunks: list[dict] = []
-    current_id: str | None = anchor.get("previous_chunk_id")
+    prev_chunks: list[dict[str, object]] = []
+    # Immutable chunks DDL declares both link columns TEXT NULL.
+    current_id = cast(str | None, anchor.get("previous_chunk_id"))
     for _ in range(count):
         if current_id is None:
             break
@@ -155,10 +157,10 @@ def get_neighbors(conn: sqlite3.Connection, chunk_id: str, count: int = 2) -> li
         if chunk is None:
             break
         prev_chunks.append(chunk)
-        current_id = chunk.get("previous_chunk_id")
+        current_id = cast(str | None, chunk.get("previous_chunk_id"))
 
-    next_chunks: list[dict] = []
-    current_id = anchor.get("next_chunk_id")
+    next_chunks: list[dict[str, object]] = []
+    current_id = cast(str | None, anchor.get("next_chunk_id"))
     for _ in range(count):
         if current_id is None:
             break
@@ -166,7 +168,7 @@ def get_neighbors(conn: sqlite3.Connection, chunk_id: str, count: int = 2) -> li
         if chunk is None:
             break
         next_chunks.append(chunk)
-        current_id = chunk.get("next_chunk_id")
+        current_id = cast(str | None, chunk.get("next_chunk_id"))
 
     prev_chunks.reverse()
     return prev_chunks + next_chunks
@@ -181,7 +183,8 @@ def count_files(conn: sqlite3.Connection) -> int:
     Returns:
         Row count.
     """
-    return conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+    # SQLite COUNT(*) always returns one INTEGER cell, even for an empty table.
+    return cast(int, conn.execute("SELECT COUNT(*) FROM files").fetchone()[0])
 
 
 def count_chunks(conn: sqlite3.Connection) -> int:
@@ -193,7 +196,7 @@ def count_chunks(conn: sqlite3.Connection) -> int:
     Returns:
         Row count.
     """
-    return conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    return cast(int, conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
 
 
 def count_embeddings(conn: sqlite3.Connection, profile_name: str = "default") -> int:
@@ -206,7 +209,7 @@ def count_embeddings(conn: sqlite3.Connection, profile_name: str = "default") ->
     Returns:
         Row count.
     """
-    return conn.execute(
+    return cast(int, conn.execute(
         "SELECT COUNT(*) FROM chunk_embeddings WHERE profile_name = ?",
         (profile_name,),
-    ).fetchone()[0]
+    ).fetchone()[0])

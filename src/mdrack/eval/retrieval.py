@@ -144,24 +144,24 @@ async def _run_single_query(
             retrieved_ids = [r.chunk_id for r in result.results]
 
         elif query.mode == "semantic":
-            result = await semantic_search(
+            semantic_result = await semantic_search(
                 conn, query.query, provider, profile=profile, limit=query_k,
             )
-            retrieved_ids = [r.chunk_id for r in result.results]
-            if result.error:
+            retrieved_ids = [r.chunk_id for r in semantic_result.results]
+            if semantic_result.error:
                 conditions_met = False
-                error = result.error
+                error = semantic_result.error
 
         elif query.mode == "hybrid":
             if config is None:
                 config = MDRackConfig()
-            result = await hybrid_search(
+            hybrid_result = await hybrid_search(
                 conn, query.query, provider, config, limit=query_k,
             )
-            retrieved_ids = [r.chunk_id for r in result.results]
-            if result.error:
+            retrieved_ids = [r.chunk_id for r in hybrid_result.results]
+            if hybrid_result.error:
                 conditions_met = False
-                error = result.error
+                error = hybrid_result.error
     except Exception:
         logger.error("eval.search.failed reason=search_error mode=%s", query.mode)
         conditions_met = False

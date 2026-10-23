@@ -43,14 +43,22 @@ and any skipped gate with a concrete reason.
 - Documentation: relative links, heading anchors, Mermaid syntax/rendering or waiver,
   instruction routing/frontmatter, and `git diff --check`.
 - Packaging/public CLI: use installed-package or live CLI checks when the claim crosses
-  beyond unit-level source behavior.
+  beyond unit-level source behavior. Keep normal PEP 517 build isolation; offline builds
+  need an explicitly provisioned, identity-checked backend wheelhouse, not a switch that
+  silently removes isolation. Source/callable CLI checks and native console-launcher
+  checks are different boundaries; do not attribute Python `-S` startup to a normal PE.
 
 ## Test design
 
 - Prefer public behavior and stable invariants over incidental implementation details.
 - Every repaired semantic defect gets a regression test that fails for the original cause.
 - Golden fixtures must state what is stable and must not hide gaps, stripped separators,
-  nondeterminism, or lossy normalization.
+  nondeterminism, or lossy normalization. A shared directory does not merge versioned
+  freezes: use `uv run python scripts/check_v11_input_freeze.py --check` for the original
+  v1 inputs plus the exact named v2 additions; do not regenerate the historical manifest.
+- Public-surface ledgers distinguish registered membership from catalog-backed ownership.
+  Check the real route and a genuine catalog-backed sibling; a retained host-artifact read
+  may legitimately work without an application catalog.
 - Fakes prove orchestration only. They do not prove LM Studio, filesystem, package,
   or external runtime integration.
 - Do not weaken an assertion merely to accommodate current output; first decide whether

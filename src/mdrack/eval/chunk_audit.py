@@ -11,6 +11,8 @@ from typing import Any
 from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
 from mdrack.domain.blocks import BlockType as SourceBlockType
+from mdrack.domain.blocks import SourceBlock
+from mdrack.domain.chunks import RetrievalChunk
 from mdrack.markdown.chunk_builder import build_chunks
 from mdrack.markdown.ir import BlockType, FinalChunk, MarkdownBlock
 from mdrack.markdown.parser import parse_markdown
@@ -103,8 +105,8 @@ def _audit_structural_files(
             mermaid_window_lines=config.get("mermaid_window_lines", 80),
         )
     )
-    all_blocks = []
-    all_chunks = []
+    all_blocks: list[SourceBlock] = []
+    all_chunks: list[RetrievalChunk] = []
     errors_count = 0
     orphan_blocks = 0
     overlap_total = 0

@@ -30,7 +30,7 @@ from mdrack.ingestion.raw_source_provenance import (
     validate_source_ref,
 )
 from mdrack.ingestion.transcripts import TranscriptReadError, read_timed_json
-from mdrack_core import Locator, PreparedResourceBatch
+from mdrack_core import JSONValue, Locator, PreparedResourceBatch
 from mdrack_core.ports.catalog import ResourceWritePort
 from mdrack_media import ProducerFingerprint, resource_id
 
@@ -85,7 +85,7 @@ class _GuardedWritePort:
         snapshot: RawSourceSnapshot,
         source_path: Path,
         budget: RawInputBudget,
-        provenance: dict[str, object],
+        provenance: dict[str, JSONValue],
     ) -> None:
         self._delegate = delegate
         self._snapshot = snapshot
@@ -286,7 +286,7 @@ class RawAudioIngestionService:
                     snapshot,
                     source_path,
                     self._budget,
-                    cast(dict[str, object], metadata_provenance["provenance"]),
+                    cast(dict[str, JSONValue], metadata_provenance["provenance"]),
                 )),
             )
             result = asyncio.run(

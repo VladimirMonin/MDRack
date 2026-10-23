@@ -48,11 +48,13 @@ Use the project-managed environment only:
 uv sync --all-extras
 uv run pytest
 uv run ruff check src/ tests/
-uv run ruff check packages/mdrack-core/src/ packages/mdrack-sqlite/src/
-uv run mypy packages/mdrack-core/src/mdrack_core packages/mdrack-sqlite/src/mdrack_sqlite
+uv run ruff check packages/mdrack-core/src/ packages/mdrack-media/src/ packages/mdrack-sqlite/src/
+uv run mypy src/mdrack packages/mdrack-core/src/mdrack_core packages/mdrack-media/src/mdrack_media packages/mdrack-sqlite/src/mdrack_sqlite scripts/run_native_evaluation.py --no-incremental --show-error-codes
 uv run python scripts/check_no_forbidden_deps.py
 uv run python scripts/check_core_boundaries.py
+uv run python scripts/check_media_boundaries.py
 uv run python scripts/check_sqlite_boundaries.py
+uv run python scripts/check_documentation.py --check
 git diff --check
 ```
 
@@ -62,6 +64,25 @@ slice. For the fixed SQLite acceptance slice, run the
 outside the checkout; it covers the synthetic fixture and a temporary wheel target.
 A green fake/offline test does not prove live LM Studio, Windows, or a real private
 corpus. Report exact commands and honest non-claims.
+
+When v1 evaluation inputs share a directory with the four versioned v2 schemas, use:
+
+```bash
+uv run python scripts/check_v11_input_freeze.py --check
+```
+
+This adapter verifies the original 66 inputs and invokes the unchanged generator on an
+owned temporary original-input view. It admits only the named v2 additions, writes no
+source inputs and does not refresh judgments or results. See the
+[evaluation contracts](evaluation/README.md#current-tree-historical-v1-check).
+
+Offline packaging keeps normal PEP 517 isolation. Provision the pinned build backend
+and runtime wheels into an approved local wheelhouse before the offline run; an absent
+backend is a setup failure, not evidence that isolation should be disabled. Verify all
+four installed distribution origins and exercise the registered console launcher when
+claiming installed CLI support. Source `-I -B -S`/callable checks are not that launcher:
+a normal Windows PE starts Python normally and needs its own pre-import/no-user-site/
+no-`.pth`/safe-path qualification. Neither boundary proves another OS or live inference.
 
 ## Change discipline
 
@@ -85,17 +106,21 @@ widening scope.
 
 ## Documentation and release checks
 
-For documentation changes, verify every relative link and heading anchor and run:
+For documentation changes, verify relative links and heading anchors, use the bounded
+maintenance route below, and run the affected public-document consumers:
 
 ```bash
 uv run pytest tests/unit/test_release_publication.py tests/unit/test_v13_release_contract.py
-uv run python scripts/check_v13_release_packet.py
-uv run python scripts/check_v13_sqlite_vec_nonpromotion.py
 git diff --check
 ```
 
-The older `scripts/check_release_docs.py` command validates a historical v0.4
-packet and is not a current release gate.
+The exact `scripts/check_v13_release_packet.py` validator belongs to the historical
+1.3 release candidate, not ordinary documentation delivery of later source bytes.
+Keep that packet strict and unchanged; a new release candidate needs its own explicit
+qualification. `scripts/check_v13_sqlite_vec_nonpromotion.py` separately checks the
+portable frozen experiment packet when that contract changes. The older
+`scripts/check_release_docs.py` validates a historical v0.4 packet and is not a current
+release gate.
 
 ## Bounded documentation maintenance
 

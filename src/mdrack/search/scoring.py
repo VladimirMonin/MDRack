@@ -47,9 +47,9 @@ def reciprocal_rank_fusion(
     for idx, item in enumerate(text_results, start=1):
         text_ranks.setdefault(item.chunk_id, idx)
         first_seen.setdefault(item.chunk_id, idx - 1)
-    for idx, item in enumerate(semantic_results, start=1):
-        semantic_ranks.setdefault(item.chunk_id, idx)
-        first_seen.setdefault(item.chunk_id, len(text_results) + idx - 1)
+    for idx, semantic_item in enumerate(semantic_results, start=1):
+        semantic_ranks.setdefault(semantic_item.chunk_id, idx)
+        first_seen.setdefault(semantic_item.chunk_id, len(text_results) + idx - 1)
 
     all_chunk_ids = list(dict.fromkeys([*text_ranks, *semantic_ranks]))
 

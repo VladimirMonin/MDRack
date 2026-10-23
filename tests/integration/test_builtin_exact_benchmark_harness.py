@@ -3,9 +3,36 @@
 from __future__ import annotations
 
 import json
+import runpy
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
+
+from mdrack_sqlite import SQLiteCatalog, SQLiteCatalogError
+
+
+@pytest.mark.parametrize("codec", ["f32", "f64", "legacy-json"])
+def test_benchmark_setup_verifies_reopens_and_rejects_damaged_graph(tmp_path: Path, codec: str) -> None:
+    namespace = runpy.run_path(str(Path(__file__).parents[2] / "scripts/sqlite_envelope_benchmark.py"))
+    for damage in (None, "fingerprint", "state"):
+        path = tmp_path / f"{codec}-{damage}.sqlite3"
+        namespace["make_catalog"](path, 8, 2, namespace["_CODECS"][codec])
+        with SQLiteCatalog.open(path) as catalog:
+            assert catalog.verify().vectors == 8
+            assert catalog.connection.execute("SELECT COUNT(*) FROM core_publication_states").fetchone()[0] == 1
+            if damage == "fingerprint":
+                catalog.connection.execute("UPDATE core_resources SET locator_fingerprint=?", ("sha256:" + "0" * 64,))
+            elif damage == "state":
+                catalog.connection.execute("DELETE FROM core_publication_states")
+            catalog.connection.commit()
+        if damage:
+            with pytest.raises(SQLiteCatalogError):
+                SQLiteCatalog.open(path)
+        else:
+            with SQLiteCatalog.open_readonly(path) as catalog:
+                assert catalog.verify().vectors == 8
 
 
 def test_builtin_exact_benchmark_reports_binary_cold_warm_and_counter_metrics(tmp_path: Path) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import locale
 import shutil
 from pathlib import Path
 
@@ -73,6 +74,28 @@ def test_current_metrics_use_stable_source_fact_denominators() -> None:
     assert result["status"] == "available"
     assert [item["expected_fact_count"] for item in result["results"]] == [1, 1, 1]
     assert all(item["metrics"]["recall_at_k"] == 1.0 for item in result["results"])
+
+
+def test_baseline_wire_is_utf8_even_with_cp1251_parent_default(monkeypatch) -> None:
+    import scripts.baseline_compare as baseline
+
+    repo = Path(__file__).resolve().parents[2]
+    monkeypatch.setattr(locale, "getencoding", lambda: "cp1251")
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1251")
+    monkeypatch.setattr(baseline, "_WORKER_SOURCE", (
+        "import json,sys\n"
+        "request=json.loads(sys.stdin.read())\n"
+        "print(json.dumps({'ru_intact':request['queries'][0]['query']=='повторяемость',"
+        "'wire':sys.stdin.encoding}))\n"
+    ))
+    result = baseline._run_checkout(
+        repo, baseline._git_sha(repo), repo / "tests/fixtures/baseline_corpus",
+        [{"query": "повторяемость"}], historical=False,
+    )
+    assert result["status"] == "available"
+    assert result["ru_intact"] is True
+    assert result["wire"].lower().replace("_", "-") == "utf-8"
+    assert result["commands"][0]["environment"]["PYTHONIOENCODING"] == "utf-8"
 
 
 def test_current_implementation_identity_covers_exact_phase1_bytes(tmp_path: Path) -> None:

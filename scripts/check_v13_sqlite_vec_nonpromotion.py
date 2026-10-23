@@ -52,7 +52,7 @@ def _validate_packet(packet: dict[str, Any]) -> None:
         _fail("classification_invalid")
 
     plan = packet["source_plan"]
-    if set(plan) != {"path", "sha256"} or plan["path"] != str(PLAN_PATH.relative_to(REPO_ROOT)):
+    if set(plan) != {"path", "sha256"} or plan["path"] != PLAN_PATH.relative_to(REPO_ROOT).as_posix():
         _fail("source_plan_path_invalid")
     if plan["sha256"] != _sha256(PLAN_PATH):
         _fail("source_plan_hash_invalid")

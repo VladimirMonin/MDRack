@@ -351,7 +351,7 @@ def cli_search(
             catalog = getattr(storage, "resource_store", None)
             if catalog is None:
                 raise ValueError("resource target requires an active resource-core generation")
-            result = MetadataCatalogService(
+            metadata_result = MetadataCatalogService(
                 catalog, read_sessions=getattr(storage, "search_read_sessions", None),
             ).search(
                 query,
@@ -359,10 +359,10 @@ def cli_search(
                 metadata_weight=metadata_weight,
                 limit=limit_value,
             )
-            _emit_success(ctx, result.to_dict(), command)
+            _emit_success(ctx, metadata_result.to_dict(), command)
             return
         if mode == "semantic" or (mode == "hybrid" and config.search.semantic_weight > 0.0):
-            provider_name: str = embedding_provider or config.embedding.provider
+            provider_name = embedding_provider or config.embedding.provider
             provider = create_embedding_provider(provider_name, config)
         assert storage is not None
         service = RetrievalService(

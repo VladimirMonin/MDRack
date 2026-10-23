@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, TextIO, cast
 
-import toml
 from pydantic import BaseModel
 
 from mdrack._observability import AppEventLogger
@@ -25,6 +25,22 @@ from mdrack.config.models import (
     ScanConfig,
     SearchConfig,
 )
+
+
+class _TomlIO(Protocol):
+    """Narrow view of the pinned, untyped TOML backend's two used functions.
+
+    Tables remain dynamic until the existing Pydantic section validation. No
+    dependency/stub installation or downstream import-error suppression is used.
+    """
+
+    def load(self, stream: TextIO) -> dict[str, Any]: ...
+
+    def dump(self, value: dict[str, Any], stream: TextIO) -> str: ...
+
+
+# The installed `toml` package exports load(file) and dump(table, file).
+toml = cast(_TomlIO, importlib.import_module("toml"))
 
 logger = AppEventLogger(logging.getLogger(__name__))
 
@@ -88,7 +104,7 @@ def _read_toml(path: Path) -> dict[str, Any]:
         "config.load.finished",
         extra={"config_ref": config_ref, "status": "success", "section_count": len(raw)},
     )
-    return raw  # type: ignore[no-any-return]
+    return raw
 
 
 def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
@@ -180,15 +196,15 @@ def _merge_section(
 def _build_config(raw: dict[str, Any]) -> MDRackConfig:
     """Build MDRackConfig from a flat dict of sections."""
     return MDRackConfig(
-        paths=PathsConfig(**raw.get("paths", {})),  # type: ignore[arg-type]
-        scan=ScanConfig(**raw.get("scan", {})),  # type: ignore[arg-type]
-        parsing=ParsingConfig(**raw.get("parsing", {})),  # type: ignore[arg-type]
-        metadata=MetadataConfig(**raw.get("metadata", {})),  # type: ignore[arg-type]
-        cache=CacheConfig(**raw.get("cache", {})),  # type: ignore[arg-type]
-        chunking=ChunkingConfig(**raw.get("chunking", {})),  # type: ignore[arg-type]
-        embedding=EmbeddingConfig(**raw.get("embedding", {})),  # type: ignore[arg-type]
-        search=SearchConfig(**raw.get("search", {})),  # type: ignore[arg-type]
-        profiling=ProfilingConfig(**raw.get("profiling", {})),  # type: ignore[arg-type]
+        paths=PathsConfig(**raw.get("paths", {})),
+        scan=ScanConfig(**raw.get("scan", {})),
+        parsing=ParsingConfig(**raw.get("parsing", {})),
+        metadata=MetadataConfig(**raw.get("metadata", {})),
+        cache=CacheConfig(**raw.get("cache", {})),
+        chunking=ChunkingConfig(**raw.get("chunking", {})),
+        embedding=EmbeddingConfig(**raw.get("embedding", {})),
+        search=SearchConfig(**raw.get("search", {})),
+        profiling=ProfilingConfig(**raw.get("profiling", {})),
     )
 
 

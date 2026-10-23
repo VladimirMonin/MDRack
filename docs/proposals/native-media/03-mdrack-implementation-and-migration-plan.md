@@ -47,6 +47,8 @@ tags:
 
 > [!important] Статус плана
 > **CURRENT** обозначает проверенные особенности указанной ревизии. **TARGET** обозначает предлагаемое изменение. Условие завершения этапа не является утверждением, что этот этап уже выполнен. Названия новых операций и модулей не следует использовать как готовые команды установленного MDRack.
+>
+> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-execution-status). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
 
 ## Исходная точка и границы работ 🔎
 
@@ -685,4 +687,69 @@ bash scripts/verify.sh
 [40]: https://github.com/VladimirMonin/MDRack/blob/843b0b4873b95ae80d08ec1d4a8707d6d7d9b676/docs/compatibility/v0.3-compatibility-registry.md
 [41]: https://github.com/VladimirMonin/MDRack/blob/843b0b4873b95ae80d08ec1d4a8707d6d7d9b676/src/mdrack/application/textual_embedding_space.py
 [42]: https://github.com/VladimirMonin/MDRack/blob/843b0b4873b95ae80d08ec1d4a8707d6d7d9b676/.github/workflows/offline-release-matrix.yml
+
+## Дополнение 2026-10-23: исторический срез static acceptance до final review
+
+Finite strict103 repair независимо ACCEPTED: 14 source-файлов, все103 dispositions,
+whole strict0/213 и Ruff0 на actual Root. Affected190 PASS/1 POSIX SKIP подтверждены
+на source и fresh noneditable installed boundaries (перекрывающиеся проверки, не380
+уникальных случаев);233 package payload identities и7 дополнительных contract groups.
+Исторические записи exact103 RED выше сохраняют границу своих прежних ревизий.
+
+Connected suite repair K1–K7 проверяет ledger, isolated offline build/installed consumers,
+неизменённый original66 freeze через отдельный adapter, canonical synthetic benchmark,
+UTF-8 child transport и portable packet/wrapper fixtures. Author owning suite:77 PASS;
+это не независимая приёмка нового candidate и не full-suite PASS. Исторический full
+result raw1/2371 PASS/18 FAIL/6 SKIP не переписывается. Шесть current-skill predicates
+реально исполнялись отдельно:4 PASS/2 semantic FAIL; два content contracts остаются
+OPEN, user-owned skill read-only. Полный final gate, independent coherent-candidate
+review и explicit Git/publication authority остаются отдельными обязанностями.
+Real corpus/model/native-pixel quality-cost, W6/operational/release не закрыты.
+
+<a id="current-execution-status"></a>
+
+## Текущий исполнительный статус и ближайшие проверки
+
+Финальный coherent PUBLIC30 software/fixture repair независимо ACCEPTED. Принятые
+14 source-файлов и закрытые103 diagnostics сохранены; strict0/213, Ruff/boundaries,
+четыре wheels/233 exact payloads и настоящие Windows PE checks переиспользованы по
+неизменённому impact. Независимый полный pre-correction checkout:2412 selected /
+2406 PASS /6 historical SKIP /0 FAIL, без deselection/xfail. После единственной taxonomy
+correction все28 исходных affected checks и реальный host-artifact/catalog-sibling
+control PASS. В ledger удалены только две неверные catalog-backed классификации;
+публичная регистрация обеих операций сохранена. Production-route repair не требовался.
+
+Original18 predicates закрыты на соответствующем кандидате; owning77/new17 не
+складываются с full в новые уникальные cases. Current read-only skill и отдельный
+committed-input control проходят исходные шесть assertions каждый; целый user-dirty
+skill не включён в scoped Git delivery. Исторические full18 и skill2 FAIL выше не
+переписываются, но больше не являются текущими software blockers. W3/W4 и принятые
+native/corpus software families не требуют повторной общей приёмки.
+
+Завершение useful docs/instructions и проверенной ретроспективы, selective commit и
+ordinary GitHub push — отдельная поставка этого bounded результата. Она не является
+tag/package/release или whole-programme/fitness acceptance. Малый paired-instance
+text-model pilot и caller-caption CPU baseline остаются ограниченными свидетельствами,
+не pixel/acoustic/native-quality или competing-model proof.
+
+Ближайший порядок исполнения уточнён без добавления gates к этому ремонту:
+
+1. **Старый OCR, две correctness-проверки:** изменённый текст при той же revision и
+   существующем dependent vector; отдельно automatic result поверх manual edit.
+   Проверить объявленную dependency/precedence семантику и реальное последующее
+   read/search/vector state. Это точечная текущая граница, не W4 reacceptance.
+2. **Один настоящий media provider:** image без OCR → image vector → text query →
+   правильное открываемое image; затем text enrichment того же материала и
+   дополнительный lexical search с сохранением native projection. LM Studio HTTP
+   остаётся production boundary. Иной маршрут сначала требует согласованных
+   разрешённых architecture/code/tests/instruction изменений; caption-only подмена
+   pixels и автоматическое продление старого inference/acquisition бюджета недопустимы.
+3. **Существующий runner и отдельная latency-проверка:** независимые материалы,
+   похожие distractors, RU/EN/negative cases и заранее заданные criteria; отдельно
+   catalog-open и search latency при росте числа chunks. Исходные source-group /
+   held-out/quality-cost обязательства №04 сохраняются.
+
+Эти последующие исполнения не выполнены данным software review и не блокируют его
+scoped publication. Входы, runtime, model/media permissions и новый бюджет для них
+проверяются отдельно; W6/operational/release не объявлены завершёнными.
 
