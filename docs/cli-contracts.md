@@ -50,7 +50,10 @@ binding. `resource enrich-ocr RESOURCE_ID READY_JSON --source-image IMAGE_PATH`
 uses the shared ready-OCR engine service: lexical-only by default, no inference,
 actual caller-owned file verification, bounded conditional merge and honest
 `published`/`already_published`/`conflict`/`not_requested` outcomes. Read-only never
-publishes FTS; unavailable requested host durability refuses. Full grammar, API,
+publishes FTS; unavailable requested host durability refuses. Changed OCR material
+invalidates retained dependent projections even under unchanged source/artifact
+revisions. Automatic lexical publication over an active manual slot refuses without
+graph/FTS/vector/token mutation. Full grammar, API,
 options, source-validation boundary, compatibility and remaining limits:
 [ready OCR v1](contracts/ready-ocr-v1.md).
 
@@ -304,8 +307,12 @@ returned. Search with `--scope all --mode text` exposes portable
 [--ocr TEXT] [--provider fake|lmstudio]` uses the existing direct-image
 surface. `PORTABLE_REF` must be a normalized relative POSIX reference; it is
 not a filesystem path. The source must have PNG, JPEG, GIF, or WEBP magic bytes.
-The success envelope remains `image ingest` with the existing result keys.
-Failures use the payload-free `IMAGE_INGEST_ERROR` envelope.
+The command uses the same conditional producer/reindex path as the engine, preserving
+independent projections rather than replacing the whole enriched graph. Automatic
+`--ocr` output refuses to overwrite an active manual OCR slot in the same source
+generation; ordinary automatic creation/update remains available. The success
+envelope remains `image ingest` with the existing result keys. Failures use the
+payload-free `IMAGE_INGEST_ERROR` envelope.
 
 ## Explicit local WAVE audio ingestion
 

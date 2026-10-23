@@ -113,24 +113,33 @@ image coverage; range/track projectors are not invented. Producer, recipe or pro
 change does not create a variant. `enrichment_v1` app metadata retains source and
 artifact revisions, recipe/producer, artifact reference/digest/custody and immediate
 artifact dependencies. A correction replaces its slot and transitively invalidates
-only dependent projections. Independent representations, units, vector values,
-facets, spaces and resource metadata are preserved; duplicate slot owners, cycles,
+only dependent projections. Retained dependents are invalidated when immediate-input
+material changes, including changed OCR text/digest under the **same source and
+artifact revisions**; revision labels alone do not prove unchanged input. Independent
+representations, units, vector values, facets, spaces and resource metadata are
+preserved; duplicate slot owners, cycles,
 space redefinitions and invalid merged graphs refuse. Unannotated legacy records
 are not guessed to be dependencies. The generic pure merger supports ready dependent
 projections but this file adapter produces only source-dependent whole-image OCR.
 
+For the current source/lifecycle, an active `manual=true` OCR slot is authoritative:
+an automatic lexical result for that same purpose/variant refuses without changing
+the graph, FTS, vector payloads or publication token. Replaying the same manual
+correction remains a no-op. Read-only and no-text results do not replace the slot.
+
 A repeat checks current graph postconditions, not merely artifact availability.
 Default retry is one remerge after failed CAS (maximum three configurable retries),
 with no repeated preparation. Only unchanged lifecycle, source binding/generation,
-immediate revisions and target permit remerge. Changed source/manual input and
-delete/recreate reject old work even with identical raw hashes. A lost publication
+immediate revisions/material and target permit remerge. Changed source/manual input
+and delete/recreate reject old work even with identical raw hashes. A lost publication
 response can be reconciled by reusing the operation and checking current graph.
 
 ## Normal image producer rescan and compatibility
 
-Normal app image producers explicitly opt into publication capability; legacy
-standalone image-service callers keep their previous capability boundary. Initial
-new image publication records a source generation; same-source full preparation
+Normal app image producers, including `MDRackEngine.ingest_image` and registered
+`image ingest`, explicitly opt into the shared conditional producer/reindex path;
+legacy standalone image-service callers keep their previous capability boundary.
+Initial new image publication records a source generation; same-source full preparation
 carries a known generation, and an explicitly observed new source with new outputs
 gets another generation. Missing legacy generation is never reconstructed.
 
@@ -140,7 +149,10 @@ checks the selected image, checks raw provenance and source binding, and republi
 the complete current graph through bounded guarded CAS. It retains OCR and native
 and independent vectors exactly. The broader prepared M03-06 contract reconciles
 explicitly prepared producer outputs rather than destructively replacing independent
-projections. Observed changed source without new outputs removes stale source-bound
+projections. In particular, automatic `image ingest --ocr` cannot overwrite an
+active manual OCR slot in the same source generation; refusal uses the existing
+`IMAGE_INGEST_ERROR` envelope. Ordinary automatic creation/update remains available.
+Observed changed source without new outputs removes stale source-bound
 projections (withdrawal if none remain); unknown legacy independence is not guessed.
 Explicit provider-driven native ingestion continues to execute that provider,
 including its failure/cancellation checks; a

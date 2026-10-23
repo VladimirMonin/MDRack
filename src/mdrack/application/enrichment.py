@@ -247,6 +247,12 @@ def prepare_ocr(captured: CapturedInputs, artifact: ReadyOCR, *, lexical: bool =
     if not lexical:
         return OCRPreparation(artifact, None, 'read_only')
     purpose, variant = captured.targets[0]
+    previous = _outputs(captured.snapshot.batch).get((purpose, variant))
+    if previous is not None and not ref.manual:
+        previous_info = previous[0].metadata['enrichment_v1']
+        assert isinstance(previous_info, Mapping)
+        if previous_info.get('manual') is True:
+            raise StaleEnrichment('manual_artifact_is_authoritative')
     key = sha256(json.dumps([state.resource_id, purpose, variant], ensure_ascii=True).encode()).hexdigest()
     rid = 'enrichment:' + key
     info: dict[str, JSONValue] = {'purpose': purpose, 'variant': variant, 'source_revision': ref.source_revision,
@@ -441,7 +447,15 @@ def merge(current: ResourceSnapshot, addition: PreparedResourceBatch) -> MergeRe
     active = dict(before)
     active.update(incoming)
     _acyclic(active)
-    invalid_slots = invalid_dependencies(active, frozenset(incoming))
+    # Revisions are caller labels: changed material under the same label still
+    # invalidates retained consumers. Outputs supplied together are fresh inputs,
+    # not retained dependents; ordinary revision checks continue to validate them.
+    changed_inputs = {slot for slot in incoming if slot in before
+                      and _input_material(old, slot) != _input_material(addition, slot)}
+    stale = {slot for slot, (_, output) in active.items() if slot not in incoming
+             and any(dependency in changed_inputs for dependency, _ in output.dependencies)}
+    invalid_slots = stale | invalid_dependencies(
+        {slot: value for slot, value in active.items() if slot not in stale}, frozenset(incoming))
     removed = {before[s][0].representation_id for s in changed | invalid_slots if s in before}
     kept_reps = tuple(r for r in old.representations if r.representation_id not in removed)
     new_reps = tuple(r for r in addition.representations if _required_output(r).slot in changed)

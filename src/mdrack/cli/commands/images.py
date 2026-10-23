@@ -124,6 +124,7 @@ def ingest_image(
             extractor=StaticImageExtractor(outputs),
             text_embedding_provider=provider,
             text_space=_text_space(config, provider, "default"),
+            conditional_publication=True,
         )
         logger.info(
             "cli.image.ingest.started",

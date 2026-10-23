@@ -484,3 +484,136 @@ def test_actual_artifact_custody_read_only_refusal_and_cleanup_privacy(tmp_path,
         assert found(engine, 'cobaltmanual')
     finally:
         engine.close()
+
+
+def legacy_automatic(root, snapshot, *, text, revision, name='automatic.json'):
+    path = artifact(root, snapshot, text=text, revision=revision, producer='automatic-fixture', name=name)
+    value = json.loads(path.read_text(encoding='utf-8'))
+    value['manual'] = False
+    path.write_text(json.dumps(value), encoding='utf-8')
+    return path
+
+
+def dependent_ocr_vector(engine):
+    """Ready vector is an external-edge control, not pixel/model evidence."""
+    from mdrack.application.enrichment import capture, prepare, publish
+    store = engine.storage.resource_store
+    before = store.read_snapshot('image')
+    ocr = next(r for r in before.batch.representations if r.representation_kind == 'ocr_text')
+    info = ocr.metadata['enrichment_v1']
+    metadata = {'enrichment_v1': {
+        'purpose': 'joint:whole', 'variant': 'default',
+        'source_revision': info['source_revision'], 'artifact_revision': 'joint-1',
+        'producer': 'ready-vector-control', 'recipe': 'fixture-only',
+        'dependencies': [{'purpose': 'ocr:whole', 'variant': 'default',
+                          'revision': info['artifact_revision']}]}}
+    addition = PreparedResourceBatch(
+        before.batch.resource,
+        (RepresentationRecord('dependent', 'image', 'visual', 'image', metadata=metadata),),
+        (SearchUnitRecord('dependent-u', 'image', 'dependent', 'whole_resource', 'image', None,
+                          before.batch.resource.locator, 0),),
+        (EmbeddingSpaceRecord('dependency-control', 2, 'dot', 'ready-v1'),),
+        (VectorRecord('dependent-u', 'dependency-control', (0.25, 0.5)),))
+    captured = capture(before, targets=(('joint:whole', 'default'),), inputs=(('ocr:whole', 'default'),))
+    assert publish(store, prepare(captured, addition)).status == 'published'
+    return store.read_snapshot('image')
+
+
+def eligible_dependent(engine):
+    from mdrack_core.application.retrieval import RetrievalService
+    from mdrack_core.domain import SearchRequest, SearchScope, VectorBranch
+    request = SearchRequest((), (VectorBranch('ready', 'dependency-control', (1.0, 1.0),
+                                             expected_fingerprint='ready-v1'),), SearchScope(), 'unit', 20)
+    result = RetrievalService(engine.storage.resource_store).search(request)
+    return [candidate.unit_id for item in result.items for candidate in item.evidence]
+
+
+def assert_legacy_state(engine, snapshot, *, text, absent, dependent, manual):
+    import struct
+    current = engine.storage.resource_store.read_snapshot('image')
+    assert current == snapshot
+    ocr = next(r for r in current.batch.representations if r.representation_kind == 'ocr_text')
+    info = ocr.metadata['enrichment_v1']
+    assert ocr.text == text and info['manual'] is manual
+    assert info['text_sha256'] == hashlib.sha256(text.encode()).hexdigest()
+    unit = next(u for u in current.batch.units if u.representation_id == ocr.representation_id)
+    assert engine.storage.resource_store.read_unit(unit.unit_id).text == text
+    assert engine.read_unit(unit.unit_id)['text'] == text
+    assert found(engine, text) and not found(engine, absent)
+    vector = engine.storage.resource_store.read_vector('dependent-u', 'dependency-control')
+    assert eligible_dependent(engine) == (['dependent-u'] if dependent else [])
+    if dependent:
+        assert struct.pack('<2d', *vector.vector) == struct.pack('<2d', 0.25, 0.5)
+        rep = next(r for r in current.batch.representations if r.representation_id == 'dependent')
+        dependency = rep.metadata['enrichment_v1']['dependencies'][0]
+        assert dependency['revision'] == info['artifact_revision']
+        assert rep.metadata['enrichment_v1']['source_revision'] == info['source_revision']
+    else:
+        assert vector is None and engine.read_unit('dependent-u') is None
+
+
+@pytest.mark.parametrize('entry', ['engine', 'cli'])
+def test_legacy_same_revision_changed_ocr_invalidates_existing_dependent_vector(tmp_path, entry):
+    engine, native, image = existing(tmp_path)
+    try:
+        path = legacy_automatic(tmp_path, engine.storage.resource_store.read_snapshot('image'),
+                                text='oldcobalt', revision='unchanged-ocr-revision')
+        assert engine.enrich_ready_ocr('image', path)['publication_status'] == 'published'
+        before = dependent_ocr_vector(engine)
+        assert_legacy_state(engine, before, text='oldcobalt', absent='newazure', dependent=True, manual=False)
+        # Same input must preserve the vector, graph and publication token.
+        assert engine.enrich_ready_ocr('image', path)['publication_status'] == 'already_published'
+        assert engine.storage.resource_store.read_snapshot('image') == before
+        changed = legacy_automatic(tmp_path, before, text='newazure', revision='unchanged-ocr-revision',
+                                   name='changed.json')
+        if entry == 'engine':
+            assert engine.enrich_ready_ocr('image', changed)['publication_status'] == 'published'
+        else:
+            result = CliRunner().invoke(main, ['--root', str(tmp_path), 'resource', 'enrich-ocr',
+                                               'image', str(changed), '--source-image', str(image)])
+            assert result.exit_code == 0, result.output
+            assert json.loads(result.output)['data']['publication_status'] == 'published'
+        current = engine.storage.resource_store.read_snapshot('image')
+        assert current.batch.resource == before.batch.resource == native.resource
+        assert current.state.lifecycle_id == before.state.lifecycle_id
+        assert current.state.state_token != before.state.state_token
+        assert current.batch.vectors == native.vectors
+        assert_legacy_state(engine, current, text='newazure', absent='oldcobalt', dependent=False, manual=False)
+    finally:
+        engine.close()
+    with MDRackEngine(root=tmp_path, config=MDRackConfig()) as reopened:
+        assert_legacy_state(reopened, current, text='newazure', absent='oldcobalt', dependent=False, manual=False)
+
+
+@pytest.mark.parametrize('entry', ['engine', 'cli', 'image-cli'])
+def test_legacy_automatic_after_manual_edit_refuses_and_preserves_dependent_vector(tmp_path, entry):
+    engine, native, image = existing(tmp_path)
+    try:
+        automatic = legacy_automatic(tmp_path, engine.storage.resource_store.read_snapshot('image'),
+                                    text='oldautomatic', revision='auto-1')
+        engine.enrich_ready_ocr('image', automatic)
+        manual = artifact(tmp_path, engine.storage.resource_store.read_snapshot('image'), text='humanedit',
+                          revision='manual-2', name='human.json')
+        assert engine.enrich_ready_ocr('image', manual)['publication_status'] == 'published'
+        before = dependent_ocr_vector(engine)
+        assert_legacy_state(engine, before, text='humanedit', absent='newautomatic', dependent=True, manual=True)
+        assert engine.enrich_ready_ocr('image', manual)['publication_status'] == 'already_published'
+        automatic = legacy_automatic(tmp_path, before, text='newautomatic', revision='auto-3', name='late.json')
+        if entry == 'engine':
+            with pytest.raises(ValueError):
+                engine.enrich_ready_ocr('image', automatic)
+        else:
+            args = (['resource', 'enrich-ocr', 'image', str(automatic), '--source-image', str(image)]
+                    if entry == 'cli' else ['image', 'ingest', str(image), '--resource-id', 'image',
+                                           '--source-namespace', 'fixture', '--source-ref', 'image.png',
+                                           '--ocr', 'newautomatic', '--provider', 'fake'])
+            result = CliRunner().invoke(main, ['--root', str(tmp_path), *args])
+            assert result.exit_code == 1, result.output
+            assert json.loads(result.output)['error']['code'] == (
+                'READY_OCR_ERROR' if entry == 'cli' else 'IMAGE_INGEST_ERROR')
+        assert before.batch.resource == native.resource
+        assert_legacy_state(engine, before, text='humanedit', absent='newautomatic', dependent=True, manual=True)
+    finally:
+        engine.close()
+    with MDRackEngine(root=tmp_path, config=MDRackConfig()) as reopened:
+        assert_legacy_state(reopened, before, text='humanedit', absent='newautomatic', dependent=True, manual=True)

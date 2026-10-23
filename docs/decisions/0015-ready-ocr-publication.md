@@ -12,6 +12,11 @@ purpose/variant slots, immediate artifact dependencies, exact merge outcomes and
 bounded freshness-checked CAS remerge. `application/ready_ocr.py` owns bounded
 caller-file availability/origin/digest validation and the shared engine/CLI route.
 It never implements SQL, a second validator, a model pipeline or a cache lifecycle.
+Retained dependents are invalidated transitively by changed immediate-input material,
+not only changed revision labels: corrected OCR under the same source/artifact
+revisions must not leave vectors derived from the previous text eligible. The legacy
+ready-OCR projector also refuses automatic lexical publication over an active manual
+slot for the current source/lifecycle, preserving its graph and publication state.
 
 The first route is existing image + ready whole-image OCR, lexical-only. Retained
 caller-owned original files are checked, not asserted durable through metadata.
@@ -20,7 +25,9 @@ Source generations are explicit app provenance, distinct from raw/prepared hashe
 missing historical provenance stays missing. A selected original image can be
 validated through the existing source resolver without learning paths from the DB.
 
-Image producer capability is explicit at app composition. A source-validated
+Image producer capability is explicit at app composition. Both the engine and
+registered `image ingest` CLI use the conditional producer/reindex path, including
+its automatic-over-manual refusal; the CLI is not a destructive bypass. A source-validated
 ready-projection rescan preserves the complete enriched graph through CAS, while
 explicit provider calls retain their original execution/failure semantics. Legacy
 standalone storage injection does not acquire publication merely because a concrete
