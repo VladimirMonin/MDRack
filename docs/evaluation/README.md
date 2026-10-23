@@ -6,6 +6,7 @@
 - [v1.1 fixture contract](v1.1-fixture-contract.md).
 - [Privacy evidence oracle](privacy-evidence-oracle.md).
 - [Catalog-open and public-search scaling, 2026-10-23](catalog-search-scaling-2026-10-23.md) — independently checked synthetic Windows measurements, separate default/open and already-open boundaries; no declared SLO or performance/model-quality PASS.
+- [Native-image CUDA external-host canary, 2026-10-23](native-image-cuda-canary-2026-10-23.md) — independently reproduced real vision/backbone CUDA and six learned vectors; synthetic external host, not normal engine/catalog/CLI or quality/SLO acceptance.
 
 Evaluation correctness, provider usefulness, production search latency and installed
 release readiness are separate evidence boundaries. The v2 manual oracle proves
@@ -44,5 +45,8 @@ suite was run for the result review. The linked catalog/open/search report is ch
 model's typed PNG request was refused by the tested LM Studio 0.4.26+4 embedding wrapper;
 text200/768 does not establish pixel admission. See the
 [scoped input limitation](../contracts/native-image-v1.md#lm-studio-input-qualification).
+A later independent external-host CUDA canary used actual native pixel/query forwards;
+it neither repairs that HTTP wrapper nor qualifies MDRack integration. The existing
+2411-pass/six-skip software gate and catalog measurements remain unchanged.
 Next execution order is maintained in the
-[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-result-qualification).
+[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-cuda-canary-and-product-remainder).

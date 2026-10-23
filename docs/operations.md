@@ -110,6 +110,13 @@ capability refusals, or assume that reloading/updating a model repairs an API/wo
 contract. A concrete supported image-embedding input/output contract must be qualified
 before using that route; no replacement runtime is implied.
 
+The separate [external-host CUDA canary](evaluation/native-image-cuda-canary-2026-10-23.md)
+qualified existing native components outside MDRack, not HTTP image admission or an
+installed product provider. Do not copy its vectors into a legacy space, weaken guards,
+or infer a new CLI provider option. Host-owned encoding still needs explicit prepared-
+provider injection, normal catalog/engine/read/reopen and installed CLI proof. Existing
+app defaults and model/server state are not changed by that diagnostic result.
+
 ### Search is slow although an engine is already constructed
 
 Normal uninjected search opens and fully verifies its own readonly catalog per operation.

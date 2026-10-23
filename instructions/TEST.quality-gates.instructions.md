@@ -49,6 +49,13 @@ and any skipped gate with a concrete reason.
   count and cache definition; small-series percentiles are descriptive, not production
   tail bounds. Without an applicable predeclared workload/profile SLO, retain measurements
   only rather than inventing a performance PASS or subtracting unpaired stage medians.
+- Accelerator evidence: bind source/executable, runtime/weights, recipe and selected
+  device. Offload/allocation logs alone do not prove execution: observe actual evaluated
+  operation outputs in each claimed real stage with device checks and finite nonzero
+  synchronous readback. State sampled-node limits and CPU preparation/normalization;
+  do not promote an external-host canary to integrated engine/catalog/CLI or quality/SLO
+  acceptance. Keep raw exits and cleanup observations even when ordinary native stderr
+  is nonempty; current absence never supplies a missing historical exit.
 - Packaging/public CLI: use installed-package or live CLI checks when the claim crosses
   beyond unit-level source behavior. Keep normal PEP 517 build isolation; offline builds
   need an explicitly provisioned, identity-checked backend wheelhouse, not a switch that

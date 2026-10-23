@@ -5,7 +5,7 @@ Read [bundle](../../docs/proposals/native-media/README.md) in order 01 → 02 �
 This entry tracks execution, not another roadmap or evidence registry.
 
 Current software acceptance and the next bounded execution are recorded in
-[the latest status](#current-result-qualification). Earlier per-family OPEN /
+[the latest status](#current-cuda-canary-and-product-remainder). Earlier per-family OPEN /
 FAIL statements below retain their original acceptance boundary; they do not reopen
 findings explicitly closed by a later qualified result.
 
@@ -202,6 +202,10 @@ budget. W6/operational/release and broader quality remain separate from scoped d
 
 ## Current result qualification
 
+This API-refusal/catalog-measurement checkpoint precedes the
+[later external-host CUDA qualification](#current-cuda-canary-and-product-remainder).
+Its HTTP-specific prerequisite is not a claim that no other native execution is possible.
+
 Source `37cb7d39f03c152c64ee9100560ee2fe19c7be75` includes the separately accepted old-OCR
 producer/manual/material consistency fixes. Their 2411-pass/six-historical-skip source
 qualification remains retained; this result review changed no product source/tests and
@@ -235,3 +239,32 @@ predeclared quality-cost criteria. The separate catalog scaling request now has 
 measurements; choosing an applicable workload SLO for a future performance decision is
 still distinct. These result acceptances do not reopen accepted software or close native /
 semantic fitness, W6/operational/release.
+
+## Current CUDA canary and product remainder
+
+On the documentation baseline `4623abf4c86c647d3f096703c6d4b31ad2da8484`, the
+[external-host CUDA canary](../../docs/evaluation/native-image-cuda-canary-2026-10-23.md)
+is independently ACCEPTED within its synthetic scope. Exact frozen vendor ABI/host /
+runtime/weight bindings and a fresh seven-cell run produced six learned768 vectors,
+32 vision +48 backbone sampled post-evaluation CUDA outputs, unchanged numeric criteria
+and both hash/decode-verified original opens. WIC CPU decode and host L2 remain CPU;
+this is not all-operator GPU, general ABI, legacy-space or real-quality acceptance.
+
+The HTTP wrapper limitation and production LM Studio HTTP default are unchanged.
+The canary did not traverse `PreparedEmbeddingProvider`, normal engine/catalog/public
+read or installed CLI. Existing W3/W4/W5/M03–04/OCR/full2411+6 and separate catalog
+MEASUREMENTS_ONLY remain retained, not reopened or rerun by this result.
+
+The next actual product slice is bounded host-owned encoder → explicit prepared-provider
+injection → normal `MDRackEngine` image ingest/semantic text-query search/public read /
+hash-original-open/close-reopen. Preserve exact recipe/space identity, honest supported
+roles/byte bounds, source authority, failure/cancellation cleanup and no hidden CPU or
+legacy-vector substitution. Do not put the model loader in Core/application/default
+providers. The current CLI exposes no external-host provider option; actual explicit
+composition and installed-launcher parity must be proved, not inferred from the canary.
+
+Then verify lexical enrichment on that same resource without native re-encoding, and
+existing-runner independently judged RU/EN/similar-distractor/negative/held-out quality
+and cost/latency criteria. No new server/runtime/model or blind update follows. Completed
+live budgets are closed; this result does not itself grant further execution. Whole
+native-media/fitness/W6/operational/release remains OPEN.

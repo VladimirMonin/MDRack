@@ -97,8 +97,9 @@ serialized-byte growth is bounded by finite numeric widths of that fixed schema,
 not by payloads or vector count. This is a logging bound, not a throughput/SLA or
 model-quality benchmark.
 
-Native LM Studio pixels, real-source quality/cost and full release acceptance are
-unverified/blocked separately from deterministic local component tests.
+Normal MDRack native-pixel integration, real-source quality/cost and full release
+acceptance remain unverified separately from deterministic local component tests.
+The external-host CUDA canary below is a different execution boundary.
 
 ## LM Studio input qualification
 
@@ -112,11 +113,27 @@ inspected official SDK wire contract use `embedString(inputString)`.
 This qualifies that concrete API/input refusal, not absence of model Vision, rejection
 of generic prepared providers, or impossibility in future versions. Selected runtime
 2.63.0 metadata is not a trace of the executed GPU kernel. The six subsequent repeat,
-lossless/changed-pixel, shared-space and invalid-image discriminator cells were NOT_RUN;
-text200 is not image-vector or semantic-quality success.
+lossless/changed-pixel, shared-space and invalid-image discriminator cells in that HTTP
+experiment were NOT_RUN; later external-host cells do not retroactively execute them.
+Text200 is not image-vector or semantic-quality success.
 
-A supported LM Studio typed image input and compatible text-query embedding output
-remain unmet prerequisites for the genuine image-vector/search/openable-image route.
-Removing only the HTTP guard is insufficient while the worker/backend remains string-
-only. No speculative payload, caption/base64-as-text substitution, blind app/runtime
-update or alternative production embedding boundary is established by this result.
+For this HTTP route, supported typed image input and compatible text-query output
+remain unmet prerequisites. Removing only its guard is insufficient while its worker /
+backend remains string-only. No speculative payload, caption/base64-as-text substitution,
+blind app/runtime update or alternative production default is established by that result.
+
+## External-host CUDA qualification
+
+The [independently accepted synthetic CUDA canary](../evaluation/native-image-cuda-canary-2026-10-23.md)
+used existing installed LM Studio native components outside MDRack and its HTTP wrapper:
+seven fresh cells, six learned 768d vectors, actual post-evaluation vision/backbone CUDA
+readbacks and hash/decode-checked original opens. WIC PNG decoding and L2 normalization
+remain CPU work. This does not make the normal HTTP adapter image-capable, register a
+production provider or qualify all GPU operators, document role or legacy vector spaces.
+
+The next product slice must explicitly inject a host-owned `PreparedEmbeddingProvider`
+with bounded honest roles/input capabilities and complete canonical space identity.
+Prove real `ingest_native_image` / `search_media`, normal catalog/public read/original
+open/close-reopen and installed CLI parity; same-resource lexical enrichment must retain
+the native vector without re-encoding. Core/application/default providers gain no model
+loader. Independent RU/EN/distractor/negative quality/cost/latency gates remain separate.

@@ -48,7 +48,7 @@ tags:
 > [!important] Статус плана
 > **CURRENT** обозначает проверенные особенности указанной ревизии. **TARGET** обозначает предлагаемое изменение. Условие завершения этапа не является утверждением, что этот этап уже выполнен. Названия новых операций и модулей не следует использовать как готовые команды установленного MDRack.
 >
-> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-result-qualification). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
+> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-cuda-canary-and-product-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
 
 ## Исходная точка и границы работ 🔎
 
@@ -761,6 +761,9 @@ scoped publication. Входы, runtime, model/media permissions и новый �
 
 ## Следующий принятый срез: API-отказ и измерения каталога
 
+Этот checkpoint предшествует [последующей CUDA-приёмке внешнего host](#current-cuda-canary-and-product-remainder).
+Его HTTP-specific prerequisite сохраняется для того адаптера, не как запрет иных native путей.
+
 Текущая source-опора `37cb7d39f03c152c64ee9100560ee2fe19c7be75` включает независимо
 принятые old-OCR producer/manual/material consistency fixes; их full2411 PASS /
 6 historical SKIP сохраняется отдельно, без нового full-прогона для result review.
@@ -793,4 +796,34 @@ embedding контракт с совместимым query space. Затем с�
 cases и заранее заданными criteria. Отдельный запрос catalog/search scaling получил
 проверенные измерения, но не автоматически performance PASS. Бюджеты не продлены;
 whole native/semantic/fitness/W6/release из этих двух результатов не объявляются.
+
+<a id="current-cuda-canary-and-product-remainder"></a>
+
+## Принят внешний CUDA canary; product integration остаётся открытой
+
+На documentation baseline `4623abf4c86c647d3f096703c6d4b31ad2da8484` независимо принят
+[bounded synthetic external-host CUDA canary](../../evaluation/native-image-cuda-canary-2026-10-23.md):
+точные frozen host/ABI/runtime/weights, новый seven-cell run, шесть learned768 vectors,
+32 vision /48 backbone sampled post-evaluation CUDA outputs, неизменённые numeric criteria
+и настоящее чтение/hash/decode обоих выбранных originals. PNG WIC decode и L2 — CPU;
+не квалифицированы все GPU operators/layers, общий upstream ABI, text-document role или
+совместимость с прежними vector spaces. Это не ремонт HTTP wrapper и не смена default.
+
+W3/W4/W5/M03–04/OCR/full2411+6 и catalog MEASUREMENTS_ONLY сохраняются по неизменённой
+области влияния. Новый Source/full/build/installed replay ими не подменяется; canary не
+доказывает нормальный MDRack engine/catalog/CLI и независимое real-corpus качество/SLO.
+
+**Следующий implementation slice:** внешний host-owned encoder → явная инъекция
+существующего `PreparedEmbeddingProvider` → обычные `MDRackEngine`/catalog image ingest,
+semantic text-query search, public read, hash-original-open, close/reopen. Нужны честные
+capabilities/roles/bounds, полная canonical space identity, drift/refusal/cleanup и
+отсутствие CPU/legacy-vector подмены. Model loader не переносится в Core/application /
+default providers. У текущего CLI нет external-host provider option; явная композиция
+и настоящая installed-launcher parity требуют собственного выполненного доказательства.
+
+Затем — lexical enrichment того же resource без native re-encoding и существующий
+runner с независимо оценёнными RU/EN/similar distractor/negative/held-out материалами,
+заранее заданными quality/cost/latency критериями. Новый runtime/server/model или blind
+update из результата не следует; завершённые live-бюджеты закрыты. Полная native-media /
+semantic fitness/W6/operational/release цель остаётся OPEN.
 

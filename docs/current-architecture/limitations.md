@@ -32,9 +32,14 @@ This page is a current-state boundary, not a roadmap promise.
   does not establish API pixel admission; this is not a negative claim about the model,
   generic prepared-provider capabilities or all future LM Studio implementations.
   See the [input qualification](../contracts/native-image-v1.md#lm-studio-input-qualification).
-  No live native pixel/image, audio or video transport/semantic quality is qualified.
-  Explicit synthetic native providers prove local orchestration only. Original real
-  corpus/held-out/public A–D/quality-cost and W6 release gates remain separate.
+  Normal MDRack pixel/image, audio or video transport/semantic quality is not qualified.
+  A separate [external-host CUDA canary](../evaluation/native-image-cuda-canary-2026-10-23.md)
+  used actual installed native components: six fresh learned image/query vectors, sampled
+  completed CUDA outputs in both vision and backbone, and correct synthetic original
+  opens. It bypasses HTTP outside MDRack, not a new provider/default/CLI integration.
+  CPU PNG decoding/normalization, unqualified text-document role and distinct vector-space
+  identity remain explicit. Fake synthetic providers still prove local orchestration
+  only. Original real corpus/held-out/public A–D/quality-cost and W6 gates remain separate.
 - Local capture, source guards, CPU decoding and child cleanup remain app-owned.
   `mdrack_core` and `mdrack_media` never open sources or run processes. Pure media
   builders now accept native ready observations separately from genuine textual
