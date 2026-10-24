@@ -48,7 +48,7 @@ tags:
 > [!important] Статус плана
 > **CURRENT** обозначает проверенные особенности указанной ревизии. **TARGET** обозначает предлагаемое изменение. Условие завершения этапа не является утверждением, что этот этап уже выполнен. Названия новых операций и модулей не следует использовать как готовые команды установленного MDRack.
 >
-> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-reviewed-caption-pilot-and-required-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
+> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-native-text-image-v2-and-required-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
 
 ## Исходная точка и границы работ 🔎
 
@@ -899,6 +899,10 @@ whole semantic/cost/latency fitness/W6/operational/release остаётся OPEN
 
 ## Приняты ограниченный caption corpus и pre-score policy; обязательные срезы открыты
 
+Это исходный DATA-cutoff. [Отдельный paired companion](#current-reviewed-paired-companion-and-original-family)
+и [последующая native v2 приёмка](#current-native-text-image-v2-and-required-remainder)
+ниже сохраняют исходную семью и отдельно закрывают конкретные DATA/functional вопросы.
+
 На baseline `754cb37cf2df00c2bbfb590ed476ae97d1b80cdf` независимо приняты versioned
 private source-caption inputs и ограниченная experimental policy;
 [DATA-результат](../../evaluation/native-corpus-review-2026-10-24.md).
@@ -924,4 +928,71 @@ profile/config plan и отдельный конечный executor budget с ou
 Сохранены принятые native normal product/full/software/functional A без replay/reset;
 обязательные bilingual/negative/text/media gaps не скрываются числом pilot cases.
 Catalog MEASUREMENTS_ONLY; whole quality/cost/latency/SLO/W6/operational/release OPEN.
+
+<a id="current-reviewed-paired-companion-and-original-family"></a>
+
+## Принят paired-query companion; исходная семья сохраняется целиком
+
+[Независимая DATA-приёмка](../../evaluation/paired-query-companion-review-2026-10-24.md)
+принимает отдельный frozen/evaluable companion с одним конкретным held-out
+full-visible-intent pair, не robust multilingual fitness. Две семьи по 52 cases /
+44 human strings имеют 50 общих cases; union 54 cases/46 strings/22 source groups —
+только карта знаменателей, не исполняемый смешанный corpus. Две более трудные исходные
+cases обязательны в полной исходной семье. После изменения assistance нельзя копировать
+model rankings даже для общих cases. Reusable labels доказаны полными text/scope/media
+identities: 512 известных scoped rows сохранены, 22 решения двух изменённых 11-target
+scopes получены независимо. Четыре pooled unknowns, прежние исправления и policy/config
+bytes, включая минимум восемь QUERY-source groups при фактических одиннадцати на split,
+не изменены. Новый strict-pair minimum не вводится.
+
+Фактические reviewed rights bytes повторно использованы; новые query provenance и
+role lineage выведены для новых identities, а исходные metadata/physical root сохранены.
+Обе семьи проверены на собственных правильных roots, не на подменённом старом ledger.
+Component/inspect/evaluability/refusal gates выполнены без Root/model операций в DATA
+cutoff. Публикация была сериализована до фактического освобождения whole-Root custody.
+Это не приёмка тогда параллельно изменявшегося product source, не новые model results,
+legal/privacy certificate или разрешение публиковать private inputs.
+
+<a id="current-native-text-image-v2-and-required-remainder"></a>
+
+## Принят opt-in native text/image v2; corpus fitness и whole programme открыты
+
+[Независимая software/installed/CUDA приёмка](../../evaluation/native-text-image-product-2026-10-24.md)
+закрывает конкретный B text-DOCUMENT functional/composition blocker для явного
+`mdrack-cuda-retrieval-v2`: короткий UTF-8 DOCUMENT, один QUERY/text route по image/text
+candidates и прежний ограниченный RGB PNG DOCUMENT. Default HTTP A/v1, legacy spaces,
+Core/SQLite/schema/evaluator/assertions не изменены. Старые narrower-provider cutoffs
+не являются текущим generic missing-model blocker. Через existing complete import /
+ordinary-document C, normal engine/catalog/public read/reopen и настоящий installed PE
+подтверждён новый путь, не source injection или новый ordinary text-ingest command.
+
+Actual current Root: 2449 collected /2443 PASS /zero FAIL /six historical SKIP.
+Affected149 включает145 overlaps с full и четыре caller-lifecycle checks, не новую сумму
+независимых tests. Strict216/Ruff/four boundaries и четыре свежие isolated PEP517 wheels /
+noneditable236 payloads прошли проверку. ORIGINAL canonical tests читают текущий dirty
+tracked skill как fixture; это не утверждение равенства committed-HEAD fixture bytes.
+Foreign skill/reference/private evidence не входят в доставку.
+
+Новый конечный native window завершил14 cells/16 conservative units,12 отдельных
+read-only controls и один bounded monitor без retries. Десять настоящих forwards:
+3 text DOCUMENT +5 text QUERY +2 image;96 post-evaluation CUDA observations,
+10 независимо проверенных fresh raw/double-L2/f32 pairs и4 ожидаемых host refusals без
+forward/vector. D lexical enrichment кодирует0, сохраняет тот же resource/revision /
+native vector/space; последующий fresh hybrid QUERY возвращает image+text evidence.
+Процессы подтверждены original retained handles/creation identity/awaited exits;
+app roster/inventory/server сохранены. Прежний failed aggregate release и PID-reuse
+observer history не переписаны в PASS. CPU WIC/tokenization/L2 и sampled-node limits
+остаются явными; HTTP A text-kernel device по-прежнему UNKNOWN.
+
+Window использовал только artificial contract canaries, ноль target queries/scores
+из caption pilot/companion. Его бюджет CLOSED, не новый model grant. Actual target-campaign
+provider/profile/space/runner-plan bindings остаются unbound до отдельно названного
+qualified frozen-input/config/executor scope. Обе полные семьи и harder original cases,
+unknowns, actual A–D/optional-E/policy/coverage obligations сохранены; mixed54 corpus,
+перенос rankings или подмена quality зелёными controls не допускаются. Optional E и
+полный target-corpus experiment здесь не выполнялись. Исходные arbitrary-intent /
+lexical/name/number/code/long-text/media/OCR-ASR обязательства остаются в своём declared
+scope, без новых generic mandatory capabilities. Принятые software/OCR/normal image /
+functional A не переоткрываются. Catalog MEASUREMENTS_ONLY; whole semantic/cost/latency
+fitness/SLO/W6/operational/package/tag/release остаются OPEN.
 

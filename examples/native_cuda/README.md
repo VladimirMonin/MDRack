@@ -5,13 +5,48 @@ never loads model weights or vendor DLLs. `CUDAEncoderProvider` spawns a separat
 selected, hash-pinned caller executable and injects prepared vectors/space into the
 existing `MDRackEngine`. SQLite/catalog/ranking/public reads are unchanged.
 
-Only the `mdrack-cuda-abi12-v1` producer protocol is supported here: Windows x64,
+The default `mdrack-cuda-abi12-v1` producer protocol remains unchanged: Windows x64,
 PNG-only WIC CPU decode, fixed 224×224 8-bit RGB PNG, native mean pooling, 768 output,
 double L2 to float32. Image documents and text queries for image candidates only.
 No text-document, image-query/similarity, legacy-space compatibility, CPU-vector
 fallback, OCR/caption substitution, HTTP image request or general quality/SLO claim.
 A caller-supplied profile is an identity declaration, not a qualification certificate.
 A new producer/runtime/recipe needs its own real qualification.
+
+## Independently qualified opt-in retrieval-v2
+
+`configure.py --protocol mdrack-cuda-retrieval-v2` explicitly selects the extended
+caller-owned host/profile, never rewrites v1 or existing catalogs. Its new complete
+identity binds one shared image/text/document/query space. It declares DOCUMENT/image,
+DOCUMENT/text and one QUERY/text capability covering image and text candidates together.
+The Python adapter formats text exactly once, preserving the body without stripping,
+normalization or filename-derived title:
+
+```text
+DOCUMENT: title: none | text: {prepared body unchanged}
+QUERY:    task: search result | query: {query unchanged}
+IMAGE:    original bounded pixels, no text template
+```
+
+The 65,536-byte formatted UTF-8 ceiling is prefix-aware; context/batch/ubatch stay 2,048.
+The versioned native receipt binds operation, role/mode, formatted-input SHA256, PID
+and profile; wrong/partial/stale outputs refuse. Native token count includes prefix
+and special tokens and refuses before forward, without truncation/retry/fallback.
+The actual extended producer source/binary must be qualified and pinned separately;
+a declaration alone is not a certificate. The exact bounded
+[independent text/image qualification](../../docs/evaluation/native-text-image-product-2026-10-24.md)
+records fresh installed236 SDK/ordinary PE, ten learned forwards, 96 sampled evaluated
+CUDA outputs and four host refusals. It closes the named short-text B functional blocker,
+not target-corpus relevance, optional dense E, whole A–D or release acceptance.
+Image-query/similarity/audio/video and compatibility with v1/A remain unsupported.
+
+B uses the existing prepared manifest/import route, not a new text-ingest command.
+Existing `image native-search --candidates text|image|all` can select text/image/union;
+canonical D uses hybrid union after same-resource lexical-only enrichment (encoding0),
+then separately encodes its query. This does not qualify optional dense E product/quality.
+No evaluator rows, coverage/policy gates, SQL schema or Core ranker are changed.
+The outer caller owns every factory-created provider and closes it in finally, also
+when a later constructor, runner/report or cancellation fails; no default registration.
 
 ## Producer/source/build contract
 
@@ -51,6 +86,12 @@ uv run --offline --no-sync python examples/native_cuda/configure.py --profile C:
 mdrack --root C:/caller/project image native-ingest C:/caller/image.png --resource-id image-A --source-namespace caller --source-ref images/A.png --provider external --host-config C:/caller/native-host.json
 mdrack --root C:/caller/project image native-search --text "a visual description" --mode semantic --candidates image --provider external --host-config C:/caller/native-host.json
 ```
+
+For retrieval-v2, add `--protocol mdrack-cuda-retrieval-v2` to the configuration
+command and select its exact matching separately qualified source/executable/profile.
+Omitting that flag keeps v1; changing a name or protocol never migrates old vectors.
+The text-document path uses existing prepared manifest/import/API/runner composition,
+not a new ordinary text-ingest CLI.
 
 The `image native-*` commands alone expose `--provider external --host-config`.
 Other/default provider selection is unchanged. Host configuration is trusted local

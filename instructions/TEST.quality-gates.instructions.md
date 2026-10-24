@@ -86,6 +86,12 @@ isolate early reads/writes. Do not disable required guards for a green result. I
 cleanup/finalizers immediately after acquire, including partial setup, exceptions and
 cancellation; never clean another owner's resources.
 
+Native/helper release evidence must bind the owned process handle, creation identity
+and actual awaited exit. A numeric PID can be reused: its later presence is not an
+owned-process leak or permission to kill it, and later absence cannot supply an unknown
+historical exit. Preserve the original failure and distinguish identity-qualified
+release from a bare-PID observation.
+
 Use focused RED → minimal authorized implementation → the same GREEN test for a new
 behavior/regression. Preserve actual command, assertion/source identity and first failure;
 a fixture/setup error is not product RED. Verify observable bytes/state/readback/reopen

@@ -5,6 +5,11 @@ multilingual retrieval fitness, latency SLO, full-matrix or release acceptance.
 Source baseline: `46824c9be98b70521ce585294a3d185f2c315ef3`. The previously accepted
 [native image product](native-image-product-2026-10-23.md) and software gates remain
 unchanged; neither the full suite nor native CUDA forwards were replayed here.
+This report retains that HTTP-A cutoff. The later
+[opt-in native text/image result](native-text-image-product-2026-10-24.md) separately
+closes the named native B text-DOCUMENT functional blocker with fresh installed/CUDA
+proof; it does not expand this A result, identify its HTTP kernel device or run a
+real-corpus A–D/optional-E experiment.
 
 ## Producer, roles and identity
 
@@ -79,13 +84,15 @@ instance, enforce a new authorized hard ledger, close providers and unload that
 instance in `finally`: the current script does **not** provide a provider-close finally.
 An old closed proof ledger must never be reused or reset for another trial.
 
-Current `RunConfig` requires A/B/C/D or A/B/C/D/E; C/D-only configuration is refused.
-The B provider serves both prepared-text B and native C/D/optional E. Native B/E
-text-document capability remains unsupported. Null policy returns
+`RunConfig` requires A/B/C/D or A/B/C/D/E; C/D-only configuration is refused.
+The B provider serves both prepared-text B and native C/D/optional E. At this HTTP-A
+review cutoff, the selected native v1 text-document capability remained unsupported. Null policy returns
 `BLOCKED_POLICY_MISSING`; incomplete stages return `BLOCKED_COVERAGE`. Supplying
 independent gold/policy alone therefore does not make this composition a complete
-fitness matrix. The required B-role/matrix source-contract disposition remains open;
-no role fabrication, matrix redesign or assertion weakening is accepted here.
+fitness matrix. The required B-role source disposition was still open at that cutoff;
+no role fabrication, matrix redesign or assertion weakening was accepted here. The later
+explicit v2 qualification closes that functional role/composition blocker, while
+matrix/policy/coverage and corpus-fitness obligations remain unchanged.
 
 Next evidence must use independently frozen approved corpus/projections/queries /
 judgments/groups and experiment/policy/cutoffs/quality-cost-latency criteria through

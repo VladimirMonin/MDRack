@@ -8,8 +8,10 @@
 - [Catalog-open and public-search scaling, 2026-10-23](catalog-search-scaling-2026-10-23.md) — independently checked synthetic Windows measurements, separate default/open and already-open boundaries; no declared SLO or performance/model-quality PASS.
 - [Native-image CUDA external-host canary, 2026-10-23](native-image-cuda-canary-2026-10-23.md) — independently reproduced real vision/backbone CUDA and six learned vectors; its original external-only cutoff is preserved.
 - [Normal native-image product, 2026-10-23](native-image-product-2026-10-23.md) — independently accepted explicit caller host through normal engine/catalog/source CLI/installed PE, full DTO/f32/space parity and zero-encode same-resource lexical gain; not real-corpus fitness/SLO.
-- [Short-text A producer and caller factories, 2026-10-24](text-provider-functional-2026-10-24.md) — functional DOCUMENT/QUERY and actual no-argument factory dispatch; text-kernel device unknown, native B/E/full-matrix/corpus quality still open.
+- [Short-text A producer and caller factories, 2026-10-24](text-provider-functional-2026-10-24.md) — functional DOCUMENT/QUERY and actual no-argument factory dispatch; HTTP text-kernel device remains unknown, not model fitness.
+- [Opt-in native text/image product, 2026-10-24](native-text-image-product-2026-10-24.md) — independently accepted text-DOCUMENT/text-query-union bridge, fresh installed236 SDK/normal PE and bounded evaluated CUDA repeat; default/v1 unchanged, not corpus fitness or whole A–D completion.
 - [Independently reviewed source-caption pilot, 2026-10-24](native-corpus-review-2026-10-24.md) — private frozen data/limited pre-score policy; actual physical/rights/shared-gold review and public inspect, not mandatory-slice or model-fitness completion.
+- [Independently reviewed paired-query companion, 2026-10-24](paired-query-companion-review-2026-10-24.md) — separate frozen/evaluable companion and whole original family retained; one concrete held-out matched-intent DATA pair, not robust multilingual model fitness.
 
 Evaluation correctness, provider usefulness, production search latency and installed
 release readiness are separate evidence boundaries. The v2 manual oracle proves
@@ -50,14 +52,23 @@ text200/768 does not establish pixel admission. See the
 [scoped input limitation](../contracts/native-image-v1.md#lm-studio-input-qualification).
 The later canary and normal product result have distinct boundaries: the latter now
 qualifies actual opt-in prepared-provider integration with unchanged default HTTP.
-Current actual full is 2428 collected /2422 PASS /six historical SKIP /zero FAIL;
+At the image-v1 cutoff, full was 2428 collected /2422 PASS /six historical SKIP /zero FAIL;
 the six original real-current-skill consumers passed read-only without body changes /
-substitution. Earlier RED remains historical; no private skill content is delivered.
+substitution. The later independent opt-in v2 qualification is 2449 collected /2443 PASS /
+six historical SKIP /zero FAIL, with 149 affected checks, strict216 and four fresh isolated
+wheels/noneditable installed236. Current dirty canonical skill fixture consumption is
+not an assertion of identical committed-HEAD fixture bytes. Earlier RED remains historical; no private skill content is delivered.
 The later short-text A qualification establishes functional producer/prefix/space and
 real caller-factory dispatch only, not multilingual quality or native text-document roles.
-The later independent review accepts a private22-parent/52-case caption pilot and limited
-pre-score policy, with three grade changes/four pooled unknowns. Required strict held-out
-bilingual coverage, negative semantic fitness and B-role/matrix remain OPEN; data approval
-is not model fitness. No unchanged full/native/build/installed/A replay was performed.
-Catalog measurements remain MEASUREMENTS_ONLY. Next execution is maintained in the
-[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-reviewed-caption-pilot-and-required-remainder).
+The data review accepts a private 22-parent/52-case caption pilot and limited pre-score
+policy, with three grade changes/four pooled unknowns. Its separate reviewed companion
+adds one concrete strict held-out matched-intent group. Both complete 52-case families
+remain required: shared 50 cases, campaign 54 scope-cases/46 human strings/22 groups,
+not an executable mixed union or permission to copy model results after assistance changes.
+The named native B text-DOCUMENT functional blocker is now closed by the opt-in v2
+result; A–D/optional-E requirements and coverage/policy checks are unchanged. No target
+corpus scoring occurred. Robust multilingual/negative semantic fitness, actual owning
+remaining slices, quality/cost/latency/SLO/W6/operations/release stay OPEN. Functional A
+is retained without new HTTP calls; catalog measurements remain MEASUREMENTS_ONLY.
+Next execution is maintained in the
+[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-native-text-image-v2-and-required-remainder).

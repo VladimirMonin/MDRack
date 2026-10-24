@@ -24,8 +24,11 @@ This page is a current-state boundary, not a roadmap promise.
   at context 2048, not an 8 MiB/long-context guarantee or multilingual semantic quality.
   Server-returned unit norms are observed, not adapter normalization. Selected CUDA /
   GPU-max/residency do not establish HTTP text-forward/kernel device; that remains unknown.
-  Caller-private factory glue is not installed product support. The existing runner's
-  native B/E text-document and required full-matrix constraint remain open.
+  Caller-private factory glue is not installed product support. The separate
+  [opt-in native text/image v2 qualification](../evaluation/native-text-image-product-2026-10-24.md)
+  closes the named native B text-DOCUMENT functional blocker with fresh installed/CUDA
+  evidence; this does not execute a target-corpus A–D experiment or optional dense E.
+  The runner still requires the complete A–D/optional-E matrix and policy/coverage gates.
 - Legacy raw audio/video textual paths still consume supplied transcripts/frame captions
   or explicit local STT/extractor output. The separate 1.4.0rc3
   [native temporal component](../contracts/native-temporal-v1.md) performs bounded
@@ -47,18 +50,29 @@ This page is a current-state boundary, not a roadmap promise.
   public original opens/reopen and zero-encode same-resource lexical enrichment with
   an explicitly selected external provider. It does not repair the HTTP wrapper.
   CPU PNG decoding/L2, sampled rather than all-operator CUDA proof, separate full-space
-  identity and unqualified text-document/image-query/similarity remain explicit.
-  Only bounded fixed-size RGB PNG and text-query-for-image roles are qualified; no audio /
-  video inference, independent semantic quality or portable latency/SLO follows. Fake
+  identity remain explicit. The original v1 result qualifies fixed RGB PNG documents
+  and text-query-for-image only; explicit v2 separately qualifies short UTF-8 text
+  DOCUMENT and one text QUERY capability over image/text candidates. Its 65,536-byte
+  formatted wire and 2,048-token context are bounds, not long-context support; old spaces
+  are not rekeyed. Image-query/SIMILARITY, document-vector reuse, audio/video inference,
+  independent semantic quality and portable latency/SLO remain unqualified. Fake
   synthetic providers still prove orchestration only. Real-corpus/held-out/public A–D /
   quality-cost/W6 gates remain separate.
 - The [independently reviewed private caption pilot](../evaluation/native-corpus-review-2026-10-24.md)
   establishes bounded data/rights/shared-gold and pre-score policy only:22 parents,
   11+11 source groups,44 human texts/52 scope-cases, three grade changes and four pooled
-  unknowns. Strict query-translation coverage has one dev pair/no held-out pair; paired
-  assistance languages do not repair it. Negative gold is subcatalog-scoped and ceiling10
-  is structural, not refusal fitness. Arbitrary notes/code/long-text and other media
-  slices, required B-role/matrix and actual semantic/cost/latency/SLO fitness remain OPEN.
+  unknowns. That original family retains one strict dev pair/no held-out pair; paired
+  assistance languages do not repair it. The [reviewed companion](../evaluation/paired-query-companion-review-2026-10-24.md)
+  separately adds one concrete strict held-out query-intent group, not a new independent
+  parent or robust multilingual model result. Retain both whole 52-case families and
+  the original harder cases; their 54-case union is a map, never mixed executable input
+  or permission to transfer rankings after assistance changes. Eight QUERY-source groups
+  remains the unchanged full-family policy, not a strict-pair minimum. Negative gold is
+  subcatalog-scoped and ceiling ten is structural, not abstention fitness; pooled unknowns
+  stay unknown. Actual owning arbitrary-intent/lexical/name/number/code/long-text and
+  text/media/OCR-ASR obligations retain their declared scope, without new generic gates.
+  Target-corpus A–D/optional-E and semantic/cost/latency/SLO fitness remain OPEN despite
+  the separately closed B-role functional blocker.
 - Local capture, source guards, CPU decoding and child cleanup remain app-owned.
   `mdrack_core` and `mdrack_media` never open sources or run processes. Pure media
   builders now accept native ready observations separately from genuine textual

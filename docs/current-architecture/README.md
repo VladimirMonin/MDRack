@@ -4,10 +4,13 @@ This package describes the checked-out MDRack 1.4.0rc3 source candidate.
 The app-owned [native image contract](../contracts/native-image-v1.md) adds typed
 routes. Default LM Studio HTTP remains text-only; an explicit trusted outer
 [caller-process composition](../decisions/0018-caller-owned-native-encoder.md) now has
-bounded real image product qualification, not independent real-quality/SLO acceptance.
-Per-component evidence sections below retain original cutoffs; the
-[latest product/software result](../evaluation/native-image-product-2026-10-23.md)
-records current full/static/installed qualification without reopening historical debt.
+bounded real image product qualification and a separately accepted explicit text/image
+v2 protocol, not independent real-quality/SLO acceptance. Per-component sections below
+retain original cutoffs; the
+[latest product/software result](../evaluation/native-text-image-product-2026-10-24.md)
+records current full/static/fresh-installed and evaluated CUDA qualification without
+reopening historical debt. The [paired-query companion](../evaluation/paired-query-companion-review-2026-10-24.md)
+is separate DATA evidence and retains the complete original corpus family.
 It is the
 maintainer entry point for current module boundaries, indexing, persistence,
 retrieval, asset handling, public interfaces, and known limitations.
@@ -34,7 +37,7 @@ When sources disagree, use this order:
 
 ## Supporting current contracts
 
-- [Native image / explicit caller host](../contracts/native-image-v1.md) — default text HTTP, opt-in image native external process, honest roles/space/lifecycle and original-opening authority.
+- [Native image / explicit caller host](../contracts/native-image-v1.md) — default text HTTP, opt-in image-v1/text-image-v2 external process, honest roles/space/lifecycle and original-opening authority.
 - [ADR-0018: caller-owned native encoder](../decisions/0018-caller-owned-native-encoder.md)
 
 - [Native temporal/media v1](../contracts/native-temporal-v1.md) — actual bounded CPU preparation and pure frames/audio/direct-video builders, async engine, conditional publication and explicit synthetic-only component boundary.

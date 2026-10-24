@@ -114,16 +114,21 @@ The [short-text A functional result](text-provider-functional-2026-10-24.md) qua
 short DOCUMENT/QUERY inputs through the existing LM Studio producer/legacy adapter,
 including the real script's no-argument factory path. This is not real-corpus quality,
 long-context support or installed support for a caller-private factory module. Native
-image product qualification is separate and does not add native text-document roles.
+image-v1 qualification retains its narrower roles. The later independently accepted
+[opt-in native text/image v2 result](native-text-image-product-2026-10-24.md) adds real
+short text DOCUMENT and one text QUERY capability covering image/text candidates,
+with fresh installed SDK/ordinary PE and evaluated CUDA evidence. The named native B
+text-DOCUMENT functional/composition blocker is closed for that exact profile, not by gold.
 
-Current `RunConfig.parse` admits only A/B/C/D or A/B/C/D/E, not a C/D-only run.
+Current `RunConfig.parse` still admits only A/B/C/D or A/B/C/D/E, not a C/D-only run.
 The supplied B provider is shared by prepared-text B and native C/D/E: `_projection`
-requires DOCUMENT TextInput, and optional dense E also needs that role. The qualified
-image/text-query native provider honestly refuses it before encoding. Null policy
-returns `BLOCKED_POLICY_MISSING`; any incomplete stage returns `BLOCKED_COVERAGE`.
-Independent gold/policy cannot alone close this required B-role/matrix constraint.
-Its source-contract disposition remains open; do not fabricate capabilities, drop
-blocked denominators or treat functional A as whole-matrix fitness acceptance.
+requires DOCUMENT TextInput, and optional dense E also needs that role. The original
+image-only-document v1 provider still refuses it; explicit v2 supports it without
+changing default A/v1 or rekeying existing vectors. Null policy returns
+`BLOCKED_POLICY_MISSING`; incomplete stages return `BLOCKED_COVERAGE`. No target-corpus
+A–D or optional-E model experiment was executed by the bounded v2 qualification.
+Do not fabricate capabilities, drop blocked denominators or treat functional roles
+as whole-matrix relevance/cost/latency fitness.
 
 ## Independently reviewed private caption pilot
 
@@ -134,12 +139,34 @@ changed; four unresolved pairs stay omitted in pooled judgments, not grade0. Cur
 validators/require_evaluable and real public source `inspect` accept the own frozen
 successors with publicationfalse; full RunConfig parsing is separately established.
 
-This does not close strict held-out bilingual, negative-intent semantic fitness or the
-B-role/matrix constraint above. Source-caption assistance is not actual OCR/ASR. The
+The original family has one strict dev pair and no strict held-out pair; the separate
+companion below adds one concrete held-out pair. Neither DATA acceptance nor the
+separate functional v2 bridge proves robust multilingual or negative-intent semantic
+fitness. Source-caption assistance is not actual OCR/ASR. The
 policy's0.05 regression/0 gain are per-query hypotheses at the last compared cutoff;
 negative ceiling10 is structural for6/7-member scopes, and30,000ms includes query
 preparation/search/ranked conversion/first evaluation, not pure API latency or a user SLA.
 No model, factory or scoring was run for DATA approval; execution needs its own grant.
+
+## Reviewed paired-query companion and original family
+
+The [paired DATA result](paired-query-companion-review-2026-10-24.md) accepts a separate
+frozen/evaluable companion; the complete original 52-case family remains mandatory
+and unchanged, including its harder cases. Each family has 44 literal human strings
+and 22 groups. Their shared 50 exact cases support only identity-bound label reuse:
+512 known scoped rows retain complete text/scope/media identity, while the two changed
+11-target scopes have 22 fresh independent decisions. Rankings cannot be copied after
+assistance changes. The campaign 54-case/46-string union is a denominator map, not an
+executable mixed corpus; actual old-query/mixed-union controls refuse copied assistance.
+
+Use each final bundle with its own actual approved physical/metadata root, not an older
+source rights-ledger substitution. Exact reviewed rights bytes are reused, attribution
+descriptors rebound honestly and changed query provenance/role lineage derived for the
+new identities. Four pooled unknowns and prior corrections remain. Publication stays
+false; local technical rights review is not a legal/privacy certificate. The policy
+minimum remains eight QUERY-source groups, with eleven per full-family split, not a
+new strict-pair minimum. One strict held-out group is not robust multilingual model
+fitness, and the negative ceiling of ten remains structural rather than abstention proof.
 
 ## Caller policy, costs and privacy
 

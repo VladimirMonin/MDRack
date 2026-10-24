@@ -16,6 +16,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("profile", "executable", "source", "runtime-path", "vendor-path", "work-directory", "output"):
         parser.add_argument("--" + name, required=True, type=Path)
+    parser.add_argument("--protocol", choices=("mdrack-cuda-abi12-v1", "mdrack-cuda-retrieval-v2"),
+                        default="mdrack-cuda-abi12-v1", help="Explicit opt-in; never rekeys old catalogs/profiles.")
     args = parser.parse_args()
     if args.output.resolve().is_relative_to(Path(__file__).resolve().parents[2]):
         parser.error("private configuration must remain outside the source checkout")
@@ -24,6 +26,8 @@ def main() -> None:
     expected = hashlib.sha256(json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if expected != profile["fingerprint"]:
         parser.error("profile fingerprint mismatch")
+    if args.protocol == "mdrack-cuda-retrieval-v2" and metadata.get("protocol") != args.protocol:
+        parser.error("extended producer profile required")
     pins = {row["path"]: row["sha256"] for row in metadata["runtime_file_identities"]}
     for row in metadata["actual_loaded_release_modules"]:
         pins[row["path"]] = row["sha256"]
@@ -35,7 +39,7 @@ def main() -> None:
         if hashlib.sha256(path.read_bytes()).hexdigest() != pins[str(path.resolve())]:
             parser.error("producer identity mismatch")
     payload = {
-        "protocol": "mdrack-cuda-abi12-v1",
+        "protocol": args.protocol,
         "executable": str(args.executable.resolve()), "source": str(args.source.resolve()),
         "model": weights["embeddinggemma-2-Q8_0.gguf"], "projector": weights["mmproj-F16.gguf"],
         "files": [{"path": p, "sha256": d} for p, d in pins.items()],

@@ -5,7 +5,7 @@ Read [bundle](../../docs/proposals/native-media/README.md) in order 01 → 02 �
 This entry tracks execution, not another roadmap or evidence registry.
 
 Current software acceptance and the next bounded execution are recorded in
-[the latest status](#current-reviewed-caption-pilot-and-required-remainder). Earlier per-family OPEN /
+[the latest status](#current-native-text-image-v2-and-required-remainder). Earlier per-family OPEN /
 FAIL statements below retain their original acceptance boundary; they do not reopen
 findings explicitly closed by a later qualified result.
 
@@ -275,7 +275,7 @@ native-media/fitness/W6/operational/release remains OPEN.
 ## Current native product and fitness remainder
 
 This product checkpoint retains its original next-work cutoff. The functional-A
-checkpoint below also retains its cutoff; [the latest data/remainder status](#current-reviewed-caption-pilot-and-required-remainder) is current.
+checkpoint below also retains its cutoff; [the latest native/data remainder](#current-native-text-image-v2-and-required-remainder) is current.
 
 The exact source8 on baseline `d5476653a4da80ab4082b47ce47a0e4ffc90c973` is independently
 ACCEPTED as a bounded normal image product slice; see [product result](../../docs/evaluation/native-image-product-2026-10-23.md)
@@ -333,6 +333,10 @@ budgets stay closed, catalog scaling MEASUREMENTS_ONLY, whole fitness/W6/release
 
 ## Current reviewed caption pilot and required remainder
 
+This is the original DATA-review cutoff. The [paired companion](#current-reviewed-paired-companion-and-original-family)
+and [later native v2 qualification](#current-native-text-image-v2-and-required-remainder)
+below retain the original family while resolving their separately named DATA/functional gaps.
+
 On baseline `754cb37cf2df00c2bbfb590ed476ae97d1b80cdf`, independent DATA review accepted
 [a private source-caption pilot and limited pre-score policy](../../docs/evaluation/native-corpus-review-2026-10-24.md), not model fitness. Actual22 submitted RGB224 views/parents/rights/lineage and shared gold were checked;
 11 dev +11 held-out source groups,44 human texts/52 cases. Three proposed grades changed;
@@ -356,3 +360,64 @@ unload. Do not replay unchanged native/full/build/installed/A proof, reopen thei
 ledgers or replace required missing bilingual/negative/text slices with pilot counts.
 Functional A/normal native product stay accepted; catalog MEASUREMENTS_ONLY and whole
 semantic/cost/latency fitness/SLO/W6/operational/release remain OPEN.
+
+## Current reviewed paired companion and original family
+
+Independent [paired-query DATA review](../../docs/evaluation/paired-query-companion-review-2026-10-24.md)
+accepts a separate frozen/evaluable companion while retaining the complete original
+family and its two harder cases. The two changed 11-target scopes have 22 independent
+visual judgments; 50 exact shared cases/512 known scoped rows reuse only unchanged
+text/scope/media-bound label evidence. Both families have 52 cases/44 human strings /
+22 groups; the campaign union is 54 scope-cases/46 strings/22 groups, not executable
+mixed input. Model rankings cannot be copied after assistance changes.
+
+One concrete strict held-out full-visible-intent group is established, not another
+independent parent or robust multilingual model fitness. Four pooled unknowns, prior
+corrections and policy/config bytes remain unchanged, including eight QUERY-source groups
+with eleven per split. Actual reviewed rights bytes and genuinely derived query
+provenance/role lineage are bound to each correct full root; publication stays false.
+Qualified component/physical/evaluability/inspect/refusal gates passed without Root/model
+operations at that DATA cutoff. Publication was serialized until actual whole-Root
+custody release; it is not another data approval or a model-quality result.
+
+<a id="current-native-text-image-v2-and-required-remainder"></a>
+
+## Current native text/image v2 and required remainder
+
+The [explicit native text/image v2 composition](../../docs/evaluation/native-text-image-product-2026-10-24.md)
+is independently ACCEPTED for short text DOCUMENT, one text QUERY route over image/text
+candidates and bounded RGB PNG DOCUMENT. Default HTTP A/v1 and legacy spaces are
+unchanged. Existing complete import, ordinary-document C delegation, normal engine /
+SQLite/read/reopen and fresh D hybrid union operate through the fresh noneditable SDK
+and ordinary installed PE. The named B text-DOCUMENT functional blocker is closed;
+old narrower-provider cutoffs must not be used as a current generic missing-model block.
+No new text-ingest command, default registration or source-package injection is added.
+
+Current independent Root: 2449 collected /2443 PASS /zero FAIL /six historical SKIP;
+149 original affected checks include 145 full-suite overlaps and four caller-lifecycle
+checks. Strict216, Ruff/four boundaries and four fresh isolated wheels with236 exact
+installed payloads passed. Original canonical tests consume the current dirty tracked
+skill fixture; this does not claim committed-HEAD fixture-byte equivalence or deliver
+foreign skill/reference bodies.
+
+A separate hard-bounded native window completed 14 dispatch cells/16 units, twelve
+individual read-only controls and one monitor without retries. Ten actual forwards
+(three text DOCUMENT, five text QUERY, two images) provide96 evaluated CUDA observations
+and ten independently reconstructed fresh raw/double-L2/f32 pairs; four host negatives
+refuse without forwards/vectors. D lexical enrichment encodes0, retains the same native
+resource/revision/vector/space and its later fresh QUERY returns both image/text evidence.
+Retained handles/creation identities/awaited exits establish cleanup; app roster/inventory /
+server and frozen source/runtime/input bytes remain unchanged. Earlier aggregate release
+failures/PID-reuse observations stay historical failures, not retroactive PASS.
+
+This window used only artificial contract canaries, zero caption-pilot/companion targets,
+queries or scores. Its budget is CLOSED. Actual target-campaign provider/profile/space /
+runner-plan identities remain unbound until a concrete separately named frozen-input
+plan and fresh execution scope. Keep both complete data families, original harder cases,
+unknowns and unchanged A–D/optional-E/policy/coverage requirements; no mixed54 union or
+shared rankings. A functional role is not optional-E or whole-matrix fitness acceptance.
+Actual owning arbitrary-intent/lexical/name/number/code/long-text/media/OCR-ASR obligations
+retain their declared scope, without adding generic future gates. Functional A and
+accepted software/OCR/image scopes stay accepted; HTTP A kernel device remains UNKNOWN.
+Catalog scaling is MEASUREMENTS_ONLY; corpus quality/cost/latency/SLO/W6/operations /
+package/tag/release remain OPEN. No automatic model trial follows.

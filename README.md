@@ -4,8 +4,10 @@
 > Core pin 1.0.0rc2, media pin 1.0.0rc3, SQLite 1.0.0rc3 and app-v2 schema 0005.
 > Existing [prepared/native image API](docs/contracts/native-image-v1.md)
 > and [ADR-0013](docs/decisions/0013-native-image-contract.md). Native CLI/engine
-> orchestration is available for explicit offline providers; selected production
-> LM Studio pixels remain unsupported. This is not live/quality/release acceptance.
+> orchestration supports explicit offline providers and a separately qualified
+> [opt-in caller-owned native text/image process](docs/evaluation/native-text-image-product-2026-10-24.md).
+> Default LM Studio HTTP pixels remain unsupported; bounded native qualification is
+> not target-corpus quality, whole-programme or release acceptance.
 
 
 The retained MDRack 1.3.0 base is a local Python 3.11+ command-line and embedded retrieval rack for
@@ -89,9 +91,9 @@ LM Studio model-management commands. Host applications can use
 - [MDRack agent skill](skills/mdrack/SKILL.md) — self-contained terminal workflow
 - [Operations, diagnostics, privacy, and troubleshooting](docs/operations.md)
 - [Development guide for humans and coding agents](docs/development.md)
-- [Evaluation contracts and native corpus/public runner](docs/evaluation/README.md) — source/local and installed synthetic mechanics; real corpus/model quality remains open
+- [Evaluation contracts and native corpus/public runner](docs/evaluation/README.md) — separate software/installed/native functional and reviewed-data evidence; target-corpus model fitness remains open
 - [Current architecture index](docs/current-architecture/README.md)
-- [Proposed native-media / late-enrichment programme](docs/proposals/native-media/README.md) — full programme; scoped native components are implemented, while live/quality/release obligations remain open
+- [Proposed native-media / late-enrichment programme](docs/proposals/native-media/README.md) — full programme; scoped native components are implemented, while whole-programme quality/operations/release obligations remain open
 - [System overview](docs/current-architecture/system-overview.md)
 - [Indexing and structural chunking](docs/current-architecture/indexing-and-chunking.md)
 - [SQLite persistence and current schema](docs/current-architecture/sqlite-persistence.md)
@@ -129,6 +131,16 @@ text is caller-supplied or produced by an injected extractor; live LM Studio use
 requires an explicit provider choice. Source bytes remain outside SQLite and are
 never modified.
 
+The explicit [caller-owned native composition](examples/native_cuda/README.md) also
+supports real image vectors without caption substitution. Its unchanged v1 protocol
+admits fixed RGB PNG documents/text-query-for-image; explicit retrieval-v2 additionally
+qualifies short text DOCUMENT and one text QUERY route over image/text candidates.
+Normal engine/catalog/installed PE and fresh evaluated CUDA checks are recorded
+separately from private corpus/model fitness. No runtime/model is bundled, loaded into
+Python or made the default; provider roles, complete space identity and caller lifecycle
+remain explicit. The [reviewed paired-data companion](docs/evaluation/paired-query-companion-review-2026-10-24.md)
+retains both complete corpus families and does not grant model execution or publication.
+
 ## Known limitations
 
 - SQLite is the only persistent database. Fresh compact generations use canonical
@@ -138,8 +150,10 @@ never modified.
   not overlap.
 - Production reranking is disabled. `rerank_rank` and `rerank_score` remain
   `null`; non-null reranker injection fails closed.
-- MDRack indexes supplied transcripts and frame-caption text; it does not
-  transcribe raw audio or perform pixel/visual or acoustic search.
+- Default textual media paths index supplied transcripts/frame-caption text; they
+  do not transcribe raw audio or perform pixel/acoustic inference. The separately
+  selected bounded native image/text process above is not a generic audio/video
+  inference capability or independent semantic-quality guarantee.
 - The CLI also accepts explicitly authorized local raw-media adapters:
   `ingest audio SOURCE_PATH --source-ref REF --allow-external-stt
   --stt-command COMMAND` for RIFF/WAVE input and `ingest raw-video SOURCE_PATH

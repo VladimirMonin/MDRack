@@ -43,11 +43,18 @@ side effects; `--provider synthetic` is explicit offline testing, not a model.
 Only these image native commands additionally accept `--provider external --host-config CONFIG`:
 trusted outer composition of a caller-owned bounded CUDA process with the normal engine /
 catalog. Missing config or config with another provider refuses with the normal one-envelope
-error; there is no implicit fallback/default or other-command factory change. Current
-roles are image-document and text-query-for-image, not text-document/image-query/similarity.
+error; there is no implicit fallback/default or other-command factory change. The
+original v1 protocol supports image-document/text-query-for-image. Explicit
+`mdrack-cuda-retrieval-v2` additionally qualifies short text DOCUMENT through the existing
+prepared import/API/runner path and one text QUERY capability over image/text candidates.
+The same normal `image native-search --text TEXT --candidates text|image|all` command
+uses those declared candidate routes; no new ordinary text-ingest CLI is introduced.
+Image QUERY, SIMILARITY, audio/video inference and stored-document-vector reuse remain
+unsupported by this external provider.
 Exact private setup, lifecycle and limits: [caller recipe](../examples/native_cuda/README.md),
 [ADR-0018](decisions/0018-caller-owned-native-encoder.md). Source and actual installed PE
-product execution is qualified separately from independent real-corpus quality/SLO.
+product execution is qualified separately from independent real-corpus quality/SLO;
+see the [latest opt-in text/image result](evaluation/native-text-image-product-2026-10-24.md).
 No OCR, caption, filename-as-text or hidden provider substitution is performed.
 Old `image ingest/search` and text search envelopes remain unchanged.
 

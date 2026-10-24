@@ -130,8 +130,11 @@ Preflight the exact intended instance/artifacts/context, keep a fresh explicit l
 then close providers and unload only that owned instance in outer `finally`. The current
 script has no provider-close finally. A closed proof ledger or unavailable alias is not
 a new execution allowance or JIT/fallback route. Private factory glue is not bundled
-installed support. Current required A/B/C/D(/E) and native B/E text-document mismatch
-remain open; do not fabricate roles or reinterpret C/D-only as accepted configuration.
+installed support. The separately qualified [native text/image v2 composition](evaluation/native-text-image-product-2026-10-24.md)
+closes the named native B text-DOCUMENT functional blocker; default/v1 remains unchanged.
+Required A/B/C/D(/E), policy and coverage gates are not relaxed, and no target-corpus
+matrix or optional-E experiment follows. Do not fabricate roles or reinterpret C/D-only
+as accepted configuration.
 
 ### Reviewed private evaluation inputs
 
@@ -141,10 +144,25 @@ Keep media/text/credits/URLs private and use only the explicitly admitted source
 Pooled unknowns stay unknown, negative gold applies only to the declared6/7-member
 subcatalogs, and paired assistance variants are not strict bilingual query coverage.
 The policy's per-query bounds/structural negative ceiling are not user SLAs or semantic
-fitness. Resolve the external required B-role/matrix contract and freeze a concrete new
-executor scope before any dispatch; approved data does not reopen closed proof budgets.
+fitness. Functional v2 resolves the named B-role blocker separately from DATA; freeze a
+concrete target input/profile/config/executor scope and fresh authorization before its
+model dispatch. Approved data does not reopen closed proof budgets.
 
-### Explicit caller-owned native image encoder
+### Keep original and paired companion experiments separate
+
+The [reviewed paired companion](evaluation/paired-query-companion-review-2026-10-24.md)
+has its own exact metadata/physical root. Retain the complete original 52-case family,
+including its harder cases, and use its actual approved root rather than an older
+source-ledger substitution. Do not append the now assistance-copy original queries to
+the companion or treat the 54-case union as executable input. Shared labels never license
+sharing model results when assistance changes. Four pooled unknowns and policy bytes
+remain unchanged. One concrete strict held-out pair is DATA evidence, not robust
+multilingual or abstention fitness. Actual target-campaign profile/space/runner-plan
+bindings remain unbound until its separately named qualified phase.
+
+<a id="explicit-caller-owned-native-image-encoder"></a>
+
+### Explicit caller-owned native image/text encoder
 
 Use only trusted qualified artifacts and an existing private work directory, following
 [the caller recipe](../examples/native_cuda/README.md). From the checkout, configure
@@ -153,8 +171,14 @@ then explicitly select `image native-ingest` / `image native-search --provider e
 --host-config CONFIG`. CONFIG is private caller composition, never indexed content or
 a profile certificate. Default/other commands still use their existing providers.
 
-This bounded route accepts fixed 224×224 RGB PNG documents and text queries for images,
-not text-document/image-query/similarity. Do not mix its full space with legacy vectors,
+The default v1 protocol accepts fixed 224×224 RGB PNG documents and text queries for
+images. Configure the separately qualified v2 artifacts explicitly with
+`--protocol mdrack-cuda-retrieval-v2` for short UTF-8 text DOCUMENT and one text QUERY
+route over image/text candidates. Formatted bytes are at most 65,536, full token count
+at most 2,048 and native timeout at most 120 seconds; there is no silent truncation.
+This is existing prepared import/API/runner composition, not a new text-ingest command.
+Image QUERY/SIMILARITY, audio/video inference and document-vector reuse remain unsupported.
+Do not mix its distinct full space with v1/A/legacy vectors, rekey an old catalog,
 change pins silently, weaken refusals or infer general quality/latency. Python/Core /
 application/default providers do not load weights/vendor DLLs. The caller owns the
 separate process, resource availability and close/reap; no new service/model is implied.

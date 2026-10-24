@@ -28,13 +28,19 @@ effective modes, nullable evidence and explicit score_kind. CLI adapters are
 The default LM Studio HTTP adapter still refuses pixels; explicit synthetic selection
 tests orchestration only. Explicit trusted outer `CUDAEncoderProvider` injection and
 `image native-* --provider external --host-config CONFIG` now have a bounded real
-source/installed product qualification: image documents/text-query-for-image only,
-normal catalog/search/public read/reopen and zero-encode manual lexical enrichment.
-See [ADR-0018](../decisions/0018-caller-owned-native-encoder.md) and
-[product evidence](../evaluation/native-image-product-2026-10-23.md). Original opening
-joins read identity/whole_image with PUBLIC search locator/revision and caller allowlist;
-read-unit coordinates remain redacted. No text-document/image-query/similarity, legacy
-space, audio/video model quality, default or legacy method change follows.
+source/installed product qualification. The original v1 protocol supports image documents
+and text-query-for-image; explicit `mdrack-cuda-retrieval-v2` additionally supports short
+UTF-8 text DOCUMENT and one text QUERY capability over image/text candidates. Normal
+catalog/import/search/public read/reopen and zero-encode same-image lexical enrichment
+are exercised, with a fresh D hybrid query returning both image/text evidence.
+See [ADR-0018](../decisions/0018-caller-owned-native-encoder.md), the
+[original image result](../evaluation/native-image-product-2026-10-23.md) and
+[latest text/image result](../evaluation/native-text-image-product-2026-10-24.md).
+This uses existing prepared inputs/import methods, not a new ordinary text-ingest CLI.
+Original opening joins read identity/whole_image with PUBLIC search locator/revision
+and caller allowlist; read-unit coordinates remain redacted. Image-query/similarity,
+document-vector reuse, legacy-space compatibility, audio/video model quality, default
+or legacy method changes do not follow; corpus fitness remains separate.
 
 ## Prepared OCR enrichment
 

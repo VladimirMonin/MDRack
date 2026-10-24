@@ -15,6 +15,12 @@ real-image packet received independent data review, without model operations:
 The accepted [normal native product](native-image-product-2026-10-23.md) and
 [functional short-text A](text-provider-functional-2026-10-24.md) remain accepted
 within their own scopes. Neither was replayed or reclassified as a missing model.
+The decisions above retain this original DATA-review cutoff. The later
+[paired-query companion](paired-query-companion-review-2026-10-24.md) accepts a separate
+whole family with one concrete strict held-out pair; the separately accepted
+[native text/image v2 result](native-text-image-product-2026-10-24.md) closes the named
+B text-DOCUMENT functional blocker. Neither changes this family's original cases/gold,
+policy, rights limit or absence of target-model scoring.
 
 ## Physical inputs, rights and independence
 
@@ -119,10 +125,13 @@ are preserved. Independent review made **zero** model/GPU/LM Studio/lifecycle/fa
 HTTP GET, ranking/scoring or installation calls. Own checker-setup failures were
 retained and corrected only in owned helpers, not product/tests or proposed inputs.
 
-Current [runner contract](native-corpus-v2.md#current-real-provider-qualification-and-matrix-boundary)
-still requires the external B-role/matrix source disposition; approved data cannot
-manufacture DOCUMENT TextInput capability or make C/D-only a valid config. Execution
-needs that disposition, a concrete profile/configuration freeze and a separately
-authorized hard budget with outer provider-close/exact-owned-unload lifecycle. No
+At this DATA-review cutoff the [runner contract](native-corpus-v2.md#current-real-provider-qualification-and-matrix-boundary)
+still required the external B-role source disposition; approved data could not manufacture
+DOCUMENT TextInput capability or make C/D-only valid. The later independent opt-in v2
+result resolves that named functional blocker, not by changing data or the A–D/optional-E
+matrix. Target execution still needs its concrete frozen families/profile/configuration
+and a separately authorized hard budget with outer provider-close/exact-owned-unload
+lifecycle. Keep both complete original/companion families; their overlap map is not an
+executable mixed corpus and shared labels do not authorize copied model rankings. No
 closed native/text proof ledger is renewed. Catalog scaling stays MEASUREMENTS_ONLY;
 no relevance, latency SLO or whole-plan acceptance follows from this data approval.

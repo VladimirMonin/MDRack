@@ -888,3 +888,57 @@ def test_public_engine_all_scenarios_and_paired_enrichment(tmp_path: Path) -> No
     assert len(report["paired"]) == 6
     assert a.calls > 0 and b.calls > 0
     assert (tmp_path / "run" / "multimodal" / ".mdrack" / "catalog.sqlite3").is_file()
+
+
+class RetrievalRoleProvider(ScriptedProvider):
+    """Scripted mechanics with exactly the proposed text/image role matrix."""
+    capabilities = RouteCapabilities((
+        InputCapability(EncodingRole.DOCUMENT, "image", ("image",), 2000000),
+        InputCapability(EncodingRole.DOCUMENT, "text", ("text",), 65500),
+        InputCapability(EncodingRole.QUERY, "text", ("image", "text"), 65500),
+    ))
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.roles: list[tuple[str, EncodingRole]] = []
+
+    async def encode(self, value: PreparedInput, role: EncodingRole) -> EmbeddingResult:
+        self.roles.append((value.modality, role))
+        return await super().encode(value, role)
+
+
+def test_retrieval_roles_complete_required_B_and_D_union_without_dense_E(tmp_path: Path) -> None:
+    data = tmp_path / "media"
+    bundle = validate_native_bundle(fixture(data), media_root=data)
+    a, b = RetrievalRoleProvider(), RetrievalRoleProvider()
+    cfg = config()
+    cfg["scenarios"] = ["A", "B", "C", "D"]
+    report = run_native_experiment(bundle, cfg, media_root=data, output_root=tmp_path / "roles",
+                                   provider_a=a, provider_b=b)
+    assert [stage["scenario"] for stage in report["stages"]] == ["A", "B", "C", "D"]
+    assert report["completed_scenarios"] == 4 and report["executed_cells"] == 12
+    assert report["fitness"] == "BLOCKED_POLICY_MISSING"
+    assert b.roles.count(("text", EncodingRole.DOCUMENT)) == 2
+    assert b.roles.count(("image", EncodingRole.DOCUMENT)) == 2
+    assert b.roles.count(("text", EncodingRole.QUERY)) == 9
+    stages = report["stages"]
+    assert stages[3]["provider_calls_cumulative"] - stages[2]["provider_calls_cumulative"] == 3
+    assert b.capabilities.require(EncodingRole.QUERY, "text", ("image", "text"))
+
+
+def test_old_image_only_roles_still_block_B_and_D_coverage(tmp_path: Path) -> None:
+    data = tmp_path / "media"
+    bundle = validate_native_bundle(fixture(data), media_root=data)
+    old = RetrievalRoleProvider()
+    old.capabilities = RouteCapabilities((
+        InputCapability(EncodingRole.DOCUMENT, "image", ("image",), 2000000),
+        InputCapability(EncodingRole.QUERY, "text", ("image",), 65500),
+    ))
+    cfg = config()
+    cfg.update(scenarios=["A", "B", "C", "D"], policy=policy())
+    report = run_native_experiment(bundle, cfg, media_root=data, output_root=tmp_path / "old",
+                                   provider_a=RetrievalRoleProvider(), provider_b=old)
+    stages = {stage["scenario"]: stage for stage in report["stages"]}
+    assert stages["B"]["status"] == stages["D"]["status"] == "BLOCKED"
+    assert report["fitness"] == "BLOCKED_COVERAGE"
+    assert len([cell for cell in report["cells"] if cell["status"] == "BLOCKED"]) == 6

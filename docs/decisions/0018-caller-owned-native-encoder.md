@@ -19,9 +19,13 @@ never adopted from indexed/resource content. A profile is an identity declaratio
 not a qualification certificate or a sandbox for an untrusted executable. No producer
 binary, vendor library, model or private config is bundled or registered globally.
 
-The finite supported protocol admits image documents (224×224 RGB PNG) and text queries
-for image candidates. Text-document, image-query/similarity and old-space compatibility
-are not qualified. Full canonical space binds the producer/profile, input/decoder,
+The original `mdrack-cuda-abi12-v1` protocol admits image documents (224×224 RGB PNG)
+and text queries for image candidates. The additive, explicit
+`mdrack-cuda-retrieval-v2` protocol separately qualifies short UTF-8 text DOCUMENT and
+one text QUERY capability over image/text candidates. It formats role prefixes once,
+never derives model text from a filename, and bounds formatted bytes/context before
+forward. V1/default behavior is unchanged. Image-query/similarity, audio/video inference,
+document-vector reuse and old-space compatibility are not qualified. Full canonical space binds the producer/profile, input/decoder,
 query-prefix, pooling/normalization and float32 codec; equal dimensions are insufficient.
 Provider work completes outside application read/write transactions; current source
 snapshots, CAS, Core validation/ranking and one SQLite catalog keep their existing owners.
@@ -44,8 +48,9 @@ a locator, filename or DB row alone never grants source access.
 
 Manual same-resource lexical enrichment uses existing prepared-enrichment/CAS with
 `lexical=True,dense=False`, retaining the native projection/vector/space/source revision
-without encoding. A later semantic query is separately encoded. This does not qualify
-a text-document role or request OCR/caption extraction.
+without encoding. A later semantic query is separately encoded. This enrichment
+operation itself neither proves a text-document role nor requests OCR/caption extraction;
+the v2 role has its own independent functional/runtime qualification.
 
 ## Qualification and limits
 
@@ -54,6 +59,14 @@ learned CUDA execution across three normal catalogs, full DTO/f32/space parity, 
 original opens, close/reopen, installed origins and zero-encode lexical gain. The prior
 [external-host canary](../evaluation/native-image-cuda-canary-2026-10-23.md) remains a
 separate frozen success-path ABI/GPU qualification, not generic upstream ABI support.
+The later [text/image v2 result](../evaluation/native-text-image-product-2026-10-24.md)
+independently verifies current full/static gates, four fresh isolated wheels and installed236,
+normal B import/query/read/reopen, native C and same-image D lexical/combined evidence.
+Its closed artificial-canary window has ten fresh forwards, 96 evaluated CUDA observations
+and four expected host refusals. All ten fresh raw/f32 pairs are independently checked;
+ordinary installed PE startup has no source injection. The named B text-DOCUMENT
+functional blocker is closed, not target-corpus A–D/optional-E fitness.
+
 PNG decoding and host normalization remain CPU work; sampled CUDA outputs do not prove
 all operators/layers. No independent RU/EN/near-distractor/negative/held-out quality,
 model-cost/latency SLO, operational/W6/tag/package release follows from synthetic data.

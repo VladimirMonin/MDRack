@@ -16,6 +16,7 @@ import struct
 import subprocess
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,15 @@ from mdrack_core import EmbeddingSpaceRecord, JSONValue
 
 _PROTOCOL = "mdrack-cuda-abi12-v1"
 _PREFIX = "task: search result | query: "
+_PROTOCOL_V2 = "mdrack-cuda-retrieval-v2"
+_DOCUMENT_PREFIX = "title: none | text: "
+_ROLE_RECIPE = {
+    "document_prefix": _DOCUMENT_PREFIX, "query_prefix": _PREFIX,
+    "format_owner": "python-once-body-unchanged", "title": "literal-none-no-filename",
+    "text_tokenization": "native-llama_tokenize-add_special=true-parse_special=true",
+    "formatted_wire_bytes": 65536, "context_batch_ubatch": 2048,
+    "roles": ("document:image:image", "document:text:text", "query:text:image,text"),
+}
 _MAX = 2 * 1024 * 1024
 
 
@@ -81,8 +91,10 @@ class CUDAEncoderProvider:
             raise ValueError("external_host_config_invalid")
         self._config_hash = _hash(self._config_path)
         config = json.loads(self._config_path.read_bytes())
-        if not isinstance(config, dict) or config.get("protocol") != _PROTOCOL:
+        if not isinstance(config, dict) or config.get("protocol") not in {_PROTOCOL, _PROTOCOL_V2}:
             raise ValueError("external_host_config_invalid")
+        self._protocol = str(config["protocol"])
+        self._extended = self._protocol == _PROTOCOL_V2
         self._config: dict[str, Any] = config
         self._exe = _file(config["executable"])
         self._source = _file(config["source"])
@@ -101,6 +113,8 @@ class CUDAEncoderProvider:
         self._timeout = config.get("timeout_seconds", 120)
         if type(self._timeout) not in (int, float) or not math.isfinite(self._timeout) or not 1 <= self._timeout <= 300:
             raise ValueError("external_host_config_invalid")
+        if self._extended and self._timeout > 120:
+            raise ValueError("external_host_config_invalid")
         # An explicit caller-selected work directory; no model/cache/global mutation.
         self._work = Path(config["work_directory"])
         if not self._work.is_absolute() or not self._work.is_dir() or self._work.is_symlink():
@@ -117,6 +131,9 @@ class CUDAEncoderProvider:
         if profile["dimensions"] != 768 or profile["metric"] != "cosine":
             raise ValueError("external_host_profile_invalid")
         encoder = profile["metadata"]
+        if self._extended and (encoder.get("protocol") != _PROTOCOL_V2
+                               or _canonical(encoder.get("role_recipe")) != _canonical(_ROLE_RECIPE)):
+            raise ValueError("external_host_profile_invalid")
         pinned = dict(self._pins)
         expected = encoder["runtime_file_identities"]
         if (pinned[self._exe] != encoder["host_exe_sha256"]
@@ -131,7 +148,7 @@ class CUDAEncoderProvider:
             if pinned.get(Path(row["path"])) != row["sha256"]:
                 raise ValueError("external_host_profile_invalid")
         metadata: dict[str, JSONValue] = {
-            "producer": _PROTOCOL,
+            "producer": self._protocol,
             "encoder_profile_fingerprint": profile["fingerprint"],
             "executable_sha256": dict(self._pins)[self._exe],
             "source_sha256": dict(self._pins)[self._source],
@@ -142,12 +159,28 @@ class CUDAEncoderProvider:
             "vector_value_policy": "ieee754-f32-canonical-v1",
             "vector_codec": "ieee754-f32-le-v1",
         }
+        if self._extended:
+            metadata.update({
+                "document_prefix": _DOCUMENT_PREFIX, "title_rule": "literal-none-no-filename",
+                "document_input": "image/png224RGB-or-text-UTF8;no-derived-image-text",
+                "roles": ("document:image:image", "document:text:text", "query:text:image,text"),
+                "role_recipe_fingerprint": _canonical(_ROLE_RECIPE),
+                "formatted_wire_bytes": 65536, "context_batch_ubatch": 2048,
+            })
         fingerprint = _canonical(metadata)
         self.space = EmbeddingSpaceRecord("external-cuda-" + fingerprint, 768, "cosine", fingerprint, metadata)
         self.capabilities = RouteCapabilities((
             InputCapability(EncodingRole.DOCUMENT, "image", ("image",), 1048576),
             InputCapability(EncodingRole.QUERY, "text", ("image",), 65536 - len(_PREFIX)),
         ))
+        if self._extended:
+            self.capabilities = RouteCapabilities((
+                InputCapability(EncodingRole.DOCUMENT, "image", ("image",), 1048576),
+                InputCapability(EncodingRole.DOCUMENT, "text", ("text",),
+                                65536 - len(_DOCUMENT_PREFIX.encode("utf-8"))),
+                InputCapability(EncodingRole.QUERY, "text", ("image", "text"),
+                                65536 - len(_PREFIX.encode("utf-8"))),
+            ))
         self._verify()
 
     def _verify(self) -> None:
@@ -163,8 +196,8 @@ class CUDAEncoderProvider:
         async with self._lock:
             pass
 
-    async def encode(self, value: PreparedInput, role: EncodingRole) -> EmbeddingResult:
-        self.capabilities.validate(value, role, ("image",))
+    def _prepare(self, value: PreparedInput, role: EncodingRole) -> tuple[bytes, str]:
+        self.capabilities.validate(value, role, () if self._extended else ("image",))
         if isinstance(value, ImageInput):
             data = value.content
             if (value.media_type != "image/png" or len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n"
@@ -173,10 +206,17 @@ class CUDAEncoderProvider:
                 raise ValueError("external_host_image_bounds")
             kind = "image"
         elif isinstance(value, TextInput):
-            data = (_PREFIX + value.text).encode("utf-8")
-            kind = "query"
+            document = self._extended and role is EncodingRole.DOCUMENT
+            data = ((_DOCUMENT_PREFIX if document else _PREFIX) + value.text).encode("utf-8")
+            if len(data) > 65536:
+                raise ValueError("embedding_input_too_large")
+            kind = "document" if document else "query"
         else:
             raise ValueError("unsupported_embedding_route")
+        return data, kind
+
+    async def encode(self, value: PreparedInput, role: EncodingRole) -> EmbeddingResult:
+        data, kind = self._prepare(value, role)
         async with self._lock:
             if self._closed:
                 raise EmbeddingError("external_host_closed")
@@ -216,14 +256,23 @@ class CUDAEncoderProvider:
                 raise ValueError("external_host_config_invalid")
             env.update(TEMP=str(work / "tmp"), TMP=str(work / "tmp"), CUDA_CACHE_PATH=str(work / "cache"),
                        OMP_NUM_THREADS="4", OMP_WAIT_POLICY="PASSIVE")
+            operation = uuid.uuid4().hex if self._extended else "prepared"
+            argv = [str(exe), str(self._model), str(self._projector), kind,
+                    str(selected), str(output), operation, str(pins)]
+            binding: dict[str, str | int] | None = None
+            if self._extended:
+                role = "query" if kind == "query" else "document"
+                wire_digest = hashlib.sha256(data).hexdigest()
+                argv += [self._protocol, self.space.fingerprint, wire_digest, role]
+                binding = {"protocol": self._protocol, "operation": operation,
+                           "profile_fingerprint": self.space.fingerprint,
+                           "formatted_input_sha256": wire_digest, "role": role}
             with (work / "stdout").open("wb") as stdout, (work / "stderr").open("wb") as stderr:
                 job = Job()
                 child: _Process | None = None
                 try:
                     self.calls += 1  # Failed dispatch/timeout also counts; never a fresh-vector cache hit.
-                    child = job.popen([str(exe), str(self._model), str(self._projector), kind,
-                                       str(selected), str(output), "prepared", str(pins)],
-                                      cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr)
+                    child = job.popen(argv, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr)
                     job.resume()
                     deadline = time.monotonic() + self._timeout
                     while child.poll() is None:
@@ -248,14 +297,16 @@ class CUDAEncoderProvider:
                     finally:
                         stdout.flush()
                         stderr.flush()
-                        self._retain_diagnostics(work, kind, child, job.closed)
+                        self._retain_diagnostics(work, kind, child, job.closed, argv)
             self._verify()
             assert child is not None
-            vector = self._result(work, output, kind, child.pid)
+            vector = self._result(work, output, kind, child.pid, binding)
             self.completed += 1
             return EmbeddingResult(vector, self.space)
 
-    def _retain_diagnostics(self, work: Path, kind: str, child: Any, job_closed: bool) -> None:
+    def _retain_diagnostics(
+        self, work: Path, kind: str, child: Any, job_closed: bool, argv: list[str] | None = None,
+    ) -> None:
         # Explicit caller opt-in to PRIVATE producer diagnostics. Never a log,
         # event or CLI payload. Producer details may be sensitive. Input and
         # vector files are never copied to this optional diagnostic directory.
@@ -272,9 +323,11 @@ class CUDAEncoderProvider:
                 "owned_job_closed": job_closed,
                 "producer_executable_sha256": dict(self._pins)[self._exe],
                 "profile_fingerprint": self.space.fingerprint,
-                "argv": [str(work / "encoder.exe"), str(self._model), str(self._projector), kind,
-                         str(work / ("fixtures" if kind == "image" else "inputs") / "input"),
-                         str(work / "wire" / "result"), "prepared", str(work / "pins.tsv")],
+                "argv": argv if argv is not None else [
+                    str(work / "encoder.exe"), str(self._model), str(self._projector), kind,
+                    str(work / ("fixtures" if kind == "image" else "inputs") / "input"),
+                    str(work / "wire" / "result"), "prepared", str(work / "pins.tsv"),
+                ],
                 "admission": "native exit only; result validation occurs separately",
             }
             (directory / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
@@ -282,7 +335,9 @@ class CUDAEncoderProvider:
             self.diagnostic_losses = min(2**31 - 1, self.diagnostic_losses + 1)
 
     @staticmethod
-    def _result(work: Path, output: Path, kind: str, pid: int) -> tuple[float, ...]:
+    def _result(
+        work: Path, output: Path, kind: str, pid: int, binding: dict[str, str | int] | None = None,
+    ) -> tuple[float, ...]:
         def bounded(path: Path, maximum: int) -> bytes:
             if path.is_symlink() or path.stat().st_size > maximum:
                 raise ValueError("external_host_output_invalid")
@@ -293,6 +348,9 @@ class CUDAEncoderProvider:
         if len(records) != 2 or records[-1] != {"owned_cleanup_completed": True}:
             raise ValueError("external_host_partial_output")
         result = records[0]
+        if binding is not None and (result.get("pid") != pid
+                                    or any(result.get(key) != value for key, value in binding.items())):
+            raise ValueError("external_host_binding_mismatch")
         if result["dimensions"] != 768 or result["cuda_device"] != "CUDA0" or result["kind"] != kind:
             raise ValueError("external_host_output_invalid")
         ops = [json.loads(line[9:]) for line in stderr.splitlines() if line.startswith(b"GPU_EVAL ")]

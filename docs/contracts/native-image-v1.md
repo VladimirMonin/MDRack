@@ -150,12 +150,23 @@ space remain unchanged; Core/application/default providers do not load weights/v
 DLLs. See [ADR-0018](../decisions/0018-caller-owned-native-encoder.md) and the
 [qualified caller recipe](../../examples/native_cuda/README.md).
 
-The explicit protocol admits only DOCUMENT image/png (224×224 noninterlaced 8-bit RGB,
+The original explicit `mdrack-cuda-abi12-v1` protocol admits only DOCUMENT image/png (224×224 noninterlaced 8-bit RGB,
 ≤1MiB) and QUERY UTF-8 text for image candidates (≤65536 bytes including the host prefix).
 There is no text-document/image-query/similarity or document-vector reuse capability.
 Full canonical space binds exact producer/profile, decoder/prefix/pooling/L2/f32 codec;
 equal dimensions do not permit old-space vector reuse. Configuration is caller-selected
 trusted composition, not resource metadata or a certificate for an unqualified producer.
+
+The separately qualified opt-in `mdrack-cuda-retrieval-v2` adds DOCUMENT UTF-8 text
+and one QUERY text capability covering image/text candidates. Python adds exactly one
+role prefix (`title: none | text: ` or `task: search result | query: `), preserving the
+body and never using a filename as text. Formatted text is bounded to 65,536 bytes;
+native tokenization includes prefix/special tokens and refuses more than 2,048 tokens
+before forward. There is no truncation or long-context guarantee. V2 keeps the same
+image bound, uses at most 120 seconds per native call and has a distinct complete space;
+it does not add image-query, SIMILARITY, audio/video or reuse-document-vector roles.
+Default/v1 identity and existing catalogs are not rewritten. See the
+[independent text/image result](../evaluation/native-text-image-product-2026-10-24.md).
 
 Every call drift-checks pins/config and uses exclusive private prepared files, a fresh
 shell-free process, suspended→owned Job→resume, bounded timeout/output, actual evaluated
@@ -172,6 +183,11 @@ or filename alone grants nothing. Same-resource manual lexical enrichment encode
 retained the native projection and used existing CAS; later semantic query counted anew.
 The [independent private-caption data review](../evaluation/native-corpus-review-2026-10-24.md)
 accepts bounded frozen inputs/shared gold and limited pre-score policy, not image-model
-fitness. Four pooled unknowns, missing strict held-out bilingual coverage, subcatalog-only
-negative gold and the required native B-role/matrix mismatch remain explicit. Actual
-RU/EN/near-distractor/negative/held-out quality/cost/latency remains OPEN.
+fitness. The later [paired-query DATA companion](../evaluation/paired-query-companion-review-2026-10-24.md)
+adds one concrete strict held-out matched-intent group while retaining the whole original
+family and its harder cases. Four pooled unknowns, subcatalog-only negative gold and
+lack of robust multilingual/abstention model evidence remain explicit. The separate
+v2 qualification closes the named native B text-DOCUMENT functional blocker, not the
+unchanged A–D/optional-E experiment requirements. Both data families remain separate;
+DATA approval does not extend provider roles, compatible spaces, publication rights or
+SLOs. Actual corpus quality/cost/latency, W6/operations and release remain OPEN.

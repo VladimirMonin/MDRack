@@ -9,6 +9,11 @@ adapters, the fixed application catalog lifecycle, and default LM Studio HTTP in
 Explicit trusted outer host/CLI composition can also inject a prepared provider backed
 by a separately selected bounded process; [ADR-0018](../decisions/0018-caller-owned-native-encoder.md)
 defines this additive exception, not an in-process model loader or a changed default.
+Its original image-v1 and explicit text/image-v2 protocols have separate complete
+spaces. V2's short text DOCUMENT and one text QUERY route over image/text candidates
+are independently qualified through installed composition and evaluated CUDA; see the
+[bounded result](../evaluation/native-text-image-product-2026-10-24.md). This neither
+adds audio/video inference nor accepts target-corpus fitness or a release.
 
 ## Dependency direction
 
