@@ -92,6 +92,15 @@ owned-process leak or permission to kill it, and later absence cannot supply an 
 historical exit. Preserve the original failure and distinguish identity-qualified
 release from a bare-PID observation.
 
+For bounded external trials, account each delegated command/request at its actual leaf
+before dispatch, not as one collection/wrapper exit. Failed or interrupted reservations
+remain spent; pending work cannot be ignored or inferred complete from PID absence.
+Verify durable monotonic resume and stale-checkpoint/journal refusal, exact-cap success
+and cap-plus-one no-dispatch through the intended caller/factory/provider ports, including
+awaited cancellation and all-delegate cleanup. Keep any separately authorized monitor
+bound to its own session/frame limits; never relabel controls to fit a ceiling. Synthetic
+edge proofs establish software enforcement, not real transport authorization/compliance.
+
 Use focused RED → minimal authorized implementation → the same GREEN test for a new
 behavior/regression. Preserve actual command, assertion/source identity and first failure;
 a fixture/setup error is not product RED. Verify observable bytes/state/readback/reopen

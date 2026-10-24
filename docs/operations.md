@@ -132,9 +132,10 @@ script has no provider-close finally. A closed proof ledger or unavailable alias
 a new execution allowance or JIT/fallback route. Private factory glue is not bundled
 installed support. The separately qualified [native text/image v2 composition](evaluation/native-text-image-product-2026-10-24.md)
 closes the named native B text-DOCUMENT functional blocker; default/v1 remains unchanged.
-Required A/B/C/D(/E), policy and coverage gates are not relaxed, and no target-corpus
-matrix or optional-E experiment follows. Do not fabricate roles or reinterpret C/D-only
-as accepted configuration.
+Required A/B/C/D(/E), policy and coverage gates are not relaxed. The later
+[partial-pilot and repair disposition](evaluation/native-fts-repair-2026-10-24.md)
+retains eight failed complete-report attempts, not a completed target-corpus matrix or
+optional-E experiment. Do not fabricate roles or reinterpret C/D-only as accepted configuration.
 
 ### Reviewed private evaluation inputs
 
@@ -157,8 +158,9 @@ source-ledger substitution. Do not append the now assistance-copy original queri
 the companion or treat the 54-case union as executable input. Shared labels never license
 sharing model results when assistance changes. Four pooled unknowns and policy bytes
 remain unchanged. One concrete strict held-out pair is DATA evidence, not robust
-multilingual or abstention fitness. Actual target-campaign profile/space/runner-plan
-bindings remain unbound until its separately named qualified phase.
+multilingual or abstention fitness. Future target-campaign profile/space/runner-plan
+bindings remain unbound until a separately named qualified phase; the closed pilot's
+historical bindings are not authorization for another run.
 
 <a id="explicit-caller-owned-native-image-encoder"></a>
 
@@ -205,7 +207,42 @@ An injected open catalog is a different consistency boundary, not a general prod
 speed fix. The measurements do not establish concurrent-write safety or an applicable
 latency SLO; retain the actual route, counts, runtime and warm/cold definition in diagnosis.
 
+### Guarded evaluation after a closed partial run
+
+The [software repair and historical pilot](evaluation/native-fts-repair-2026-10-24.md)
+are separate:37 individual external operations exceeded24, even though useful partial
+rankings and native-device receipts exist. No complete canonical experiment report or
+overall policy result was emitted. Keep all prior spend and failures; neither unused
+units/time nor a new caller counter permits another target invocation.
+
+Before a separately authorized run, freeze the accepted source/installed identities,
+full original and companion families, policy, provider spaces/roles, runner plan and
+actual transport/lifecycle ownership. Use the existing public factory/runner ports;
+there is no public resume-D/query-vector-cache interface. A vector hash is not a query
+vector, and old partial reports cannot be merged into a claimed complete invocation.
+
+The private caller's synthetic proof covers durable reservation before each individual
+command/metadata leaf and every awaited provider encode, not before a grouped wrapper.
+Its proposed schedule is8 setup plus6 final controls within24, leaving10 contingency;
+protect the final-control/time reserve and close/unload only owned resources. The single
+separately bounded monitor must retain its own session/frame limits: no new per-invocation
+resource collections disguised as sampling or restarted sessions. Failed/interrupted
+reservations stay spent, pending work requires its original exit/cleanup evidence, and
+stale ledger/witness disagreement stops dispatch. Actual adapter/model/profile/data/grant
+bindings are still required; this private glue is not shipped support or a sandbox for
+arbitrary code bypassing the guarded ports. The public script still has no provider-close
+finally, so the outer owner must close every constructed delegate on all outcomes.
+
 ### Text search or FTS is inconsistent
+
+FTS5 boolean keywords are case-sensitive. Ordinary lower/mixed-case words in a plain
+query such as `alpha And beta.` may use the existing quoted-literal retry after a syntax
+error. Explicit uppercase operators, quotes, parentheses, stars and column filters are
+not silently reinterpreted. This is one shared catalog/legacy helper, not a tokenizer,
+schema or ranking change. A declared evaluator search-branch failure now keeps the
+planned denominator and emits BLOCKED with `search_branch_failure`; it does not become
+an empty successful ranking or a quality PASS. See the
+[runner contract](cli-contracts.md#native-corpus-evaluator-search-failures).
 
 Preserve the store first, stop writers, and inspect diagnostics. If the SQLite
 store is otherwise healthy, the explicit command is:

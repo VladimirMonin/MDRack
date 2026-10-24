@@ -12,6 +12,7 @@
 - [Opt-in native text/image product, 2026-10-24](native-text-image-product-2026-10-24.md) — independently accepted text-DOCUMENT/text-query-union bridge, fresh installed236 SDK/normal PE and bounded evaluated CUDA repeat; default/v1 unchanged, not corpus fitness or whole A–D completion.
 - [Independently reviewed source-caption pilot, 2026-10-24](native-corpus-review-2026-10-24.md) — private frozen data/limited pre-score policy; actual physical/rights/shared-gold review and public inspect, not mandatory-slice or model-fitness completion.
 - [Independently reviewed paired-query companion, 2026-10-24](paired-query-companion-review-2026-10-24.md) — separate frozen/evaluable companion and whole original family retained; one concrete held-out matched-intent DATA pair, not robust multilingual model fitness.
+- [FTS/report repair, closed partial pilot and guarded-run readiness, 2026-10-24](native-fts-repair-2026-10-24.md) — independently accepted software and private synthetic caller binding; the real pilot remains NONCONFORMANT37/24 with no complete experiment report or computed global fitness.
 
 Evaluation correctness, provider usefulness, production search latency and installed
 release readiness are separate evidence boundaries. The v2 manual oracle proves
@@ -66,9 +67,19 @@ adds one concrete strict held-out matched-intent group. Both complete 52-case fa
 remain required: shared 50 cases, campaign 54 scope-cases/46 human strings/22 groups,
 not an executable mixed union or permission to copy model results after assistance changes.
 The named native B text-DOCUMENT functional blocker is now closed by the opt-in v2
-result; A–D/optional-E requirements and coverage/policy checks are unchanged. No target
-corpus scoring occurred. Robust multilingual/negative semantic fitness, actual owning
-remaining slices, quality/cost/latency/SLO/W6/operations/release stay OPEN. Functional A
-is retained without new HTTP calls; catalog measurements remain MEASUREMENTS_ONLY.
-Next execution is maintained in the
-[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-native-text-image-v2-and-required-remainder).
+result; A–D/optional-E requirements and coverage/policy checks are unchanged. That
+functional checkpoint did not score the target corpus. The subsequent closed pilot
+attempted eight invocations/32 scenarios: all CLI exits were1, with24 complete A/B/C
+reports/624 cases plus96 D-prefix rankings,8 failed and104 NOT_RUN cases of832 planned.
+It emitted no complete native-experiment report; global fitness is NOT_COMPUTED.
+Its37 individual external operations exceeded the24 limit without waiver; grouped21
+and stale19 are not compliance. Correctly bound partial metrics remain usable only
+within that nonconformant historical boundary.
+
+The later FTS case/declared-error repair and private guarded-caller readiness are
+software-only ACCEPT, not a rerun or repair of that execution history. Both complete
+families, four pooled unknowns and the policy remain unchanged. Robust multilingual /
+negative semantic fitness, actual owning remaining slices, quality/cost/latency/SLO /
+W6/operations/release stay OPEN. Functional A remains accepted; catalog measurements
+remain MEASUREMENTS_ONLY. The next separately frozen and authorized execution is in the
+[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-fts-repair-and-guarded-quality-remainder).

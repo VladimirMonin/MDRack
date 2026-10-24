@@ -5,7 +5,7 @@ Read [bundle](../../docs/proposals/native-media/README.md) in order 01 → 02 �
 This entry tracks execution, not another roadmap or evidence registry.
 
 Current software acceptance and the next bounded execution are recorded in
-[the latest status](#current-native-text-image-v2-and-required-remainder). Earlier per-family OPEN /
+[the latest status](#current-fts-repair-and-guarded-quality-remainder). Earlier per-family OPEN /
 FAIL statements below retain their original acceptance boundary; they do not reopen
 findings explicitly closed by a later qualified result.
 
@@ -384,6 +384,10 @@ custody release; it is not another data approval or a model-quality result.
 
 ## Current native text/image v2 and required remainder
 
+This accepted role/installed/CUDA checkpoint retains its original pre-pilot cutoff.
+The [later FTS/protocol remainder](#current-fts-repair-and-guarded-quality-remainder)
+governs next execution without reopening native-role qualification.
+
 The [explicit native text/image v2 composition](../../docs/evaluation/native-text-image-product-2026-10-24.md)
 is independently ACCEPTED for short text DOCUMENT, one text QUERY route over image/text
 candidates and bounded RGB PNG DOCUMENT. Default HTTP A/v1 and legacy spaces are
@@ -393,7 +397,7 @@ and ordinary installed PE. The named B text-DOCUMENT functional blocker is close
 old narrower-provider cutoffs must not be used as a current generic missing-model block.
 No new text-ingest command, default registration or source-package injection is added.
 
-Current independent Root: 2449 collected /2443 PASS /zero FAIL /six historical SKIP;
+At that independent Root checkpoint:2449 collected /2443 PASS /zero FAIL /six historical SKIP;
 149 original affected checks include 145 full-suite overlaps and four caller-lifecycle
 checks. Strict216, Ruff/four boundaries and four fresh isolated wheels with236 exact
 installed payloads passed. Original canonical tests consume the current dirty tracked
@@ -411,9 +415,10 @@ server and frozen source/runtime/input bytes remain unchanged. Earlier aggregate
 failures/PID-reuse observations stay historical failures, not retroactive PASS.
 
 This window used only artificial contract canaries, zero caption-pilot/companion targets,
-queries or scores. Its budget is CLOSED. Actual target-campaign provider/profile/space /
-runner-plan identities remain unbound until a concrete separately named frozen-input
-plan and fresh execution scope. Keep both complete data families, original harder cases,
+queries or scores. Its budget is CLOSED. At that cutoff the target-campaign provider /
+profile/space/runner-plan identities were still unbound. Later historical pilot bindings
+do not authorize another run: future execution needs a concrete separately named frozen
+plan and fresh scope. Keep both complete data families, original harder cases,
 unknowns and unchanged A–D/optional-E/policy/coverage requirements; no mixed54 union or
 shared rankings. A functional role is not optional-E or whole-matrix fitness acceptance.
 Actual owning arbitrary-intent/lexical/name/number/code/long-text/media/OCR-ASR obligations
@@ -421,3 +426,59 @@ retain their declared scope, without adding generic future gates. Functional A a
 accepted software/OCR/image scopes stay accepted; HTTP A kernel device remains UNKNOWN.
 Catalog scaling is MEASUREMENTS_ONLY; corpus quality/cost/latency/SLO/W6/operations /
 package/tag/release remain OPEN. No automatic model trial follows.
+
+<a id="current-fts-repair-and-guarded-quality-remainder"></a>
+
+## Current FTS repair and guarded quality remainder
+
+The [FTS/report repair and guarded-caller readiness](../../docs/evaluation/native-fts-repair-2026-10-24.md)
+are independently ACCEPTED in the MODEL0 software scope, with zero required repairs.
+The five-file candidate on baseline `c49a534d70223ef262ebf7027faf5c8aa981b2d6`
+corrects FTS5 keyword case classification and handles declared per-query Core branch
+errors with constant `search_branch_failure`, BLOCKED cells and full denominators.
+Original strict syntax, programming/cancellation propagation, ranking/policy/roles /
+profiles/data remain unchanged. This report fix is not itself a working-D or quality
+claim. Independent280 affected checks and41 source-free installed regressions passed;
+strict216/Ruff/four boundaries passed. Exact author full2484 PASS/6 historical SKIP and
+four fresh isolated PEP517/noneditable236 payloads are retained by identity, not replayed.
+Only two package payloads changed; the native encoder/default A qualification stays closed.
+
+The completed real-data pilot remains **NONCONFORMANT37/24**, excess13 without waiver;
+grouped21/stale19 are not compliance. All eight public invocations returned1, reserving
+32 scenario slots.24 complete A/B/C reports cover624 cases; D has96 successful prefix
+rankings,8 failures and104 NOT_RUN of832 planned total cases. There are no complete
+native-experiment reports and global fitness is NOT_COMPUTED. Correctly bound partial
+metrics/device/custody evidence is retained, not a full-policy or semantic/runtime PASS.
+Historical spend stays296 A calls/696 native processes/784 conservative units; one
+separately bounded monitor has74 frames/148 helper commands. No old budget is renewed.
+
+The private future caller's25 synthetic guard cases plus independent interruption /
+cancellation/cleanup discriminators and actual public-factory/runner proofs establish
+per-individual durable admission, pending-work preservation and monotonic resume.
+Each synthetic proof charges14 controls/5 A/15 conservative native units for12 cases;
+no physical command/GET/model was delegated. The14-control schedule leaves10 within24,
+not a larger ceiling. Actual transport/model/profile/data/ownership/new-grant bindings
+and the single bounded monitor's live integration remain a separately named phase;
+private proof/glue is neither shipped API nor a sandbox against arbitrary replacement.
+
+Next finite order:
+
+1. Freeze the independently accepted corrected source/installed bytes, full original
+   and companion families, unchanged policy/cutoffs, provider roles/spaces, actual
+   transport/runner plan, owned lifecycle and a fresh explicit hard budget. Preserve
+   final-control/time reserve; every external leaf and rejected/failed attempt remains
+   visible. Do not reopen approved DATA/model availability or accepted native software.
+2. Execute the separately authorized complete eight-invocation A–D matrix over both
+   assistance languages and dev/held-out splits. No public resume-D/query-vector-cache
+   interface exists; a SHA is not a vector, and old partials cannot become a complete
+   invocation by merging. Both52 families/harder originals/four unknowns remain required;
+   union54 is a map, not executable input or permission to copy changed-assistance ranks.
+3. Independently assess actual complete reports/critical slices and unchanged per-query
+   quality/cost/latency criteria, retaining legitimate regressions/POLICY_EXCEEDED without
+   tuning. Optional E and the original owning additional slices retain their declared
+   obligations; no new generic capability threshold is introduced.
+
+No target calls occur in this software repair/delivery. Full real quality, negative /
+robust multilingual fitness, cost/latency/SLO/W6/operations/package/tag/release remain
+OPEN. Scoped repository commit/push is not release approval; no ACK-only or automatic
+model trial follows.

@@ -27,7 +27,7 @@ from mdrack.eval.native_corpus import NativeCorpusError, array, decode, obj, req
 from mdrack.eval.native_runner import run_native_experiment
 from mdrack.ingestion.transcripts import read_transcript
 from mdrack.ports.embeddings import EmbeddingError
-from mdrack_core import EmbeddingSpaceRecord
+from mdrack_core import BranchExecutionError, EmbeddingSpaceRecord, ErrorCategory
 from mdrack_media import ProducerFingerprint, resource_id
 
 
@@ -942,3 +942,108 @@ def test_old_image_only_roles_still_block_B_and_D_coverage(tmp_path: Path) -> No
     assert stages["B"]["status"] == stages["D"]["status"] == "BLOCKED"
     assert report["fitness"] == "BLOCKED_COVERAGE"
     assert len([cell for cell in report["cells"] if cell["status"] == "BLOCKED"]) == 6
+
+
+def test_D_plain_keyword_punctuation_keeps_complete_matrix(tmp_path: Path) -> None:
+    media = tmp_path / "media"
+    document = fixture(media)
+    document["queries"] = [
+        {**obj(query), "input": {"modality": "text", "text": value, "resource_id": None}}
+        for query, value in zip(array(document["queries"]),
+                                ("scarlet and red.", "scarlet Or red.", "unknown not present."), strict=True)
+    ]
+    bundle = validate_native_bundle(document, media_root=media)
+    report = run_native_experiment(
+        bundle, {**config(), "scenarios": ["A", "B", "C", "D"], "mode_ab": "semantic"}, media_root=media,
+        output_root=tmp_path / "out", provider_a=ScriptedProvider(), provider_b=RetrievalRoleProvider(),
+    )
+    assert report["planned_cells"] == report["executed_cells"] == 12
+    assert report["completed_scenarios"] == 4
+    assert report["fitness"] == "BLOCKED_POLICY_MISSING"
+    assert [stage["scenario"] for stage in report["stages"]] == ["A", "B", "C", "D"]
+    assert all(cell["effective_mode"] == "hybrid" for cell in report["cells"] if cell["scenario"] == "D")
+
+
+@pytest.mark.parametrize("kind", ["declared", "programming", "cancel"])
+def test_search_error_boundary_preserves_matrix_or_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str,
+) -> None:
+    from mdrack.public_api import MDRackEngine
+
+    original = MDRackEngine.search_media
+    closed: list[bool] = []
+    original_close = MDRackEngine.close
+
+    def close(engine: MDRackEngine) -> None:
+        original_close(engine)
+        closed.append(True)
+
+    async def search(engine: MDRackEngine, request: object) -> object:
+        if getattr(request, "mode") == "hybrid":
+            if kind == "declared":
+                raise BranchExecutionError(ErrorCategory.ADAPTER_ERROR, branch_id=PORT_CANARY)
+            if kind == "programming":
+                raise RuntimeError(PORT_CANARY)
+            raise asyncio.CancelledError()
+        return await original(engine, request)
+
+    monkeypatch.setattr(MDRackEngine, "search_media", search)
+    monkeypatch.setattr(MDRackEngine, "close", close)
+    media = tmp_path / "media"
+    bundle = validate_native_bundle(fixture(media), media_root=media)
+    args = {"media_root": media, "output_root": tmp_path / "out",
+            "provider_a": ScriptedProvider(), "provider_b": RetrievalRoleProvider()}
+    configuration = {**config(), "scenarios": ["A", "B", "C", "D"], "policy": policy(),
+                     "mode_ab": "semantic"}
+    if kind != "declared":
+        with pytest.raises(RuntimeError if kind == "programming" else asyncio.CancelledError):
+            run_native_experiment(bundle, configuration, **args)
+    else:
+        report = run_native_experiment(bundle, configuration, **args)
+        assert report["planned_cells"] == 12 and report["executed_cells"] == 9
+        assert report["completed_scenarios"] == 3 and report["fitness"] == "BLOCKED_COVERAGE"
+        blocked = [c for c in report["cells"] if c["status"] == "BLOCKED"]
+        assert len(blocked) == 3 and all(c["scenario"] == "D" for c in blocked)
+        assert all(c["reason"] == "search_branch_failure" for c in blocked)
+        assert PORT_CANARY not in json.dumps(report)
+    assert len(closed) == 3
+
+
+class DeclaredSearchFailure(ScriptedProvider):
+    async def encode(self, value: PreparedInput, role: EncodingRole) -> EmbeddingResult:
+        if role is EncodingRole.QUERY:
+            raise BranchExecutionError(ErrorCategory.ADAPTER_ERROR, branch_id=PORT_CANARY)
+        return await super().encode(value, role)
+
+
+@pytest.mark.parametrize("declared", [False, True])
+def test_public_cli_plain_query_or_declared_branch_report(tmp_path: Path, declared: bool) -> None:
+    root = Path(__file__).parents[2]
+    media = tmp_path / "media"
+    document = fixture(media)
+    document["queries"] = [
+        {**obj(query), "input": {"modality": "text", "text": "scarlet and red.", "resource_id": None}}
+        if n == 0 else query for n, query in enumerate(array(document["queries"]))
+    ]
+    bundle, configuration, output = (tmp_path / n for n in ("bundle.json", "config.json", "report.json"))
+    bundle.write_text(json.dumps(document))
+    configuration.write_text(json.dumps({**config(), "scenarios": ["A", "B", "C", "D"],
+                                         "mode_ab": "semantic", "policy": policy() if declared else None}))
+    paths = [root, root / "src", *(root / "packages" / p / "src" for p in
+             ("mdrack-core", "mdrack-media", "mdrack-sqlite")), Path(pytest.__file__).parents[1]]
+    launch = ("import sys,runpy;sys.dont_write_bytecode=True;sys.path[:0]=" + repr([str(p) for p in paths])
+              + ";sys.argv=sys.argv[1:];runpy.run_path(sys.argv[0],run_name='__main__')")
+    result = subprocess.run([
+        sys.executable, "-I", "-B", "-S", "-c", launch, str(root / "scripts/run_native_evaluation.py"),
+        "run", "--bundle", str(bundle), "--config", str(configuration), "--media-root", str(media),
+        "--output-root", str(tmp_path / "out"), "--output", str(output),
+        "--provider-a",
+        "tests.unit.test_eval_native_runner:" + ("DeclaredSearchFailure" if declared else "ScriptedProvider"),
+        "--provider-b", "tests.unit.test_eval_native_runner:RetrievalRoleProvider",
+    ], capture_output=True, check=False)
+    assert result.returncode == 2
+    report = json.loads(output.read_bytes())
+    assert report["planned_cells"] == 12 and report["executed_cells"] == (9 if declared else 12)
+    assert report["fitness"] == ("BLOCKED_COVERAGE" if declared else "BLOCKED_POLICY_MISSING")
+    assert PORT_CANARY.encode() not in result.stdout + result.stderr + output.read_bytes()
+    assert b"Traceback" not in result.stderr

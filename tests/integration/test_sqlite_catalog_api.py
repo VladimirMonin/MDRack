@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,9 +12,12 @@ import pytest
 from mdrack.adapters.sqlite.resource_store import SQLiteResourceStore as LegacySQLiteResourceStore
 from mdrack.storage.sqlite.connection import get_connection
 from mdrack.storage.sqlite.migrations import apply_candidate_migrations, get_migrations_dir
+from mdrack_core.application.retrieval import RetrievalService
 from mdrack_core.domain import (
+    BranchExecutionError,
     CatalogExecutionError,
     EmbeddingSpaceRecord,
+    ErrorCategory,
     Facet,
     LexicalBranch,
     Locator,
@@ -21,6 +25,7 @@ from mdrack_core.domain import (
     RepresentationRecord,
     ResourceFacet,
     ResourceRecord,
+    SearchRequest,
     SearchScope,
     SearchUnitRecord,
     VectorBranch,
@@ -163,6 +168,48 @@ def _call_catalog_operation(catalog: SQLiteCatalog, operation: str) -> None:
 def test_legacy_import_is_exact_reexport_of_single_adapter_owner() -> None:
     assert LegacySQLiteResourceStore is SQLiteResourceStore
     assert SQLiteCatalog.__mro__[1] is SQLiteResourceStore
+
+
+@pytest.mark.parametrize("word", ["and", "And", "aNd", "or", "Or", "not", "Not", "near", "Near"])
+def test_plain_keyword_punctuation_uses_literal_retry(tmp_path: Path, word: str) -> None:
+    query = f"alpha {word} beta."
+    batch = _batch()
+    batch = replace(batch, representations=(replace(batch.representations[0], text=query),),
+                    units=(replace(batch.units[0], text=query),))
+    path = tmp_path / "literal.sqlite3"
+    with SQLiteCatalog.create_v2(path) as catalog:
+        catalog.replace_resource(batch)
+        before = catalog.read_snapshot("resource")
+        request = SearchRequest(
+            lexical_branches=(LexicalBranch("lexical", query, candidate_limit=1),),
+            vector_branches=(), target="resource", allow_partial=False,
+            scope=SearchScope(source_namespaces=("vault",)), limit=1,
+        )
+        assert request.allow_partial is False
+        result = RetrievalService(catalog).search(request)
+        assert [item.resource_id for item in result.items] == ["resource"]
+        assert not result.degradations
+        assert catalog.read_snapshot("resource") == before
+    with SQLiteCatalog.open_readonly(path) as reopened:
+        assert reopened.read_unit("unit").text == query
+        assert [x.unit_id for x in reopened.search_lexical(
+            LexicalBranch("lexical", query, candidate_limit=1), scope=SearchScope(),
+        )] == ["unit"]
+
+
+@pytest.mark.parametrize("query", ["alpha AND", "alpha OR", "alpha NOT", '"unterminated', "NEAR(", "content:"])
+def test_deliberate_malformed_fts_keeps_strict_declared_error(tmp_path: Path, query: str) -> None:
+    with SQLiteCatalog.create_v2(tmp_path / "strict.sqlite3") as catalog:
+        catalog.replace_resource(_batch())
+        request = SearchRequest(
+            lexical_branches=(LexicalBranch("lexical", query),), vector_branches=(),
+            scope=SearchScope(), target="resource", limit=1, allow_partial=False,
+        )
+        with pytest.raises(BranchExecutionError) as error:
+            RetrievalService(catalog).search(request)
+        assert error.value.category is ErrorCategory.ADAPTER_ERROR
+        assert error.value.branch_id == "lexical"
+        assert catalog.search_lexical(LexicalBranch("next", "needle"), scope=SearchScope())
 
 
 def test_context_open_verify_catalog_ports_and_close(tmp_path: Path) -> None:

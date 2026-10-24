@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import re
 
-_FTS_OPERATOR_PATTERN = re.compile(
-    r'"|\(|\)|\*|\b(?:AND|OR|NOT|NEAR)\b|\w+:',
-    re.IGNORECASE,
-)
+# FTS5 keywords are case-sensitive; ordinary and/Or/Not must remain plain text.
+# Explicit syntax (including quotes and column filters) still forbids reinterpretation.
+_FTS_OPERATOR_PATTERN = re.compile(r'"|\(|\)|\*|\b(?:AND|OR|NOT|NEAR)\b|\w+:')
 
 
 def plain_query_fallback(query: str) -> str | None:

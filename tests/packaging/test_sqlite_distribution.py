@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import sqlite3
 import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 import mdrack_sqlite
 from mdrack.storage.sqlite.fts import plain_query_fallback as legacy_plain_query_fallback
+from mdrack.storage.sqlite.fts import search_fts, upsert_fts
 from mdrack_sqlite.fts import plain_query_fallback
 from scripts.check_sqlite_boundaries import PACKAGE_ROOT, violations
 
@@ -54,6 +58,38 @@ def test_sqlite_root_exports_and_legacy_fts_helper_are_frozen() -> None:
     assert legacy_plain_query_fallback is plain_query_fallback
     assert plain_query_fallback("plain words") == '"plain words"'
     assert plain_query_fallback("title:value") is None
+
+
+@pytest.mark.parametrize("word", ["and", "And", "aNd", "or", "Or", "oR", "not", "Not", "nOt", "near", "Near"])
+def test_plain_query_keyword_case_matches_sqlite(word: str) -> None:
+    query = f"alpha {word} beta."
+    assert plain_query_fallback(query) == f'"{query}"'
+    assert legacy_plain_query_fallback(query) == f'"{query}"'
+    with sqlite3.connect(":memory:") as connection:
+        connection.execute("CREATE VIRTUAL TABLE words USING fts5(content)")
+        connection.execute("INSERT INTO words VALUES (?)", (query,))
+        connection.execute("INSERT INTO words VALUES ('alpha gamma beta')")
+        # SQLite itself treats mixed/lowercase keywords as ordinary case-folded tokens.
+        assert len(connection.execute("SELECT * FROM words WHERE words MATCH ?", (query[:-1],)).fetchall()) == 1
+        assert len(connection.execute(
+            "SELECT * FROM words WHERE words MATCH ?", (plain_query_fallback(query),)
+        ).fetchall()) == 1
+        connection.row_factory = sqlite3.Row
+        connection.execute(
+            "CREATE VIRTUAL TABLE chunks_fts USING fts5("
+            "chunk_id UNINDEXED, content, content_type UNINDEXED, heading_path)"
+        )
+        upsert_fts(connection, "synthetic-chunk", query, "text", "")
+        assert [row["chunk_id"] for row in search_fts(connection, query)] == ["synthetic-chunk"]
+
+
+@pytest.mark.parametrize("query", [
+    "alpha AND beta.", "alpha OR beta.", "alpha NOT beta.", "NEAR(alpha beta)",
+    '"alpha" beta.', "(alpha beta)", "alpha* beta", "content:alpha", "Content:alpha",
+])
+def test_explicit_fts_syntax_never_becomes_plain_literal(query: str) -> None:
+    assert plain_query_fallback(query) is None
+    assert legacy_plain_query_fallback(query) is None
 
 
 def test_sqlite_distribution_carries_public_docs_and_typing_marker() -> None:

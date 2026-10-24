@@ -46,6 +46,7 @@ from mdrack.eval.quality_v2 import evaluate_quality_v2
 from mdrack.ports.embeddings import EmbeddingError, PreparedEmbeddingProvider
 from mdrack.public_api import MDRackEngine
 from mdrack_core import (
+    BranchExecutionError,
     Locator,
     PreparedResourceBatch,
     RepresentationRecord,
@@ -60,6 +61,8 @@ from mdrack_sqlite import SQLiteCatalog
 
 
 def _reason(exc: Exception) -> str:
+    if isinstance(exc, BranchExecutionError):
+        return "search_branch_failure"
     if isinstance(exc, EmbeddingError):
         return "embedding_port_failure"
     if isinstance(exc, QualityEvaluationError):
@@ -638,7 +641,7 @@ async def run_native_experiment_async(
                                 effective_mode=found.effective_mode,
                                 search_latency_ms=(time.perf_counter() - start) * 1000,
                             )
-                        except (ValueError, OSError, ManifestError, EmbeddingError) as exc:
+                        except (ValueError, OSError, ManifestError, EmbeddingError, BranchExecutionError) as exc:
                             cell["reason"] = _reason(exc)
                     else:
                         cell["reason"] = preparation_reason

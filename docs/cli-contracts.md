@@ -88,6 +88,28 @@ around unchanged manifest v1; explicit `resource import` remains whole-graph imp
 Full fields, outcomes, source/lifecycle and archive boundaries:
 [prepared enrichment v1](contracts/prepared-enrichment-v1.md).
 
+## Native corpus evaluator search failures
+
+The separate maintainer script `scripts/run_native_evaluation.py run` uses explicit
+caller factories and the existing full A–D/optional-E configuration. It is not a new
+Click command, a model-acquisition command or a resume-D interface. Its
+[runner/input contract](evaluation/native-corpus-v2.md) remains unchanged.
+
+A declared public Core `BranchExecutionError` from the per-query search path is
+reported as a BLOCKED cell with constant reason `search_branch_failure`. The full
+planned matrix/denominator remains; the query, branch ID and raw exception are not
+serialized. With a policy, incomplete execution yields `BLOCKED_COVERAGE`; a missing
+policy retains the earlier `BLOCKED_POLICY_MISSING` precedence. These safe usable
+reports return exit2, not success from a blocked case. Unexpected programming errors
+and cancellation are not swallowed by this runner boundary; the public script retains
+its separate safe nonzero refusal boundary and the outer caller owns provider cleanup.
+
+The shared SQLite helper recognizes uppercase FTS5 keywords as explicit syntax;
+lower/mixed-case natural conjunctions with punctuation can use the existing literal
+retry. Explicit operator/quote/parenthesis/star/column-filter safeguards remain strict.
+The [software/partial-pilot report](evaluation/native-fts-repair-2026-10-24.md) separates
+this accepted repair from real-data quality, protocol compliance and release fitness.
+
 ## Scope
 
 This document is the current S2 contract for the normal local MDRack CLI. All
