@@ -108,6 +108,23 @@ At the Python runner boundary, declared `EmbeddingError` failures use the safe
 catch-all: direct programming failures and cancellation propagate, subject to the
 existing public API's provider-error normalization.
 
+## Current real-provider qualification and matrix boundary
+
+The [short-text A functional result](text-provider-functional-2026-10-24.md) qualifies
+short DOCUMENT/QUERY inputs through the existing LM Studio producer/legacy adapter,
+including the real script's no-argument factory path. This is not real-corpus quality,
+long-context support or installed support for a caller-private factory module. Native
+image product qualification is separate and does not add native text-document roles.
+
+Current `RunConfig.parse` admits only A/B/C/D or A/B/C/D/E, not a C/D-only run.
+The supplied B provider is shared by prepared-text B and native C/D/E: `_projection`
+requires DOCUMENT TextInput, and optional dense E also needs that role. The qualified
+image/text-query native provider honestly refuses it before encoding. Null policy
+returns `BLOCKED_POLICY_MISSING`; any incomplete stage returns `BLOCKED_COVERAGE`.
+Independent gold/policy cannot alone close this required B-role/matrix constraint.
+Its source-contract disposition remains open; do not fabricate capabilities, drop
+blocked denominators or treat functional A as whole-matrix fitness acceptance.
+
 ## Caller policy, costs and privacy
 
 Configuration freezes scenario matrix, split, candidate budget, lexical/vector
@@ -157,7 +174,12 @@ python scripts/run_native_evaluation.py run --bundle reviewed.json --config expe
 
 Factories are explicit host-supplied no-argument callables; draft readiness and
 configuration are checked **before** factory import. The host controls factory
-side effects; this runner never authorizes network/model acquisition. Exit 0 means
+side effects; this runner never authorizes network/model acquisition. The outer host
+must own preflight, an exact intended loaded-instance lease and a fresh authorized hard
+request budget; runner Meter counters are measurements, not that guard. It must also
+close providers and unload only its owned instance in `finally`: the current script
+has no provider-close finally. Do not reuse a closed proof ledger or use an unavailable
+instance identifier as an artifact-key/JIT/fallback selection. Exit 0 means
 successful prepare/inspect or bounds-satisfied mechanics, 2 means a written report
 with blocked/exceeded fitness, and 1 means refusal/error. None means independent
 technical ACCEPT or real-model quality PASS.

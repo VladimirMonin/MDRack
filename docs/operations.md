@@ -115,6 +115,24 @@ and later [normal product qualification](evaluation/native-image-product-2026-10
 are separate. The latter actually qualifies explicit prepared-provider injection and
 normal engine/catalog/read/reopen plus installed PE. It does not repair HTTP input.
 
+### Functional textual A and evaluator factories
+
+The [short-text qualification](evaluation/text-provider-functional-2026-10-24.md)
+exercised existing plain DOCUMENT and prefixed QUERY transport at actual context 2048.
+It does not qualify the adapter's 8 MiB declaration as a server/token limit, infer an
+HTTP text-kernel device from GPU-max/runtime/residency, or establish semantic quality.
+Do not normalize/truncate outputs or mix its full space with native/legacy vectors
+merely because all have 768 components.
+
+For an explicitly authorized evaluator trial, follow the [runner contract](evaluation/native-corpus-v2.md):
+caller-owned no-argument factories receive no automatic model acquisition or hard budget.
+Preflight the exact intended instance/artifacts/context, keep a fresh explicit ledger,
+then close providers and unload only that owned instance in outer `finally`. The current
+script has no provider-close finally. A closed proof ledger or unavailable alias is not
+a new execution allowance or JIT/fallback route. Private factory glue is not bundled
+installed support. Current required A/B/C/D(/E) and native B/E text-document mismatch
+remain open; do not fabricate roles or reinterpret C/D-only as accepted configuration.
+
 ### Explicit caller-owned native image encoder
 
 Use only trusted qualified artifacts and an existing private work directory, following

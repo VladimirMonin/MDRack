@@ -19,6 +19,13 @@ This page is a current-state boundary, not a roadmap promise.
   Explicit trusted outer host/CLI composition may instead select a caller-owned bounded
   native process via prepared-provider injection; see [ADR-0018](../decisions/0018-caller-owned-native-encoder.md).
   Core/application/default providers and Python do not load model weights/vendor DLLs.
+  Separate [short-text A functional qualification](../evaluation/text-provider-functional-2026-10-24.md)
+  covers plain DOCUMENT/existing prefixed QUERY and actual no-argument caller factories
+  at context 2048, not an 8 MiB/long-context guarantee or multilingual semantic quality.
+  Server-returned unit norms are observed, not adapter normalization. Selected CUDA /
+  GPU-max/residency do not establish HTTP text-forward/kernel device; that remains unknown.
+  Caller-private factory glue is not installed product support. The existing runner's
+  native B/E text-document and required full-matrix constraint remain open.
 - Legacy raw audio/video textual paths still consume supplied transcripts/frame captions
   or explicit local STT/extractor output. The separate 1.4.0rc3
   [native temporal component](../contracts/native-temporal-v1.md) performs bounded

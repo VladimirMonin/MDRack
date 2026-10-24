@@ -117,7 +117,11 @@ of generic prepared providers, or impossibility in future versions. Selected run
 2.63.0 metadata is not a trace of the executed GPU kernel. The six subsequent repeat,
 lossless/changed-pixel, shared-space and invalid-image discriminator cells in that HTTP
 experiment were NOT_RUN; later external-host cells do not retroactively execute them.
-Text200 is not image-vector or semantic-quality success.
+Text200 is not image-vector or semantic-quality success. The later independent
+[short-text A qualification](../evaluation/text-provider-functional-2026-10-24.md)
+checks functional DOCUMENT/QUERY semantics, prefix and real caller-factory dispatch;
+it does not repair typed PNG admission, qualify native text-document B/E or establish
+HTTP text-kernel GPU execution. Textual/native complete spaces remain distinct.
 
 For this HTTP route, supported typed image input and compatible text-query output
 remain unmet prerequisites. Removing only its guard is insufficient while its worker /

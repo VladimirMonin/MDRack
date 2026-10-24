@@ -8,6 +8,7 @@
 - [Catalog-open and public-search scaling, 2026-10-23](catalog-search-scaling-2026-10-23.md) — independently checked synthetic Windows measurements, separate default/open and already-open boundaries; no declared SLO or performance/model-quality PASS.
 - [Native-image CUDA external-host canary, 2026-10-23](native-image-cuda-canary-2026-10-23.md) — independently reproduced real vision/backbone CUDA and six learned vectors; its original external-only cutoff is preserved.
 - [Normal native-image product, 2026-10-23](native-image-product-2026-10-23.md) — independently accepted explicit caller host through normal engine/catalog/source CLI/installed PE, full DTO/f32/space parity and zero-encode same-resource lexical gain; not real-corpus fitness/SLO.
+- [Short-text A producer and caller factories, 2026-10-24](text-provider-functional-2026-10-24.md) — functional DOCUMENT/QUERY and actual no-argument factory dispatch; text-kernel device unknown, native B/E/full-matrix/corpus quality still open.
 
 Evaluation correctness, provider usefulness, production search latency and installed
 release readiness are separate evidence boundaries. The v2 manual oracle proves
@@ -51,5 +52,9 @@ qualifies actual opt-in prepared-provider integration with unchanged default HTT
 Current actual full is 2428 collected /2422 PASS /six historical SKIP /zero FAIL;
 the six original real-current-skill consumers passed read-only without body changes /
 substitution. Earlier RED remains historical; no private skill content is delivered.
-Catalog measurements remain MEASUREMENTS_ONLY. Next execution is maintained in the
-[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-native-product-and-fitness-remainder).
+The later short-text A qualification establishes functional producer/prefix/space and
+real caller-factory dispatch only, not multilingual quality or native text-document roles.
+The B-role/matrix contract and independent data/policy fitness gate remain open; no full
+native suite was replayed for that result. Catalog measurements remain MEASUREMENTS_ONLY.
+Next execution is maintained in the
+[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-functional-a-and-matrix-remainder).

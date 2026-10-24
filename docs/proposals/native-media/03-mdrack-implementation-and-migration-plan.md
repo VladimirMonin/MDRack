@@ -1,7 +1,7 @@
 ---
 id: "MDRACK-NATIVE-03"
 kind: "plan"
-updated: "2026-10-23"
+updated: "2026-10-24"
 areas: ["retrieval", "native-media", "late-enrichment"]
 summary: "Полная программа реализации, перехода и проверки совместимости."
 title: "MDRack: план внедрения, совместимость и переход"
@@ -48,7 +48,7 @@ tags:
 > [!important] Статус плана
 > **CURRENT** обозначает проверенные особенности указанной ревизии. **TARGET** обозначает предлагаемое изменение. Условие завершения этапа не является утверждением, что этот этап уже выполнен. Названия новых операций и модулей не следует использовать как готовые команды установленного MDRack.
 >
-> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-native-product-and-fitness-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
+> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-functional-a-and-matrix-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
 
 ## Исходная точка и границы работ 🔎
 
@@ -834,6 +834,9 @@ semantic fitness/W6/operational/release цель остаётся OPEN.
 
 ## Принят normal native product; independent fitness остаётся открытой
 
+Это product checkpoint с сохранённым cutoff. [Следующий functional-A/matrix статус](#current-functional-a-and-matrix-remainder)
+фиксирует позднюю проверку, не расширяя прошлое доказательство.
+
 На baseline `d5476653a4da80ab4082b47ce47a0e4ffc90c973` exact source8 независимо ACCEPTED
 как bounded normal image product slice. [ADR-0018](../../decisions/0018-caller-owned-native-encoder.md)
 фиксирует точное additive exception: default LM Studio text HTTP/legacy space сохранены;
@@ -859,4 +862,33 @@ Native/lexical cells исполняются лишь по реальным capab
 E честно BLOCKED до text-document qualification, без подмены labels/CPU/old vectors.
 Catalog measurements остаются MEASUREMENTS_ONLY, не выдуманным SLO. Бюджеты завершённого
 run не продлены; whole real-corpus/fitness/W6/operational/release остаётся OPEN.
+
+<a id="current-functional-a-and-matrix-remainder"></a>
+
+## Принят functional short-text A; matrix contract и real fitness открыты
+
+На baseline `46824c9be98b70521ce585294a3d185f2c315ef3` независимо приняты short-text
+DOCUMENT/QUERY через existing LMStudioProvider/LegacyTextEmbeddingAdapter и реальный
+caller-owned no-argument factory path; [результат](../../evaluation/text-provider-functional-2026-10-24.md).
+Независимый reusable run: 6 actual requests, два exact-wire controls, real query от второй
+фабрики, полное совпадение profile/space/capabilities и prefix semantics. Нормы — server
+observations, не adapter normalization. Context 2048/short controls не квалифицируют 8 MiB /
+long context, RU/EN semantic quality или SLO. HTTP text-kernel device UNKNOWN; CUDA-max /
+runtime/residency не заменяют evaluated-operation proof. Native forwards 0, прежние
+native/full/software gates сохранены без повторного запуска.
+
+**Ближайший source-contract artifact:** независимое разрешение required B-role/matrix.
+Current RunConfig требует A/B/C/D или A/B/C/D/E; native text-document B/dense E остаются
+unsupported, null policy/incomplete coverage блокируют fitness. Добавление независимых
+gold/policy само по себе не делает такой набор full-matrix PASS. Здесь нет redesign,
+подмены capability, ослабления assertion или объявления будущего corpus CLI run выполненным.
+
+Отдельно остаются approved независимо оценённые corpus/projections/queries/judgments /
+RU-EN/near-distractor/negative/held-out/source groups, rights/provenance/allowlist и frozen
+experiment/policy/cutoffs/quality-cost-latency criteria. Они не создавались и не оценивались
+в этом functional slice. Последующий trial использует существующий runner/factories по
+разрешённому контракту; outer caller владеет preflight/new hard ledger/provider close /
+exact own unload, поскольку у script нет provider-close finally. Private factory glue
+не становится installed product API. Бюджеты закрыты; catalog MEASUREMENTS_ONLY;
+whole semantic/cost/latency fitness/W6/operational/release остаётся OPEN.
 

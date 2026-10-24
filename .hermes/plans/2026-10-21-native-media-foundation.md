@@ -5,7 +5,7 @@ Read [bundle](../../docs/proposals/native-media/README.md) in order 01 â†’ 02 â†
 This entry tracks execution, not another roadmap or evidence registry.
 
 Current software acceptance and the next bounded execution are recorded in
-[the latest status](#current-native-product-and-fitness-remainder). Earlier per-family OPEN /
+[the latest status](#current-functional-a-and-matrix-remainder). Earlier per-family OPEN /
 FAIL statements below retain their original acceptance boundary; they do not reopen
 findings explicitly closed by a later qualified result.
 
@@ -274,6 +274,9 @@ native-media/fitness/W6/operational/release remains OPEN.
 
 ## Current native product and fitness remainder
 
+This product checkpoint retains its original next-work cutoff; the
+[later functional-A/matrix status](#current-functional-a-and-matrix-remainder) is current.
+
 The exact source8 on baseline `d5476653a4da80ab4082b47ce47a0e4ffc90c973` is independently
 ACCEPTED as a bounded normal image product slice; see [product result](../../docs/evaluation/native-image-product-2026-10-23.md)
 and [ADR-0018](../../docs/decisions/0018-caller-owned-native-encoder.md). The explicit trusted
@@ -298,3 +301,29 @@ Only supported native/lexical routes may execute; prepared-text B/dense-text E s
 blocked pending text-document qualification, not caption/CPU fallback or invented labels.
 Catalog scaling remains MEASUREMENTS_ONLY, not an applicable SLO. Completed budgets stay
 closed without renewal. Whole independent native fitness/W6/operational/release is OPEN.
+
+## Current functional A and matrix remainder
+
+On baseline `46824c9be98b70521ce585294a3d185f2c315ef3`, the existing short-text
+LMStudioProvider/LegacyTextEmbeddingAdapter and actual caller no-argument factories
+are independently functionally accepted; see [result](../../docs/evaluation/text-provider-functional-2026-10-24.md).
+Fresh reusable-facade proof used 6 real requests, including two direct wire controls
+and a real query from a second factory; full profile/space/caps, plain DOCUMENT /
+existing QUERY prefix, finite 768 and observed server norms agree. Context 2048 only;
+no 8 MiB/long-context or multilingual semantic-quality claim. Text-kernel device remains
+UNKNOWN despite selected CUDA/GPU-max/residency. Default identity/native product/full
+2422 PASS + six historical SKIP remain unchanged; no native forwards/full replay here.
+
+The remaining source-contract artifact is an independent disposition of the required
+B-role/matrix: current RunConfig requires A/B/C/D or A/B/C/D/E, while native B/E
+text-document remains unsupported. Null policy/incomplete coverage blocks fitness;
+independent gold/policy alone cannot close that mismatch. Do not redesign the matrix,
+fabricate roles or weaken assertions under this functional acceptance.
+
+Independent approved RU/EN/near-distractor/negative/held-out/source-group corpus /
+judgments/projections and frozen experiment/policy/cutoffs/quality-cost-latency criteria
+remain separate inputs. No data adjudication or quality trial was performed here.
+Future execution uses the existing runner and explicit caller factories only under its
+resolved contract and a fresh concrete scope; outer preflight/hard ledger/close/exact
+own unload are mandatory because the script has no provider-close finally. Completed
+budgets stay closed, catalog scaling MEASUREMENTS_ONLY, whole fitness/W6/release OPEN.
