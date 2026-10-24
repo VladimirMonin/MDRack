@@ -170,4 +170,8 @@ join its logical identity/whole_image with PUBLIC search evidence locator/revisi
 an explicit caller allowlist before opening/hash/decode of an original. A DB locator
 or filename alone grants nothing. Same-resource manual lexical enrichment encoded zero,
 retained the native projection and used existing CAS; later semantic query counted anew.
-Independent RU/EN/near-distractor/negative/held-out quality/cost/latency remains OPEN.
+The [independent private-caption data review](../evaluation/native-corpus-review-2026-10-24.md)
+accepts bounded frozen inputs/shared gold and limited pre-score policy, not image-model
+fitness. Four pooled unknowns, missing strict held-out bilingual coverage, subcatalog-only
+negative gold and the required native B-role/matrix mismatch remain explicit. Actual
+RU/EN/near-distractor/negative/held-out quality/cost/latency remains OPEN.

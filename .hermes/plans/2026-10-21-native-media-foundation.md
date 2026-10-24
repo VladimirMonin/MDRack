@@ -5,7 +5,7 @@ Read [bundle](../../docs/proposals/native-media/README.md) in order 01 â†’ 02 â†
 This entry tracks execution, not another roadmap or evidence registry.
 
 Current software acceptance and the next bounded execution are recorded in
-[the latest status](#current-functional-a-and-matrix-remainder). Earlier per-family OPEN /
+[the latest status](#current-reviewed-caption-pilot-and-required-remainder). Earlier per-family OPEN /
 FAIL statements below retain their original acceptance boundary; they do not reopen
 findings explicitly closed by a later qualified result.
 
@@ -274,8 +274,8 @@ native-media/fitness/W6/operational/release remains OPEN.
 
 ## Current native product and fitness remainder
 
-This product checkpoint retains its original next-work cutoff; the
-[later functional-A/matrix status](#current-functional-a-and-matrix-remainder) is current.
+This product checkpoint retains its original next-work cutoff. The functional-A
+checkpoint below also retains its cutoff; [the latest data/remainder status](#current-reviewed-caption-pilot-and-required-remainder) is current.
 
 The exact source8 on baseline `d5476653a4da80ab4082b47ce47a0e4ffc90c973` is independently
 ACCEPTED as a bounded normal image product slice; see [product result](../../docs/evaluation/native-image-product-2026-10-23.md)
@@ -304,6 +304,9 @@ closed without renewal. Whole independent native fitness/W6/operational/release 
 
 ## Current functional A and matrix remainder
 
+This functional checkpoint preserves its original data-pending cutoff; see the
+[later reviewed-pilot status](#current-reviewed-caption-pilot-and-required-remainder).
+
 On baseline `46824c9be98b70521ce585294a3d185f2c315ef3`, the existing short-text
 LMStudioProvider/LegacyTextEmbeddingAdapter and actual caller no-argument factories
 are independently functionally accepted; see [result](../../docs/evaluation/text-provider-functional-2026-10-24.md).
@@ -327,3 +330,29 @@ Future execution uses the existing runner and explicit caller factories only und
 resolved contract and a fresh concrete scope; outer preflight/hard ledger/close/exact
 own unload are mandatory because the script has no provider-close finally. Completed
 budgets stay closed, catalog scaling MEASUREMENTS_ONLY, whole fitness/W6/release OPEN.
+
+## Current reviewed caption pilot and required remainder
+
+On baseline `754cb37cf2df00c2bbfb590ed476ae97d1b80cdf`, independent DATA review accepted
+[a private source-caption pilot and limited pre-score policy](../../docs/evaluation/native-corpus-review-2026-10-24.md), not model fitness. Actual22 submitted RGB224 views/parents/rights/lineage and shared gold were checked;
+11 dev +11 held-out source groups,44 human texts/52 cases. Three proposed grades changed;
+534 scoped known rows reuse480 unique text/target decisions, four unknowns stay pooled.
+Both own frozen bundles passed current validators/require_evaluable and actual public
+source `inspect` (raw0/evaluabletrue/publicationfalse); two full RunConfig parses passed.
+Target model/GPU/LM Studio/lifecycle/factory/GET/ranking/scoring/install operations were0.
+
+Strict query-language intent has one dev pair and no held-out pair. Paired assistance
+variants are not matched-intent query-language coverage. Negative6/7-member subcatalogs
+are locally reviewed gold, not full-corpus absence or semantic refusal fitness; ceiling10
+is structural only. A minimal retained-human-caption selection correction is proposed,
+not applied or deemed sufficient bilingual coverage. The policy's per-query regression /
+zero-gain hypothesis and inclusive timing/cost bounds are experimental, not user SLAs.
+
+Next source artifact remains the separately owned required B-role/matrix disposition;
+this DATA review did not read or duplicate it. Approved data cannot add native text
+DOCUMENT roles or admit C/D-only. Thereafter use a concrete frozen-input/profile/config
+plan and separately authorized finite executor budget, outer preflight/close/exact own
+unload. Do not replay unchanged native/full/build/installed/A proof, reopen their closed
+ledgers or replace required missing bilingual/negative/text slices with pilot counts.
+Functional A/normal native product stay accepted; catalog MEASUREMENTS_ONLY and whole
+semantic/cost/latency fitness/SLO/W6/operational/release remain OPEN.

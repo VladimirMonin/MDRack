@@ -48,7 +48,7 @@ tags:
 > [!important] Статус плана
 > **CURRENT** обозначает проверенные особенности указанной ревизии. **TARGET** обозначает предлагаемое изменение. Условие завершения этапа не является утверждением, что этот этап уже выполнен. Названия новых операций и модулей не следует использовать как готовые команды установленного MDRack.
 >
-> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-functional-a-and-matrix-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
+> Последующая software-приёмка и ближайшие проверки — в [текущем исполнительном статусе](#current-reviewed-caption-pilot-and-required-remainder). Ранние CURRENT/FAIL/OPEN сохраняют свои baseline и cutoff; поздние явно закрытые findings не открываются заново по этим историческим записям.
 
 ## Исходная точка и границы работ 🔎
 
@@ -867,6 +867,9 @@ run не продлены; whole real-corpus/fitness/W6/operational/release ос
 
 ## Принят functional short-text A; matrix contract и real fitness открыты
 
+Этот functional checkpoint сохраняет свой data-pending cutoff; актуальный
+[DATA/remainder status](#current-reviewed-caption-pilot-and-required-remainder) приведён ниже.
+
 На baseline `46824c9be98b70521ce585294a3d185f2c315ef3` независимо приняты short-text
 DOCUMENT/QUERY через existing LMStudioProvider/LegacyTextEmbeddingAdapter и реальный
 caller-owned no-argument factory path; [результат](../../evaluation/text-provider-functional-2026-10-24.md).
@@ -891,4 +894,34 @@ experiment/policy/cutoffs/quality-cost-latency criteria. Они не созда�
 exact own unload, поскольку у script нет provider-close finally. Private factory glue
 не становится installed product API. Бюджеты закрыты; catalog MEASUREMENTS_ONLY;
 whole semantic/cost/latency fitness/W6/operational/release остаётся OPEN.
+
+<a id="current-reviewed-caption-pilot-and-required-remainder"></a>
+
+## Приняты ограниченный caption corpus и pre-score policy; обязательные срезы открыты
+
+На baseline `754cb37cf2df00c2bbfb590ed476ae97d1b80cdf` независимо приняты versioned
+private source-caption inputs и ограниченная experimental policy;
+[DATA-результат](../../evaluation/native-corpus-review-2026-10-24.md).
+Фактически проверены22 PNG224/parents/rights/lineage и общий gold:11 dev +11 held-out
+source groups,44 human texts/52 scope-cases. Три grades исправлены, четыре unknown
+сохранены pooled;534 scoped known rows включают480 уникальных text/target decisions.
+Own frozen successors проходят current physical/native/quality validators,
+require_evaluable и actual public source inspect (exit0/evaluabletrue/publicationfalse).
+Оба RunConfig разобраны полным текущим классом, не AST. Model/GPU/LM Studio/lifecycle /
+factory/GET/ranking/scoring/install operations0; product/tests/oracles не изменялись.
+
+Строго совпадающий query-language intent есть лишь у одной dev группы, held-out такого
+среза нет. Paired EN/RU assistance не заменяет его. Negative gold относится только к
+6/7-member subcatalogs; ceiling10 не измеряет semantic refusal. Minimal source-original
+caption-selection correction предложен отдельно, не применён и не объявлен полным
+bilingual coverage. Per-query0.05 regression/0 gain и inclusive30,000ms/64MiB/200-call
+bounds — pre-score pilot hypotheses, не пользовательские SLA и не полезность модели.
+
+Следующий source artifact — отдельно назначенное разрешение required B-role/matrix;
+DATA review его не читает и не дублирует. Corpus approval не добавляет native DOCUMENT
+TextInput и не разрешает C/D-only config. Затем необходимы concrete frozen inputs /
+profile/config plan и отдельный конечный executor budget с outer close/exact own unload.
+Сохранены принятые native normal product/full/software/functional A без replay/reset;
+обязательные bilingual/negative/text/media gaps не скрываются числом pilot cases.
+Catalog MEASUREMENTS_ONLY; whole quality/cost/latency/SLO/W6/operational/release OPEN.
 

@@ -125,6 +125,22 @@ Independent gold/policy cannot alone close this required B-role/matrix constrain
 Its source-contract disposition remains open; do not fabricate capabilities, drop
 blocked denominators or treat functional A as whole-matrix fitness acceptance.
 
+## Independently reviewed private caption pilot
+
+The [2026-10-24 data result](native-corpus-review-2026-10-24.md) accepts a versioned
+22-parent/11+11-group private source-caption pilot and limited pre-score policy. Shared
+44 human texts/52 cases are judged once across fixed-assistance languages. Three grades
+changed; four unresolved pairs stay omitted in pooled judgments, not grade0. Current
+validators/require_evaluable and real public source `inspect` accept the own frozen
+successors with publicationfalse; full RunConfig parsing is separately established.
+
+This does not close strict held-out bilingual, negative-intent semantic fitness or the
+B-role/matrix constraint above. Source-caption assistance is not actual OCR/ASR. The
+policy's0.05 regression/0 gain are per-query hypotheses at the last compared cutoff;
+negative ceiling10 is structural for6/7-member scopes, and30,000ms includes query
+preparation/search/ranked conversion/first evaluation, not pure API latency or a user SLA.
+No model, factory or scoring was run for DATA approval; execution needs its own grant.
+
 ## Caller policy, costs and privacy
 
 Configuration freezes scenario matrix, split, candidate budget, lexical/vector

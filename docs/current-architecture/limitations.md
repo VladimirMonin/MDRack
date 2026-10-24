@@ -52,6 +52,13 @@ This page is a current-state boundary, not a roadmap promise.
   video inference, independent semantic quality or portable latency/SLO follows. Fake
   synthetic providers still prove orchestration only. Real-corpus/held-out/public A–D /
   quality-cost/W6 gates remain separate.
+- The [independently reviewed private caption pilot](../evaluation/native-corpus-review-2026-10-24.md)
+  establishes bounded data/rights/shared-gold and pre-score policy only:22 parents,
+  11+11 source groups,44 human texts/52 scope-cases, three grade changes and four pooled
+  unknowns. Strict query-translation coverage has one dev pair/no held-out pair; paired
+  assistance languages do not repair it. Negative gold is subcatalog-scoped and ceiling10
+  is structural, not refusal fitness. Arbitrary notes/code/long-text and other media
+  slices, required B-role/matrix and actual semantic/cost/latency/SLO fitness remain OPEN.
 - Local capture, source guards, CPU decoding and child cleanup remain app-owned.
   `mdrack_core` and `mdrack_media` never open sources or run processes. Pure media
   builders now accept native ready observations separately from genuine textual

@@ -133,6 +133,17 @@ a new execution allowance or JIT/fallback route. Private factory glue is not bun
 installed support. Current required A/B/C/D(/E) and native B/E text-document mismatch
 remain open; do not fabricate roles or reinterpret C/D-only as accepted configuration.
 
+### Reviewed private evaluation inputs
+
+The [independent caption-pilot review](evaluation/native-corpus-review-2026-10-24.md)
+accepts own frozen data and a limited pre-score experimental policy, not a model trial.
+Keep media/text/credits/URLs private and use only the explicitly admitted source allowlist.
+Pooled unknowns stay unknown, negative gold applies only to the declared6/7-member
+subcatalogs, and paired assistance variants are not strict bilingual query coverage.
+The policy's per-query bounds/structural negative ceiling are not user SLAs or semantic
+fitness. Resolve the external required B-role/matrix contract and freeze a concrete new
+executor scope before any dispatch; approved data does not reopen closed proof budgets.
+
 ### Explicit caller-owned native image encoder
 
 Use only trusted qualified artifacts and an existing private work directory, following

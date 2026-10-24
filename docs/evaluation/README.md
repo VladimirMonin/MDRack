@@ -9,6 +9,7 @@
 - [Native-image CUDA external-host canary, 2026-10-23](native-image-cuda-canary-2026-10-23.md) — independently reproduced real vision/backbone CUDA and six learned vectors; its original external-only cutoff is preserved.
 - [Normal native-image product, 2026-10-23](native-image-product-2026-10-23.md) — independently accepted explicit caller host through normal engine/catalog/source CLI/installed PE, full DTO/f32/space parity and zero-encode same-resource lexical gain; not real-corpus fitness/SLO.
 - [Short-text A producer and caller factories, 2026-10-24](text-provider-functional-2026-10-24.md) — functional DOCUMENT/QUERY and actual no-argument factory dispatch; text-kernel device unknown, native B/E/full-matrix/corpus quality still open.
+- [Independently reviewed source-caption pilot, 2026-10-24](native-corpus-review-2026-10-24.md) — private frozen data/limited pre-score policy; actual physical/rights/shared-gold review and public inspect, not mandatory-slice or model-fitness completion.
 
 Evaluation correctness, provider usefulness, production search latency and installed
 release readiness are separate evidence boundaries. The v2 manual oracle proves
@@ -54,7 +55,9 @@ the six original real-current-skill consumers passed read-only without body chan
 substitution. Earlier RED remains historical; no private skill content is delivered.
 The later short-text A qualification establishes functional producer/prefix/space and
 real caller-factory dispatch only, not multilingual quality or native text-document roles.
-The B-role/matrix contract and independent data/policy fitness gate remain open; no full
-native suite was replayed for that result. Catalog measurements remain MEASUREMENTS_ONLY.
-Next execution is maintained in the
-[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-functional-a-and-matrix-remainder).
+The later independent review accepts a private22-parent/52-case caption pilot and limited
+pre-score policy, with three grade changes/four pooled unknowns. Required strict held-out
+bilingual coverage, negative semantic fitness and B-role/matrix remain OPEN; data approval
+is not model fitness. No unchanged full/native/build/installed/A replay was performed.
+Catalog measurements remain MEASUREMENTS_ONLY. Next execution is maintained in the
+[active plan](../../.hermes/plans/2026-10-21-native-media-foundation.md#current-reviewed-caption-pilot-and-required-remainder).
