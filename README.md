@@ -93,6 +93,7 @@ LM Studio model-management commands. Host applications can use
 - [Development guide for humans and coding agents](docs/development.md)
 - [Evaluation contracts and native corpus/public runner](docs/evaluation/README.md) — separate software/installed/native functional and reviewed-data evidence; target-corpus model fitness remains open
 - [Current architecture index](docs/current-architecture/README.md)
+- [Embedding research references and role-mapping audit](docs/research/README.md)
 - [Proposed native-media / late-enrichment programme](docs/proposals/native-media/README.md) — full programme; scoped native components are implemented, while whole-programme quality/operations/release obligations remain open
 - [System overview](docs/current-architecture/system-overview.md)
 - [Indexing and structural chunking](docs/current-architecture/indexing-and-chunking.md)
