@@ -10,6 +10,25 @@ SHA-256 публикуемой копии (**REPOSITORY**):
 `604bbcd5084eb26c65f749b77d39022004ce98f503afefc7b0494ce968714b22`.
 Это исследовательская ссылка, а не спецификация MDRack.
 
+## Статус реализации после исследования — 2026-10-27
+
+P01 [активного плана выпуска](../plans/2026-10-26-personal-library-release.md)
+технически реализован и независимо принят: настоящий HTTP provider теперь
+проверяет envelope, count, batch-local индексы, объявленную размерность и конечные
+числовые компоненты, восстанавливает входной порядок и не возвращает частичный
+список при повреждённом позднем item/batch. Текущий контракт и владельцы описаны
+в [HTTP response admission](../current-architecture/system-overview.md#lm-studio-http-response-admission),
+регрессии — в [`tests/unit/test_lmstudio_provider.py`](../../tests/unit/test_lmstudio_provider.py).
+Нормализация, document/query recipe и fingerprints этим исправлением не менялись.
+
+Таблицы, измерения, baseline и предложения ниже сохраняют исторический смысл.
+В частности, предложенная ниже ненулевая cosine-норма не стала универсальным
+правилом HTTP-порта: её проверяют существующие metric-aware downstream владельцы;
+f32 admission также остаётся у явной app value policy. Общий model/route mapping,
+новая recipe и защита её переключения не считаются выполненными P01. Проверка P01 —
+Windows offline/software и ограниченная installed-wheel совместимость, не новый
+live опыт, GPU/quality/SLO или приёмка всего выпуска.
+
 ## Ответ
 
 **Общей гарантии правильного document/query-формата для выбранной модели и транспорта

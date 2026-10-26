@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -74,6 +75,292 @@ def _patch_async_client(
 
     monkeypatch.setattr("httpx.AsyncClient", _factory)
     return clients
+
+
+def _patch_http_transport(
+    monkeypatch: pytest.MonkeyPatch,
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> list[httpx.AsyncClient]:
+    """Replace only the network edge, retaining real HTTP and JSON handling."""
+    original_client = httpx.AsyncClient
+    clients: list[httpx.AsyncClient] = []
+
+    def factory(**kwargs: object) -> httpx.AsyncClient:
+        client = original_client(transport=httpx.MockTransport(handler), **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(lm.httpx, "AsyncClient", factory)
+    return clients
+
+
+class TestLMStudioProviderHTTPResponse:
+    """Response admission through the public provider and real HTTP decoding."""
+
+    @pytest.mark.asyncio
+    async def test_reordered_data_preserves_document_vector_mapping(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        texts = ["document-first", "document-second", "document-third"]
+        expected = [[1.0, 0.0], [0.0, 2.0], [3.0, 4.0]]
+
+        def response(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert request.url.path == "/v1/embeddings"
+            assert json.loads(request.content) == {"model": "fixture-model", "input": texts}
+            return httpx.Response(200, json={"data": [
+                {"index": index, "embedding": expected[index]} for index in (2, 0, 1)
+            ]})
+
+        clients = _patch_http_transport(monkeypatch, response)
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+
+        vectors = await provider.embed(texts)
+
+        assert dict(zip(texts, vectors, strict=True)) == dict(zip(texts, expected, strict=True))
+        assert vectors == expected
+        assert len(clients) == 1 and clients[0].is_closed
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("index", [None, 0, -1, 2, "1", False, True, 1.0, 1.5], ids=[
+        "null", "duplicate-and-hole", "negative", "out-of-range", "string", "false", "true", "float", "fraction",
+    ])
+    async def test_rejects_invalid_late_index(self, monkeypatch: pytest.MonkeyPatch, index: object) -> None:
+        clients = _patch_http_transport(monkeypatch, lambda request: httpx.Response(200, json={"data": [
+            {"index": 0, "embedding": [1.0, 2.0]}, {"index": index, "embedding": [3.0, 4.0]},
+        ]}))
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+        published: list[list[float]] = []
+
+        with pytest.raises(EmbeddingError):
+            published.extend(await provider.embed(["first", "second"]))
+
+        assert published == []
+        assert len(clients) == 1 and clients[0].is_closed
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("payload", [
+        None, True, 7, "data", [], {},
+        {"data": None}, {"data": True}, {"data": 7}, {"data": "invalid"}, {"data": {}},
+        {"data": []},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}]},
+        {"data": [{"index": i, "embedding": [float(i), 2.0]} for i in range(3)]},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}, None]},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}, []]},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}, "invalid"]},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}, 1]},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}, True]},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}, {"embedding": [3.0, 4.0]}]},
+        {"data": [{"index": 0, "embedding": [1.0, 2.0]}, {"index": 1}]},
+    ], ids=[
+        "null-payload", "bool-payload", "number-payload", "string-payload", "list-payload", "missing-data",
+        "null-data", "bool-data", "number-data", "string-data", "mapping-data", "empty-data", "short", "extra",
+        "null-item", "list-item", "string-item", "number-item", "bool-item", "missing-index", "missing-embedding",
+    ])
+    async def test_rejects_invalid_response_shape_or_count(
+        self, monkeypatch: pytest.MonkeyPatch, payload: object,
+    ) -> None:
+        clients = _patch_http_transport(monkeypatch, lambda request: httpx.Response(
+            200, content=json.dumps(payload), headers={"Content-Type": "application/json"},
+        ))
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+
+        with pytest.raises(EmbeddingError):
+            await provider.embed(["first", "second"])
+
+        assert len(clients) == 1 and clients[0].is_closed
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("embedding", [
+        None, True, 7, "12", {"0": 1, "1": 2}, [], [1.0], [1.0, 2.0, 3.0],
+        [1.0, "2.0"], [1.0, True], [1.0, False], [1.0, None], [1.0, {}], [1.0, [2.0]],
+        [1.0, float("nan")], [1.0, float("inf")], [1.0, float("-inf")], [1.0, 10 ** 400],
+    ], ids=[
+        "null", "bool", "number", "string", "mapping", "empty", "short-ragged", "long-ragged", "numeric-string",
+        "true-component", "false-component", "null-component", "mapping-component", "nested-component",
+        "nan", "positive-inf", "negative-inf", "float-overflow",
+    ])
+    async def test_rejects_invalid_late_embedding(
+        self, monkeypatch: pytest.MonkeyPatch, embedding: object,
+    ) -> None:
+        # Serialize nonfinite JSON explicitly: httpx's json= encoder rejects it
+        # before the provider can exercise real response decoding and admission.
+        payload = {"data": [
+            {"index": 0, "embedding": [1.0, 2.0]}, {"index": 1, "embedding": embedding},
+        ]}
+        clients = _patch_http_transport(monkeypatch, lambda request: httpx.Response(
+            200, content=json.dumps(payload), headers={"Content-Type": "application/json"},
+        ))
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+        published: list[list[float]] = []
+
+        with pytest.raises(EmbeddingError):
+            published.extend(await provider.embed(["first", "second"]))
+
+        assert published == []
+        assert len(clients) == 1 and clients[0].is_closed
+
+    @pytest.mark.asyncio
+    async def test_rejects_uniform_dimensions_different_from_declared_contract(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _patch_http_transport(monkeypatch, lambda request: httpx.Response(200, json={"data": [
+            {"index": 1, "embedding": [3.0]}, {"index": 0, "embedding": [1.0]},
+        ]}))
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+
+        with pytest.raises(EmbeddingError, match="Dimension mismatch: expected 2, got 1"):
+            await provider.embed(["first", "second"])
+
+        assert provider.dimensions == 2
+        assert provider.returned_dimensions == 1
+        assert provider.vector_length_valid is False
+
+    @pytest.mark.asyncio
+    async def test_preserves_numeric_values_without_normalizing_or_rejecting_zero(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        expected = [[0, 0.0], [3, -4.0]]
+        _patch_http_transport(monkeypatch, lambda request: httpx.Response(200, json={"data": [
+            {"index": 1, "embedding": expected[1]}, {"index": 0, "embedding": expected[0]},
+        ]}))
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+
+        assert await provider.embed(["zero", "unnormalized"]) == expected
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("count", [65, 66])
+    async def test_reordered_batches_use_local_indices_including_tail(
+        self, monkeypatch: pytest.MonkeyPatch, count: int,
+    ) -> None:
+        texts = [f"document-{i}" for i in range(count)]
+        expected = [[float(i), float(i + 100)] for i in range(count)]
+        by_text = dict(zip(texts, expected, strict=True))
+        batches: list[list[str]] = []
+
+        def response(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            batches.append(body["input"])
+            assert body == {"model": "fixture-model", "input": batches[-1]}
+            return httpx.Response(200, json={"data": list(reversed([
+                {"index": i, "embedding": by_text[text]} for i, text in enumerate(batches[-1])
+            ]))})
+
+        clients = _patch_http_transport(monkeypatch, response)
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+
+        vectors = await provider.embed(texts)
+
+        assert batches == [texts[:32], texts[32:64], texts[64:]]
+        assert vectors == expected
+        assert dict(zip(texts, vectors, strict=True)) == by_text
+        assert len(clients) == 3 and all(client.is_closed for client in clients)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["duplicate-index", "global-index", "short", "component", "dimension"])
+    async def test_second_batch_failure_publishes_nothing_and_stops_before_tail(
+        self, monkeypatch: pytest.MonkeyPatch, failure: str,
+    ) -> None:
+        texts = [f"document-{i}" for i in range(65)]
+        expected = [[float(i), float(i + 100)] for i in range(65)]
+        by_text = dict(zip(texts, expected, strict=True))
+        batches: list[list[str]] = []
+
+        def response(request: httpx.Request) -> httpx.Response:
+            batch = json.loads(request.content)["input"]
+            batches.append(batch)
+            data = list(reversed([
+                {"index": i, "embedding": by_text[text]} for i, text in enumerate(batch)
+            ]))
+            if len(batches) == 2:
+                if failure == "duplicate-index":
+                    data[-1]["index"] = 1
+                elif failure == "global-index":
+                    for item in data:
+                        item["index"] += 32
+                elif failure == "short":
+                    data.pop()
+                elif failure == "component":
+                    data[-1]["embedding"] = [1.0, True]
+                else:
+                    data[-1]["embedding"] = [1.0]
+            return httpx.Response(200, json={"data": data})
+
+        clients = _patch_http_transport(monkeypatch, response)
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+        published: list[list[float]] = []
+
+        with pytest.raises(EmbeddingError):
+            published.extend(await provider.embed(texts))
+
+        assert published == []
+        assert batches == [texts[:32], texts[32:64]]
+        assert len(clients) == 2 and all(client.is_closed for client in clients)
+        # A subsequent complete call on the same provider has no partial-result residue.
+        assert await provider.embed(texts) == expected
+        assert batches[2:] == [texts[:32], texts[32:64], texts[64:]]
+        assert all(client.is_closed for client in clients)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("extra_item", [False, True])
+    async def test_empty_input_preserves_existing_http_contract(
+        self, monkeypatch: pytest.MonkeyPatch, extra_item: bool,
+    ) -> None:
+        def response(request: httpx.Request) -> httpx.Response:
+            assert json.loads(request.content) == {"model": "fixture-model", "input": []}
+            data = [{"index": 0, "embedding": [1.0, 2.0]}] if extra_item else []
+            return httpx.Response(200, json={"data": data})
+
+        clients = _patch_http_transport(monkeypatch, response)
+        provider = LMStudioProvider(endpoint="https://fixture.invalid", model="fixture-model", dimensions=2)
+
+        if extra_item:
+            with pytest.raises(EmbeddingError):
+                await provider.embed([])
+        else:
+            assert await provider.embed([]) == []
+        assert len(clients) == 1 and clients[0].is_closed
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["index", "shape", "component", "dimension"])
+    async def test_validation_errors_and_serialized_provider_logs_are_private(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str,
+    ) -> None:
+        late = {
+            "index": {"index": "PRIVATE_RESPONSE_BODY", "embedding": [3.0, 4.0]},
+            "shape": "PRIVATE_RESPONSE_BODY",
+            "component": {"index": 1, "embedding": [3.0, "PRIVATE_RESPONSE_BODY"]},
+            "dimension": {"index": 1, "embedding": [3.0]},
+        }[failure]
+        _patch_http_transport(monkeypatch, lambda request: httpx.Response(200, json={
+            "data": [{"index": 0, "embedding": [1.0, 2.0]}, late], "private": "PRIVATE_RESPONSE_BODY",
+        }))
+        provider = LMStudioProvider(
+            endpoint="https://PRIVATE_USER:PRIVATE_PASSWORD@PRIVATE_HOST.invalid/private-api",
+            model="fixture-model", dimensions=2,
+        )
+        provider_logger = logging.getLogger(lm.__name__)
+        previous = (provider_logger.level, provider_logger.propagate)
+        provider_logger.setLevel(logging.INFO)
+        provider_logger.propagate = False
+        log_path = tmp_path / "validation.log"
+        sink = logging.FileHandler(log_path, encoding="utf-8")
+        provider_logger.addHandler(sink)
+        try:
+            with pytest.raises(EmbeddingError) as error:
+                await provider.embed(["PRIVATE_FIRST_INPUT", "PRIVATE_SECOND_INPUT"])
+            sink.flush()
+            output = log_path.read_text(encoding="utf-8")
+            assert output and "llm.request.failed " in output
+            assert "input_count=2" in output and "status_code=200" in output and "elapsed_ms=" in output
+            assert "llm.request.finished " not in output
+            rendered = output + str(error.value) + repr(error.value.__cause__)
+            for private in ("PRIVATE_FIRST_INPUT", "PRIVATE_SECOND_INPUT", "PRIVATE_USER", "PRIVATE_PASSWORD",
+                            "PRIVATE_HOST", "private-api", "PRIVATE_RESPONSE_BODY"):
+                assert private not in rendered
+        finally:
+            provider_logger.removeHandler(sink)
+            sink.close()
+            provider_logger.setLevel(previous[0])
+            provider_logger.propagate = previous[1]
 
 
 class TestLMStudioProviderEmbed:
@@ -213,7 +500,10 @@ class TestLMStudioProviderEmbed:
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
         mock_response.json.side_effect = [
-            {"data": [{"embedding": [float(index)] * 128, "index": index} for index in range(start, stop)]}
+            {"data": [
+                {"embedding": [float(index)] * 128, "index": index - start}
+                for index in range(start, stop)
+            ]}
             for start, stop in ((0, 32), (32, 64), (64, 65))
         ]
         clients = _patch_async_client(monkeypatch, response=mock_response)

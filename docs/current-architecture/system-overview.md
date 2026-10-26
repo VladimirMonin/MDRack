@@ -102,6 +102,40 @@ The canonical service path is `IndexingService`, `RetrievalService`, and
 `indexing/indexer.py` wrapper, and thin `search/` modules are compatibility
 surfaces rather than the preferred home for new behavior.
 
+## LM Studio HTTP response admission
+
+The canonical [`LMStudioProvider`](../../src/mdrack/integrations/lmstudio/client.py)
+owns the OpenAI-compatible text embeddings response boundary. The legacy
+`mdrack.embeddings.lmstudio` path re-exports this implementation; it is not a
+second transport or validator.
+
+- Each HTTP response must be an object with list `data`, containing exactly one
+  object per input in that request. Large calls use batches of at most 32 inputs.
+- Every item has a unique batch-local integer `index` in `0..batch_len-1`.
+  Booleans, strings and floats are invalid indices. Response order is arbitrary:
+  the provider restores input order by index, including subsequent batches and
+  the final tail.
+- Each `embedding` is a nonempty list of finite numeric components, excluding
+  booleans and strings, with the configured provider dimension. The provider
+  neither infers a new dimension from a response nor truncates a vector.
+- A malformed item or later batch raises the existing `EmbeddingError`; the
+  public call does not return a partial vector list. Request-scoped clients are
+  closed, and a later call can succeed. Validation diagnostics contain safe
+  reasons/counts/dimensions, not document text, vectors, raw response bodies or
+  endpoint credentials.
+
+This admission step does not change document/query formatting, profile identity,
+normalization or values. Raw zero vectors remain allowed at the HTTP port.
+Explicit float32 value-policy conversion is owned by
+`src/mdrack/application/vector_values.py`; cosine nonzero-norm requirements belong
+to prepared-resource validation and the metric-aware SQLite adapter. These are
+not transport-independent reasons to introduce a new HTTP normalizer.
+The provider regressions in
+[`tests/unit/test_lmstudio_provider.py`](../../tests/unit/test_lmstudio_provider.py)
+exercise this real path with only the external HTTP transport substituted.
+Offline/installed-software checks do not qualify live model semantics or GPU
+execution.
+
 ## Local-file adapters and prepared-resource boundary
 
 Opening a caller-selected local source is application work, not a capability of

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from math import isfinite
 from time import perf_counter
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -710,7 +711,7 @@ class LMStudioProvider:
             )
             raise EmbeddingError("Failed to parse LM Studio response") from exc
 
-        if "data" not in data:
+        if not isinstance(data, dict) or "data" not in data:
             _log_message(
                 logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s "
@@ -725,8 +726,33 @@ class LMStudioProvider:
             raise EmbeddingError("Invalid response: missing 'data' field")
 
         try:
-            embeddings = [item["embedding"] for item in data["data"]]
-        except (KeyError, TypeError) as exc:
+            items = data["data"]
+            if not isinstance(items, list) or len(items) != len(texts):
+                raise ValueError("Invalid embedding response count")
+
+            indexed_embeddings: dict[int, list[float]] = {}
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("Invalid embedding response item")
+                index = item.get("index")
+                if (
+                    isinstance(index, bool)
+                    or not isinstance(index, int)
+                    or not 0 <= index < len(texts)
+                    or index in indexed_embeddings
+                ):
+                    raise ValueError("Invalid embedding response index")
+                embedding = item.get("embedding")
+                if not isinstance(embedding, list) or any(
+                    isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value)
+                    for value in embedding
+                ):
+                    raise ValueError("Invalid embedding payload")
+                indexed_embeddings[index] = embedding
+
+            # Count, range and uniqueness guarantee complete batch-local coverage.
+            embeddings = [indexed_embeddings[index] for index in range(len(texts))]
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
             _log_message(
                 logging.ERROR,
                 "llm.request.failed provider=%s model=%s profile=%s "
