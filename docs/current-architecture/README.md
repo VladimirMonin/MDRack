@@ -28,7 +28,7 @@ When sources disagree, use this order:
 ## Architecture map
 
 - [System overview](system-overview.md) — layers, dependency direction, app-owned local-file adapters, prepared-resource boundaries, component diagram, and source anchors.
-- [Indexing and structural chunking](indexing-and-chunking.md) — scan, parsing, identities, exact spans, chunks, embeddings, and atomic replacement.
+- [Indexing and structural chunking](indexing-and-chunking.md) — scan, selected mixed roots, literal TXT, identities, exact spans, chunks, embeddings, and atomic replacement.
 - [SQLite persistence](sqlite-persistence.md) — the single clean-v2 application catalog, historical schemas, transactions, FTS, vectors, and identity.
 - [Retrieval](retrieval.md) — text, semantic, hybrid RRF, degradation, and the reranking boundary.
 - [Images](assets.md) — Markdown text projection versus explicit direct-image ingestion.
@@ -71,6 +71,20 @@ When sources disagree, use this order:
 - [One-store acceptance evidence](../one-store-acceptance.md) — bounded fixture runner, safe lifecycle evidence, and installed-wheel boundary.
 - [Offline release verification](../offline-release-verification.md) and [W5-CI contract](../contracts/v0.4-w5-ci-contract.md)
 - [v0.4 offline release-candidate packet](../evidence/v0.4-release-packet.md) and [public-surface compatibility ledger](../compatibility/v0.4-public-surface-ledger.json)
+
+## Selected mixed-folder addition
+
+Registered [folder add](../cli-contracts.md#selected-mixed-folders) and the matching
+[async engine path](public-interfaces.md#selected-mixed-folder-api) route explicit
+Markdown/TXT and JPEG/PNG/WEBP roots through the existing document/image owners.
+Namespace/root authority is durable, planning is scoped, TXT is literal
+`text/plain`, and physical derived store/cache aliases cannot overlap selected
+sources even when the final leaf is absent. Unchanged replay/reopen makes zero
+encode calls and no resource/unit duplicates. The
+[indexing contract](indexing-and-chunking.md#selected-mixed-folder-indexing) owns
+these rules; [limits](limitations.md#selected-mixed-folders) retain relative-path
+projection ambiguity, full reconciliation, unified search and quality boundaries.
+P05 source/local acceptance does not qualify a whole personal-library release.
 
 ## Operation-owned search snapshots
 

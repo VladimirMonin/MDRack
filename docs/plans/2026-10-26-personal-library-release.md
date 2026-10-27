@@ -50,7 +50,7 @@ PDF/DOCX не объявляются поддерживаемыми. Если **
 - [Исследование ролей embeddings](../research/embedding-role-mapping-audit-2026-10-26.md) объясняет найденные дефекты, но маленькое сравнение моделей не является приёмкой этого выпуска.
 - [Исследование скорости каталога](../evaluation/catalog-search-scaling-2026-10-23.md) указывает возможные причины затрат, но не измеряет новую полную пользовательскую команду.
 
-Для явно выбранного native-v2 закреплённый комплект, полные bindings, обычный Markdown-путь и ограниченная installed-интеграция технически приняты ниже. Реальная папка и ожидаемые находки пользователя, обычный image processor, полный installed-release путь, скорость и L1/L2 остаются открытыми до своих прогонов. Отсутствие этих доказательств не превращать в общее запрещение независимой разработки.
+Для явно выбранного native-v2 закреплённый комплект, полные bindings, обычный Markdown-путь и ограниченная installed-интеграция технически приняты ниже. Отдельно приняты P04 ordinary-image preparation и P05 смешанные выбранные корни/TXT в указанных границах. Реальная папка и ожидаемые находки пользователя, полный installed-release путь, скорость и L1/L2 остаются открытыми до своих прогонов. Отсутствие этих доказательств не превращать в общее запрещение независимой разработки.
 
 ### Уточнения начального Оракула, принятые координатором
 
@@ -75,8 +75,8 @@ PDF/DOCX не объявляются поддерживаемыми. Если **
 | P01 | Строгие ответы HTTP embeddings, правильная привязка по `index` | базовый checkout; не требует личного корпуса | ACCEPTED (technical), опубликован `12fe6a2` — Windows offline и ограниченная installed-wheel совместимость |
 | P02 | Точный рецепт документа/запроса, версия пространства | P01 и защитный P03; не активировать новую recipe раньше guard | ACCEPTED (technical) — выбранный native-v2 ordinary Markdown/QUERY, full space/input bound и CLI/engine; исторический HTTP positive остаётся NOT_RUN |
 | P03 | Запрет несовместимой смены до записи; честная частичная индексация | P01 | ACCEPTED (technical) — Windows source/offline и synthetic local components; без горячей миграции |
-| P04 | Подготовка обычного изображения по рецепту модели | P00, P02 | TODO — технические зависимости закрыты; processor/JPEG/WEBP/EXIF/alpha ещё не приняты |
-| P05 | Единое добавление смешанной папки и TXT | P02, P03, P04 | TODO |
+| P04 | Подготовка обычного изображения по рецепту модели | P00, P02 | ACCEPTED (technical), опубликован `397364a` — WIC/JPEG/WEBP/EXIF/alpha и bounded one-IMAGE, не whole release |
+| P05 | Единое добавление смешанной папки и TXT | P02, P03, P04 | ACCEPTED (technical) — зарегистрированные folder add/import_folders, literal TXT, scoped roots и physical store/cache safety; Windows synthetic/local |
 | P06 | Повторное сканирование, версии, прерывание, пропавшие источники | P05 | TODO |
 | P07 | Один поисковый план, RRF, фильтры и группировка ресурсов | P02; offline mixed catalog не требует готового folder importer | TODO |
 | P08 | Короткие пользовательские действия, открытие и диагностика | P06, P07 | TODO |
@@ -268,6 +268,28 @@ real corpus, quality/SLO и L1/L2 остаются P04 и следующими �
 
 **Приёмка:** смешанный одноразовый корень добавляется одним зарегистрированным действием, поиск открывает правильные оригиналы; повторный проход без изменений — ноль новых model calls и ноль дублей.
 
+**Реализовано и независимо технически принято, 27 октября 2026 года (только P05):**
+`folder add NAMESPACE=PATH ...` и `MDRackEngine.import_folders(...)` используют
+существующие document/image owners и явно выбранный prepared provider. Markdown
+сохраняет прежнюю семантику; UTF-8 TXT — буквальный `document`/`text/plain` с
+точными spans, без второй `raw_text` копии. JPEG/PNG/WEBP идут в принятый visual
+путь без обязательных caption/ID. Приватный `folders.json` хранит trusted mapping;
+одинаковые относительные имена в разных корнях различаются, проход B сохраняет A.
+Configured exclusions и запрет обхода source links/junctions/reparse сохранены.
+
+Исправлен и независимо закрыт F01: store/cache containment проверяется по
+физическим путям, включая существующий junction/symlink ancestor с ещё отсутствующим
+конечным каталогом, до создания catalog/registry и encoding. Прежний RED сохранён;
+новых публичных reason codes нет. Ошибки отдельных файлов остаются видимыми,
+остальные продолжаются; partial/failed folder result имеет `ok=true`, status и exit1,
+не меняя legacy scan contract. Повтор/reopen — zero encode и без resource/unit
+дублей; write-free image bookkeeping не обещается. Точные команды/границы:
+[CLI](../cli-contracts.md#selected-mixed-folders),
+[engine](../current-architecture/public-interfaces.md#selected-mixed-folder-api),
+[indexing](../current-architecture/indexing-and-chunking.md#selected-mixed-folder-indexing).
+Это source/local orchestration, не новая native/model или personal-corpus/quality
+квалификация. Полные changed/missing/rename/interruption остаются P06, общий поиск — P07.
+
 ### P06. Версии, обновления и продолжение
 
 - Изменение текста/изображения заменяет только затронутое представление и сохраняет ресурсную идентичность согласно зафиксированному контракту. Не меняется fingerprint неизменённой ветки.
@@ -412,9 +434,10 @@ real corpus, quality/SLO и L1/L2 остаются P04 и следующими �
 - [x] **P03 — ACCEPTED (technical):** весь cumulative safety slice независимо принят после исправления unknown-binding admission и явного storage contract; точная ревизия поставки фиксируется отдельной квитанцией публикации.
 - [x] **P02 — ACCEPTED (technical) для выбранного native-v2:** exact recipe/full space/full native input bound и обычная Markdown CLI/engine/store/query интеграция; прежний HTTP source/safety cutoff сохранён отдельно.
 - [x] **P00 — ACCEPTED (technical) для выбранного existing native-v2:** kit/dependencies/functional smoke и исходные полные времена; ранний `ACCEPT_METADATA_ONLY` сохранён как историческая граница, не как текущее runtime-доказательство.
-- [x] **Явный выбор пользователя:** существующий retrieval-v2 для текста и изображений в новой коллекции, без новых моделей и изменения прежних индексов. Это решение, не выполненное подключение или runtime PASS.
-- [x] Обычный текст через выбранный native-v2 и ограниченная проверка комплекта независимо приняты; технические зависимости текущего P04 закрыты.
-- [ ] Остальные P04–P13 выполнены и независимо приняты в своих границах.
+- [x] **Явный выбор пользователя:** существующий retrieval-v2 для текста и изображений в новой коллекции, без новых моделей и изменения прежних индексов. Сам выбор транспорта не является runtime PASS; принятые интеграции перечислены отдельно.
+- [x] **P04 — ACCEPTED (technical), опубликован `397364acc68458c07bf6118dd00c781f269f5b7f`:** ordinary image preparation и ограниченная one-IMAGE проверка в сохранённых границах.
+- [x] **P05 — ACCEPTED (technical):** единое добавление выбранных смешанных корней/TXT, trusted mapping, scoped identities, honest partial outcomes и исправленный physical derived-owner guard; только Windows synthetic/local boundary.
+- [ ] Остальные P06–P13 выполнены и независимо приняты в своих границах.
 - [ ] L1 принят и передан для личного использования.
 - [ ] L2 принят; конечный Оракул проверил весь результат.
 
@@ -500,9 +523,40 @@ tokens. Точный count отказа не выведен. Raw/f32 transient p
 native/model/GPU/HTTP/control/public-source вызовов Проверяющий не делал, окно не
 пополнялось. Реальные command times не закрывают P09/SLO3s.
 
-**Итог:** P00 и P02 технически закрыты по явно выбранному existing native-v2 пути.
-Текущий определённый P04 может начаться по зависимостям с actual HEAD/ownership
-guards; здесь он не назначен и не запущен. Его processor/JPEG/WEBP/EXIF/alpha recipe
-не доказан fixed224 RGB PNG. P04–P13, реальный корпус, quality/SLO, whole installed
-release и L1/L2 остаются отдельными непринятыми результатами. Подробные частные
-receipts и публикационная SHA хранятся вне Git.
+**Итог на cutoff P00/P02:** эти части технически закрыты по явно выбранному
+existing native-v2 пути; на том cutoff ordinary-image recipe ещё не был доказан
+fixed224 PNG. Позднее P04 отдельно принят и опубликован, а P05 принят в своих
+source/local границах выше. Это не перенос раннего native evidence на новый producer.
+Реальный корпус, quality/SLO, whole installed release и L1/L2 остаются открытыми.
+Подробные частные receipts и публикационные SHA хранятся вне Git.
+
+### Проверенные границы P05
+
+Независимая Windows/CPython 3.14.2 проверка с pinned outer/inner uv0.11.15 на
+исправленном cumulative кандидате относительно опубликованного `397364a`:
+**39 passed, EXIT=0**, без skips — прежние три F01 predicates, десять постоянных
+store/cache direct/junction-alias/disjoint cases и 26 P05 routing/identity/error/
+reopen/parity checks. Прежний F01 **2 failed, 1 passed, EXIT=1** остаётся RED;
+после исправления те же утверждения проходят через реальный engine и registered CLI,
+не создавая derived state внутри источников и не вызывая encode. Fake vectors
+подменяют только внешний edge; SQLite/filesystem и fresh processes настоящие.
+
+Финальный полный прогон на этих точных repaired source/test bytes —
+**2837 passed, 6 skipped, EXIT=0** — и текущие ruff/strict mypy221/dependency/boundary
+результаты переиспользованы по неизменности входов, а не выданы за новый независимый
+full run. Старые **2824 passed, 3 failed, 6 skipped** сохранены как исторический
+неуспех build prerequisites; последующий pinned-uv installed-wheel PASS не делает
+его прежним PASS. Прежний full2827/6 не назван gate исправленного кандидата;
+первый three-cell pass с unpinned inner uv остаётся diagnostic-only. Шесть inherited
+skips не засчитаны как PASS. Нормальная PEP517 isolation и существующий private
+backend wheelhouse сохранены без переустановки общего окружения.
+
+Новых product native/model/GPU/HTTP/control вызовов, weight/DLL loads/downloads,
+kit rehash или пополнения P04 allowances нет. Отдельная installed compatibility
+не равна готовности всего установленного выпуска. Поиск/чтение соответствующих
+веток возвращает original locators; relative-path-only `files list`/
+`get_file_by_path` остаётся неоднозначным между namespaces и не заменяет logical IDs.
+Полные P06 reconciliation и P07 unified search, P08–P10 эксплуатация/скорость/
+восстановление/реальный корпус с исходными 15+15 и порогами качества, затем L2
+остаются отдельными обязательствами. Публикационная identity фиксируется отдельной
+квитанцией commit/push/readback, не самим technical verdict.

@@ -39,6 +39,32 @@ data, not semantic-quality evidence. Configure LM Studio before ordinary
 semantic or hybrid use; see [Getting started](docs/getting-started.md) and the
 [CLI guide](docs/getting-started.md#static-cli-guide).
 
+## Selected mixed folders
+
+A separate registered action adds explicit Markdown/TXT and JPEG/PNG/WEBP roots
+through the prepared document/image paths, without per-file IDs or captions.
+Create a derived-state root outside the selected sources; with an already configured
+caller-owned native host, replace these example paths with explicitly selected roots:
+
+```bash
+mkdir -p ./library-state
+uv run mdrack --root ./library-state folder add "notes=../chosen-notes" "photos=../chosen-photos" --provider external --host-config ./private-host-config.json
+```
+
+Paths resolve from the working directory, not `--root`. Namespaces are durably bound
+to roots; equal relative names stay distinct. Store/cache physical overlap and
+source link/junction traversal are refused. TXT is literal `text/plain`; Markdown
+image references never trigger image access. `--provider synthetic` is only an
+explicit offline fixture provider, not a model or a production fallback.
+
+Inspect `data.status`: partial/failed folder attempts exit 1 even with `ok: true`,
+while successfully published files remain usable. Unchanged replay/reopen performs
+zero encode calls and creates no resource/unit duplicates. Full missing/rename/
+interruption handling, unified library search, OS opening and personal-corpus
+quality/release acceptance remain later work. See the exact
+[folder contract](docs/cli-contracts.md#selected-mixed-folders) and
+[embedded API](docs/current-architecture/public-interfaces.md#selected-mixed-folder-api).
+
 ## Agent-first work with human data
 
 For a real task, an agent first identifies whether it is using the source-checkout
@@ -93,6 +119,7 @@ LM Studio model-management commands. Host applications can use
 - [Development guide for humans and coding agents](docs/development.md)
 - [Evaluation contracts and native corpus/public runner](docs/evaluation/README.md) — separate software/installed/native functional and reviewed-data evidence; target-corpus model fitness remains open
 - [Current architecture index](docs/current-architecture/README.md)
+- [Selected mixed-folder CLI and outcomes](docs/cli-contracts.md#selected-mixed-folders)
 - [Embedding research references and role-mapping audit](docs/research/README.md)
 - [Active personal-library release plan: documents, images, then selected enrichment](docs/plans/2026-10-26-personal-library-release.md) — target and acceptance boundaries, not a claim of implemented features
 - [Proposed native-media / late-enrichment programme](docs/proposals/native-media/README.md) — full programme; scoped native components are implemented, while whole-programme quality/operations/release obligations remain open

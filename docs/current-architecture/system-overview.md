@@ -83,7 +83,7 @@ The current bounded exception is `IndexingService`: it imports and constructs
 |---|---|
 | `domain/` | Parser-independent documents and blocks, chunks, logical identities, source locators, profiles, and retrieval DTOs. |
 | `ports/` | Storage, parser, embedding, model-catalog, lifecycle, and reranker contracts. |
-| `application/` | Canonical Markdown indexing, chunking, reads, and text/semantic/hybrid orchestration. |
+| `application/` | Canonical document indexing/chunking, explicit mixed-folder routing, reads, and text/semantic/hybrid orchestration. |
 | `adapters/` | markdown-it parsing, app SQLite compatibility/composition, and LM Studio-specific adapters. |
 | `storage/sqlite/` | Compatibility types and read/write helpers; normal application startup does not select an app-migration database. |
 | `packages/mdrack-sqlite/` | Generic `core_*` catalog/search adapter, FTS fallback, context-managed bridge lifecycle, and safe verification. |
@@ -203,10 +203,18 @@ that will be replaced in the fixed catalog:
 | Entry path | Application-side owner and preparation | Neutral/persistent boundary |
 |---|---|---|
 | Markdown scan | `IndexingService` scans its configured root and creates the compatibility `PreparedFile` for `IndexStorage.replace_file`. | The app storage path writes the same fixed `core_*` catalog; a scan does not inspect image targets. |
+| Selected mixed folders | `FolderImportService` owns explicit roots, durable namespace mapping, physical store/cache separation and scoped enumeration. It routes Markdown/literal TXT to selected document preparation and JPEG/PNG/WEBP to existing visual ingestion. | Existing conditional document/image publication writes one graph per logical resource; no parallel catalog or legacy multi-root deletion planner. |
 | Explicit raw text | `RawTextIngestionService` captures strict UTF-8 text or Markdown selected outside the scan root and prepares a `PreparedResourceBatch`. | `CoreIndexingService` validates it and calls the `ResourceWritePort`. |
 | Explicit direct image | `ImageIngestionService` captures and magic-checks one local image, then prepares its caller-supplied text and/or visual records. | `CoreIndexingService` validates the complete graph before the write port replaces it. |
 | Explicit WAVE | `RawAudioIngestionService` captures RIFF/WAVE and obtains strict timed JSON from the authorized local stdin command; `TranscriptIngestionService` prepares the timed-text graph. | `CoreIndexingService` validates the complete graph before the write port replaces it. |
 | Explicit ISO-BMFF video | `RawVideoIngestionService` captures `ftyp` input and obtains strict transcript/frame JSON from the authorized local stdin extractor; `VideoCompositionService` prepares one video graph. | `CoreIndexingService` validates the complete graph before the write port replaces it. |
+
+The [mixed-folder path](indexing-and-chunking.md#selected-mixed-folder-indexing)
+keeps its private root mapping in `<store>/folders.json`, outside selected sources;
+this is application authority, not a filesystem permission inferred from a catalog
+locator. Both engine and registered CLI share the guard for physical derived-owner
+aliases, including absent final leaves. TXT stays `document`/`text/plain` with
+literal spans, distinct from the explicit provider-free `raw_text` producer.
 
 `mdrack_media` supplies the provider-free builders and validators used by the
 application composition services for prepared transcript and frame-caption
@@ -263,6 +271,8 @@ the atomic logical-resource replacement.
 - Resource adapter compatibility import: `src/mdrack/adapters/sqlite/resource_store.py`
 - Services: `src/mdrack/application/indexing.py`,
   `src/mdrack/application/retrieval.py`, `src/mdrack/application/query.py`
+- Mixed-folder routing and selected document publication:
+  `src/mdrack/application/folder_import.py`, `src/mdrack/application/native_text.py`
 - Ports: `src/mdrack/ports/storage.py`, `src/mdrack/ports/embeddings.py`
 - Local-file adapters: `src/mdrack/ingestion/raw_text.py`,
   `src/mdrack/ingestion/images.py`, `src/mdrack/ingestion/raw_audio.py`,

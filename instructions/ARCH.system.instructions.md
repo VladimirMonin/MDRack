@@ -19,6 +19,9 @@ indexing and retrieval system.
   explicit direct-image ingestion primarily
   through ports. The current bounded exception is `IndexingService`: it imports and
   constructs the concrete `MarkdownItParser` default when no parser is injected.
+- `FolderImportService` owns explicit mixed-root enumeration and durable namespace/root
+  mapping. It composes existing selected document/image ingestion, not a parallel
+  catalog or a loop of the legacy relative-path-only deletion planner over roots.
 - `adapters/` implements app-specific ports and retains compatibility delegates.
 - `packages/mdrack-sqlite/` is the single owner of the generic resource catalog/search
   adapter and its FTS query helper; it depends only on `mdrack-core` and stdlib.
@@ -74,6 +77,13 @@ explicitly changes that architecture.
   SQLite supplies candidates, not a second fusion implementation.
 - Production reranking is unsupported; non-null reranker injection must fail closed.
 - Public APIs prefer logical IDs and `SourceLocator`; internal SQLite record IDs are not new public contracts.
+- Mixed-folder admission keeps store/cache physically outside selected sources in both
+  containment directions, including existing junction/symlink ancestors with absent
+  final leaves; unresolved topology fails closed before catalog creation or encoding.
+  CLI checks before prepared-provider construction. Keep namespace-scoped identities,
+  configured exclusions, source-link non-traversal and literal `text/plain` document
+  semantics. Catalog locators never supply filesystem authority. See
+  [selected folder indexing](../docs/current-architecture/indexing-and-chunking.md#selected-mixed-folder-indexing).
 
 ## Approved v0.3 transition contract
 

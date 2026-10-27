@@ -159,6 +159,35 @@ This page is a current-state boundary, not a roadmap promise.
   `PermissionError` observation is not claimed fixed; arbitrary simultaneous
   bootstrap/open topology remains outside that evidence.
 
+## Selected mixed folders
+
+- `folder add` / `MDRackEngine.import_folders` support explicitly selected Markdown,
+  literal UTF-8 TXT and JPEG/PNG/WEBP roots with a prepared provider. They do not
+  implicitly scan home/vault/repository paths, follow source link/junction/reparse
+  entries, resolve Markdown image targets, or add PDF/DOCX/GIF folder support.
+- Namespace/root bindings are durable and cannot silently remap. Physical store/
+  cache overlap, including alias ancestors with absent leaves, refuses before
+  creation/encoding. The private registry belongs outside selected sources and
+  outside Git; a catalog locator is not authority to open an arbitrary path.
+- Two roots with the same relative filename remain distinct and processing B
+  preserves A. Legacy `files list` / `get_file_by_path(relative_path)` projections
+  still key by relative path and are ambiguous across namespaces. Use returned
+  logical resource/unit IDs and namespaced search/read locators, not relative
+  filename alone, to identify a particular original.
+- Unchanged repeat/reopen is qualified for zero encode calls and no resource/unit
+  duplicates. It is not a byte-identical/no-bookkeeping-write promise. Full changed,
+  missing, rename, collision and interruption reconciliation remains separate;
+  current folder import does not withdraw a disappeared source automatically.
+- Existing branch text/media search and reads work; the future unified library
+  search and OS-open action are not supplied by this importer. An incomplete
+  attempt can return CLI `ok: true` with `partial_success`/`failed` and exit 1.
+  Inspect status, per-file reasons and counts; unsupported-only input is not full
+  success. See [CLI outcomes](../cli-contracts.md#selected-mixed-folders).
+- Independent P05 evidence is Windows source/local SQLite/filesystem with synthetic
+  vectors and scripted failure edges. It is not a new live native/model run,
+  dedicated whole installed release, personal-corpus relevance/SLO or L1/L2
+  acceptance; accepted image/text runtime boundaries are reused, not enlarged.
+
 ## Parsing and chunking
 
 - `markdown_it` is the default parser; the legacy parser/chunker remains for
@@ -179,8 +208,9 @@ This page is a current-state boundary, not a roadmap promise.
 - Direct images require PNG, JPEG, GIF, or WEBP magic bytes and a portable
   relative POSIX source reference. The source-after-read guard protects the
   existing atomic replacement, but does not provide a live filesystem lock.
-- There is no automatic image discovery, remote fetch, perceptual hashing, region
-  detection, or binary image storage in SQLite.
+- Image enumeration occurs only in explicitly selected mixed roots. There is no
+  implicit image discovery, Markdown-target traversal, remote fetch, perceptual
+  hashing, region detection, or binary image storage in SQLite.
 - Legacy `0005` asset tables remain in immutable history but have no production
   Markdown indexing owner.
 

@@ -14,6 +14,7 @@ from mdrack._observability import AppEventLogger
 from mdrack.cli.commands.cache import cache as cache_group
 from mdrack.cli.commands.eval import evaluation as eval_group
 from mdrack.cli.commands.files import files as files_group
+from mdrack.cli.commands.folder import folder as folder_group
 from mdrack.cli.commands.images import image as image_group
 from mdrack.cli.commands.metadata import metadata as metadata_group
 from mdrack.cli.commands.model import model as model_group
@@ -233,6 +234,7 @@ ingest_group.add_command(ingest_video)
 
 # Explicit direct-image lifecycle is separate from Markdown scan.
 main.add_command(image_group)
+main.add_command(folder_group)
 main.add_command(native_group)
 main.add_command(metadata_group)
 main.add_command(cache_group)

@@ -65,6 +65,28 @@ outside the checkout; it covers the synthetic fixture and a temporary wheel targ
 A green fake/offline test does not prove live LM Studio, Windows, or a real private
 corpus. Report exact commands and honest non-claims.
 
+### Mixed-folder regression boundary
+
+For `folder add` / `MDRackEngine.import_folders`, the focused local-component set is:
+
+```bash
+uv run python -m pytest -q tests/cli/test_cli_folder.py tests/unit/test_folder_import.py tests/integration/test_folder_import.py tests/integration/test_folder_storage_alias_safety.py
+```
+
+These checks use explicit synthetic sources/providers and real local SQLite/filesystem.
+They cover literal TXT/spans, document/image routing and original locators, two-root
+identity/isolation, exclusions/link policy, honest partial outcomes, privacy and
+fresh-process zero-encode/no-duplicate replay. The storage-owner regression exercises
+direct and real Windows junction aliases for store/cache through engine and registered
+CLI, including absent final leaves, no source-tree writes/no encoding, plus permitted
+disjoint layouts. Alias cells may skip when Windows junction creation is unavailable;
+a run with those skips does not qualify that Windows boundary. Do not replace normal
+build isolation or run a native model merely to test this orchestration. Full
+reconciliation/unified search, dedicated installed release and personal-corpus
+quality/SLO remain separate. Current contracts are
+[folder indexing](current-architecture/indexing-and-chunking.md#selected-mixed-folder-indexing)
+and [CLI outcomes](cli-contracts.md#selected-mixed-folders).
+
 When v1 evaluation inputs share a directory with the four versioned v2 schemas, use:
 
 ```bash

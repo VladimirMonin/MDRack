@@ -1,5 +1,89 @@
 # MDRack CLI Contracts
 
+## Selected mixed folders
+
+```text
+mdrack --root APP_ROOT folder add NAMESPACE=PATH [NAMESPACE=PATH ...]
+    [--exclude GLOB]... [--provider external|synthetic] [--host-config CONFIG]
+```
+
+`folder add` is registered and shares `MDRackEngine.import_folders(...)` with
+`FolderImportService`. Create `APP_ROOT` separately from the selected sources;
+its configured store and cache hold derived state. For example, with an already
+configured caller-owned native host:
+
+```bash
+mdrack --root ./library-state folder add "notes=../chosen-notes" "photos=../chosen-photos" --provider external --host-config ./private-host-config.json
+```
+
+The roots must be explicit existing directories. `PATH` resolves from the current
+working directory, **not** from `--root`. Each namespace starts with an ASCII
+letter/digit and otherwise contains letters, digits, `.`, `_` or `-`. A private
+`<store>/folders.json` registry durably binds each namespace to its selected root;
+remapping a namespace or registering the same root under another namespace refuses.
+Results contain portable namespace/source references, never that local root path.
+No home, vault or repository is selected implicitly.
+
+The default provider is `external`, which requires `--host-config CONFIG` and the
+existing qualified prepared document/image capabilities. `synthetic` is an explicit
+offline orchestration provider, not a model or a fallback. A host config with
+`--provider synthetic` refuses. Legacy HTTP text-only injection does not acquire
+pixel support. No per-file resource ID, caption, vector or service JSON is required.
+
+- `.md`/`.markdown` use the existing Markdown document path; `.txt` is strict UTF-8
+  `text/plain`, interpreted literally with exact spans, not Markdown-by-glob.
+  Each folder text file creates one `document`, not an additional `raw_text` copy.
+- `.jpg`/`.jpeg`/`.png`/`.webp` use the existing visual ingestion path, with original
+  source references rather than prepared image paths. Markdown image references
+  are never resolved. Other extensions are reported as unsupported; selected images
+  still undergo the existing signature/preparation checks.
+- `scan.exclude` always applies; repeated `--exclude` adds relative glob patterns.
+  The standard ignored directories remain pruned. Encountered symlinks, junctions
+  and reparse points are not followed; a selected root that is itself a link is refused.
+- Store/cache containment is **physical**, in both directions, including existing
+  junction/symlink ancestors when the final derived directory is absent. Overlap or
+  unresolvable derived-owner topology refuses before catalog creation or encoding
+  with existing `source_overlaps_store` / `source_overlaps_cache` reasons; CLI checks
+  this before constructing the prepared provider.
+
+Completed attempts return `ok: true`, `meta.command: "folder add"` and
+`data.schema: "mdrack.folder-import.v1"`. Data contains `status`, `space_id`,
+`profile_fingerprint`, `counts`, `roots`, `files` and `model_calls`:
+
+- Counts are `added`, `updated`, `skipped`, `failed`, `unprocessed`, `excluded`,
+  `total`. Root summaries contain the namespace, reported outcome count `files`,
+  and the same status counts/excluded count. `total` counts reported outcomes plus
+  excluded regular files, not an inventory of an unreadable subtree.
+- Each file outcome contains `namespace`, `source_ref`, `kind`, `media_type`,
+  `status`, `reason`, nullable `resource_id`/`source_bytes`, and `model_calls`.
+  Reasons are sanitized categories such as `source_not_utf8`, `source_too_large`,
+  `source_unavailable`, `unsupported_media_type`, `image_decode_failed` or
+  `directory_unavailable`; raw source contents and exception strings are absent.
+- Unchanged files report `skipped`/`unchanged`. Unsupported inputs and links are
+  skipped with a reason; failures/unavailable subtrees remain visible while other
+  files proceed. Skips other than unchanged make the attempt incomplete.
+- `success` exits 0; `partial_success` and `failed` exit 1 **despite `ok: true`**.
+  Selection/registry refusals instead use `ok: false`, `FOLDER_IMPORT_ERROR` and a
+  safe `error.details.reason_code`; incompatible document profiles retain
+  `EMBEDDING_ERROR`/`incompatible_embedding_profile`. This additive exit contract
+  does not change legacy `scan` partial-success exit 0.
+
+Documents have a bounded source read and use the canonical structural chunker;
+provider input limits can reject a file, never silently truncate it. Progress logs
+use opaque file references and status/counts. `model_calls` counts prepared-provider
+encode dispatches (including failed attempts), not proof of native forwards.
+An unchanged repeat, including fresh-process reopen, makes no new encode calls or
+resource/unit duplicates. This does not promise write-free image bookkeeping.
+
+Existing `search --mode text`, `native text-search`, `image native-search`,
+`read unit` and `resource inspect` reach the respective persisted branches and
+original locators; a catalog locator alone does not authorize filesystem access.
+This action neither invokes OS opening nor implements the future unified library
+search, missing/rename/interruption policy or personal-corpus quality acceptance.
+See [folder indexing](current-architecture/indexing-and-chunking.md#selected-mixed-folder-indexing),
+[engine contract](current-architecture/public-interfaces.md#selected-mixed-folder-api)
+and [remaining limits](current-architecture/limitations.md#selected-mixed-folders).
+
 ## Native temporal/media v1 (1.4.0rc3 candidate)
 
 `native ingest PATH --kind frames|audio|video --source-namespace NS --source-ref REF`
@@ -40,7 +124,7 @@ as are target, strict/partial policy, final limit and candidate budget. Exact fi
 and limitations: [native-image-v1](contracts/native-image-v1.md).
 Default `--provider lmstudio` refuses unsupported native images before source/DB
 side effects; `--provider synthetic` is explicit offline testing, not a model.
-Only these image native commands additionally accept `--provider external --host-config CONFIG`:
+The image native commands also accept `--provider external --host-config CONFIG`:
 trusted outer composition of a caller-owned bounded CUDA process with the normal engine /
 catalog. Missing config or config with another provider refuses with the normal one-envelope
 error; there is no implicit fallback/default or other-command factory change. The
@@ -70,7 +154,8 @@ preparation (EXIF orientation, white alpha, RGB PNG) and keeps the original sour
 A separately qualified retrieval-v2 profile with explicit
 `metadata.image_input_contract = mdrack-native-image-variable-v1` preserves oriented W,H for
 native `dyn_size`; old profiles still use legacy fixed224 caller policy. There is no
-new CLI flag, automatic producer selection, folder discovery or image-QUERY capability.
+new image-specific CLI flag, automatic producer selection or image-QUERY capability.
+Explicit mixed-folder enumeration is the separate `folder add` action above.
 Corrupt/over-dimension preparation retains specific fixed error codes, including
 `IMAGE_DECODE_FAILED` / `IMAGE_DIMENSIONS_TOO_LARGE`; other operation failures retain
 the existing envelope. Unchanged ready images can skip preparation/encoding after
@@ -145,7 +230,8 @@ normal operations use exactly one SQLite catalog:
 absolute path. There is no normal-command option for selecting a different
 catalog.
 
-The first writable operation (`init` or `scan`) creates the fixed catalog. A
+The first writable operation (for example `init`, `scan`, `folder add` or explicit
+ingestion) creates the fixed catalog. A
 read-only operation does not create a catalog. If a pre-S1 store artifact is
 present, normal startup fails safely; it neither opens, transfers, nor rewrites
 that artifact.
@@ -296,6 +382,7 @@ application catalog-path override.
 | --- | --- |
 | `init` | Create/open the fixed catalog. |
 | `scan` | Index Markdown into the fixed catalog. |
+| `folder add` | Add explicitly selected mixed roots with durable namespaces, literal TXT and the prepared document/image provider. |
 | `search` | Text, semantic, or hybrid retrieval from the fixed catalog. |
 | `read chunk` | Read one text chunk by public logical ID. `--context neighbors` returns adjacent text chunks derived from the same core representation. |
 | `read unit` | Read any persisted search unit by public logical ID, including timed transcript and frame-caption units, without treating it as a Markdown chunk. |
@@ -492,8 +579,10 @@ search. It names `init`, `scan`, explicit ingestion, rebuild, deletion, and
 provider/model lifecycle actions before execution because those actions can modify
 derived state.
 
-The complete input sequence is Markdown scanning under the selected root plus the
-separate raw text/Markdown, direct-image, WAVE, and ISO-BMFF contracts above. The
+Inputs can use Markdown scanning under the selected root, the separate raw
+text/Markdown, direct-image, WAVE and ISO-BMFF contracts, or explicit mixed-folder
+addition above. Mixed-folder sources remain separate from the derived app store
+and cache; the older single-root scan is not a multi-root planner. The
 audio and video adapters run only after their explicit authorization flags and use a
 caller-selected local executable with shell-free stdin. Their contracts do not add
 built-in transcription, decoding, visual/acoustic search, remote fallback, or a

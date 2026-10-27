@@ -99,14 +99,30 @@ def prepared_file_to_resource_batch(
     aggregation_fingerprint: AggregationFingerprint | None = None,
     whole_vector: Sequence[float] | None = None,
     metadata_policy: MetadataProjectionPolicy | None = None,
+    media_type: str = "text/markdown",
+    adapter: str = "markdown",
+    adapter_version: str = "1.1",
+    similarity_basis: str = "markdown_retrieval_text",
+    whole_resource_contract: str = "mdrack.markdown.whole-resource.v1",
 ) -> PreparedResourceBatch:
-    """Project one fully prepared Markdown document into one complete core graph.
+    """Project one fully prepared document into one complete core graph.
 
+    The default media/adapter metadata preserves the existing Markdown contract;
+    explicit plain-text values keep literal text honest without a second projector.
     SQLite row IDs and run IDs deliberately stay on the legacy side of this edge.
     Resource, representation, and unit identities are caller-owned logical IDs.
     """
     if not isinstance(prepared, PreparedFile):
         raise TypeError("prepared must be a PreparedFile")
+    for name, value in (
+        ("media_type", media_type),
+        ("adapter", adapter),
+        ("adapter_version", adapter_version),
+        ("similarity_basis", similarity_basis),
+        ("whole_resource_contract", whole_resource_contract),
+    ):
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"{name} must be a non-empty string")
     if whole_text_policy is not None and not isinstance(whole_text_policy, WholeResourceTextPolicy):
         raise ValueError("whole_text_policy must be a WholeResourceTextPolicy or None")
     if aggregation_fingerprint is not None and not isinstance(aggregation_fingerprint, AggregationFingerprint):
@@ -122,7 +138,7 @@ def prepared_file_to_resource_batch(
         aggregation_fingerprint = AggregationFingerprint.from_payload(
             {
                 "aggregation": _CENTROID_TEXT_AGGREGATION,
-                "contract": "mdrack.markdown.whole-resource.v1",
+                "contract": whole_resource_contract,
                 "policy": whole_text_policy.to_dict(),
             }
         )
@@ -149,7 +165,7 @@ def prepared_file_to_resource_batch(
     resource = ResourceRecord(
         resource_id=resource_id,
         resource_kind=RESOURCE_DOCUMENT,
-        media_type="text/markdown",
+        media_type=media_type,
         source_namespace=prepared.root_id,
         locator=Locator(
             _DOCUMENT_LOCATOR,
@@ -163,8 +179,8 @@ def prepared_file_to_resource_batch(
         metadata={
             "source": cast(dict[str, Any], dict(prepared.source_metadata)),
             "ingestion": {
-                "adapter": "markdown",
-                "adapter_version": "1.1",
+                "adapter": adapter,
+                "adapter_version": adapter_version,
                 "normalizer_version": prepared.metadata_normalizer_version or "legacy",
                 "metadata_fingerprint": prepared.metadata_fingerprint or None,
                 "normalization_policy_fingerprint": (
@@ -348,7 +364,7 @@ def prepared_file_to_resource_batch(
             metadata={
                 "aggregation": aggregation,
                 "aggregation_fingerprint": aggregation_fingerprint.value,
-                "similarity_basis": "markdown_retrieval_text",
+                "similarity_basis": similarity_basis,
             },
         )
         whole_unit = SearchUnitRecord(
@@ -368,7 +384,7 @@ def prepared_file_to_resource_batch(
             metadata={
                 "aggregation": aggregation,
                 "aggregation_fingerprint": aggregation_fingerprint.value,
-                "similarity_basis": "markdown_retrieval_text",
+                "similarity_basis": similarity_basis,
             },
         )
         units = units + (whole_unit,)

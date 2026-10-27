@@ -17,7 +17,7 @@ from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
 from mdrack.application.embedding_preflight import preflight_text_embedding_profile
 from mdrack.application.metadata_normalization import normalize_metadata
-from mdrack.domain.blocks import BlockType
+from mdrack.domain.blocks import BlockType, SourceBlock, SourceSpan
 from mdrack.domain.chunks import RetrievalChunk
 from mdrack.domain.documents import Document
 from mdrack.domain.identifiers import (
@@ -43,6 +43,38 @@ LEGACY_PARSER_NAME = "legacy_markdown"
 LEGACY_PARSER_VERSION = "1"
 LEGACY_CHUNK_STRATEGY_NAME = "buffered_blocks"
 LEGACY_CHUNK_STRATEGY_VERSION = "1"
+PLAIN_TEXT_PARSER_NAME = "plain_text"
+PLAIN_TEXT_PARSER_VERSION = "1"
+
+
+def _plain_text_document(
+    document_id: str,
+    relative_path: str,
+    content: str,
+    title: str,
+) -> Document:
+    """Build the literal text IR without invoking the Markdown parser."""
+    block = SourceBlock(
+        logical_id("plain-text-block", document_id, len(content)),
+        document_id,
+        BlockType.PARAGRAPH,
+        content,
+        content,
+        None,
+        None,
+        (),
+        SourceSpan(1, content.count("\n") + 1, 0, len(content)),
+    )
+    return Document(
+        document_id,
+        relative_path,
+        title,
+        {},
+        (block,),
+        hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        PLAIN_TEXT_PARSER_NAME,
+        PLAIN_TEXT_PARSER_VERSION,
+    )
 
 
 class IndexingService:
@@ -421,6 +453,37 @@ class IndexingService:
             lookup_existing=False,
         )
 
+    def prepare_selected_plain_text(
+        self,
+        *,
+        source_ref: str,
+        content: str,
+        document_logical_id: str,
+        record_id: str,
+        run_id: str,
+    ) -> PreparedFile:
+        """Prepare one caller-selected literal UTF-8 text document without scanning.
+
+        Plain text is not parsed as Markdown: one literal paragraph block keeps the
+        source bytes as written while the canonical structural chunker owns the
+        bounded retrieval pieces and exact source spans.
+        """
+        if not isinstance(content, str) or not content:
+            raise ValueError("document_content_required")
+        if not isinstance(source_ref, str) or not source_ref:
+            raise ValueError("source_ref_required")
+        document = _plain_text_document(
+            document_logical_id, source_ref, content, Path(source_ref).stem or source_ref,
+        )
+        return self._prepare_structural_file(
+            Path(source_ref),
+            run_id,
+            document=document,
+            document_logical_id_override=document_logical_id,
+            record_id_override=record_id,
+            lookup_existing=False,
+        )
+
     def _prepare_structural_file(
         self,
         relative_path: Path,
@@ -428,6 +491,7 @@ class IndexingService:
         *,
         identity_source: dict[str, Any] | None = None,
         source_content: str | None = None,
+        document: Document | None = None,
         document_logical_id_override: str | None = None,
         record_id_override: str | None = None,
         lookup_existing: bool = True,
@@ -440,16 +504,24 @@ class IndexingService:
             if existing is not None and existing.get("logical_id")
             else logical_id("doc", self.root_id, relative)
         )
-        if self.parser is None:
-            raise RuntimeError("markdown-it parser is not configured")
-
-        parsed = self.parser.parse(
-            self.root / relative_path,
-            content=source_content,
-            document_id=document_logical_id,
-            relative_path=relative,
-        )
-        parsed = self._stable_document_identities(parsed)
+        if document is not None:
+            if source_content is not None:
+                raise ValueError("document_source_content_conflict")
+            if document.document_id != document_logical_id:
+                raise ValueError("document_identity_mismatch")
+            if document.relative_path != relative:
+                raise ValueError("document_relative_path_mismatch")
+            parsed = self._stable_document_identities(document)
+        else:
+            if self.parser is None:
+                raise RuntimeError("markdown-it parser is not configured")
+            parsed = self.parser.parse(
+                self.root / relative_path,
+                content=source_content,
+                document_id=document_logical_id,
+                relative_path=relative,
+            )
+            parsed = self._stable_document_identities(parsed)
         file_ref = safe_file_ref(self.root_id, relative)
         logger.info(
             "markdown.parse.finished",

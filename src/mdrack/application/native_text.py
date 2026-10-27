@@ -1,4 +1,4 @@
-"""Ordinary selected Markdown through the existing prepared native-v2 port."""
+"""Ordinary selected text/Markdown through the existing prepared native-v2 port."""
 
 from __future__ import annotations
 
@@ -212,15 +212,21 @@ async def ingest_native_text(
     resource_id: str | None = None,
     source_namespace: str,
     source_ref: str,
+    media_type: str = "text/markdown",
     expected_revision: str | None = None,
     resolver: SourceResolver | None = None,
 ) -> NativeTextIngestionResult:
-    """Encode one ordinary UTF-8 Markdown document through the prepared port.
+    """Encode one ordinary UTF-8 document through the prepared port.
 
-    The provider is caller-owned and must already declare DOCUMENT/text. All
-    source/identity preflight runs before the first model dispatch; publication
-    uses the existing Core conditional writer and Markdown chunk/provenance owner.
+    ``text/markdown`` keeps the canonical Markdown parser/chunker semantics;
+    ``text/plain`` uses one literal text block and the same structural chunker,
+    so the original bytes are not reinterpreted as Markdown. The provider is
+    caller-owned and must already declare DOCUMENT/text. All source/identity
+    preflight runs before the first model dispatch; publication uses the existing
+    Core conditional writer and document provenance owner.
     """
+    if media_type not in {"text/markdown", "text/plain"}:
+        raise ValueError("unsupported_text_media_type")
     provider.capabilities.require(EncodingRole.DOCUMENT, "text")
     if not isinstance(source_namespace, str) or not source_namespace:
         raise ValueError("source_namespace_required")
@@ -242,7 +248,7 @@ async def ingest_native_text(
     selected = (resolver or SourceResolver()).selected_path(
         namespace=source_namespace, source_ref=source_ref, selected=path,
     )
-    signature = RawSignatureFact(RawSignatureKind.UTF8_TEXT, "text/markdown", "utf8-strict-v1")
+    signature = RawSignatureFact(RawSignatureKind.UTF8_TEXT, media_type, "utf8-strict-v1")
     budget = RawInputBudget()
     source = capture_source(selected, source_ref, RawMediaKind.TEXT, signature, budget=budget)
     try:
@@ -262,16 +268,41 @@ async def ingest_native_text(
             profile="native",
             root_id=source_namespace,
         )
-        prepared = indexing.prepare_selected_document(
+        prepare = (
+            indexing.prepare_selected_plain_text
+            if media_type == "text/plain"
+            else indexing.prepare_selected_document
+        )
+        prepared = prepare(
             source_ref=source_ref,
             content=text,
             document_logical_id=resource_id,
             record_id=str(uuid.uuid4()),
             run_id=uuid.uuid4().hex,
         )
+        if not prepared.chunks:
+            raise RawSourceError(RawSourceErrorCode.PREPARED_EVIDENCE_INVALID)
         prepared = replace(prepared, source_provenance=cast(Any, {"provenance": source.provenance.to_dict()}))
         metadata_policy = getattr(storage, "metadata_policy", None)
-        base_batch = prepared_file_to_resource_batch(prepared, metadata_policy=metadata_policy)
+        plain = media_type == "text/plain"
+        adapter = "plain_text" if plain else "markdown"
+        adapter_version = "1" if plain else "1.1"
+        similarity_basis = "plain_text_retrieval_text" if plain else "markdown_retrieval_text"
+        whole_resource_contract = (
+            "mdrack.plain-text.whole-resource.v1" if plain else "mdrack.markdown.whole-resource.v1"
+        )
+        def project(prepared_file: Any) -> PreparedResourceBatch:
+            return prepared_file_to_resource_batch(
+                prepared_file,
+                metadata_policy=metadata_policy,
+                media_type=media_type,
+                adapter=adapter,
+                adapter_version=adapter_version,
+                similarity_basis=similarity_basis,
+                whole_resource_contract=whole_resource_contract,
+            )
+
+        base_batch = project(prepared)
 
         if before.batch is not None and _same_document_identity(before.batch, base_batch, provider.space):
             old = before.batch
@@ -318,7 +349,7 @@ async def ingest_native_text(
                 raise ValueError("incompatible_embedding_space")
             vectors.append(canonicalize_for_space(result.vector, result.space))
         prepared = replace(prepared, vectors=tuple(vectors), embedding_space=provider.space)
-        batch = prepared_file_to_resource_batch(prepared, metadata_policy=metadata_policy)
+        batch = project(prepared)
         job = producer_job(before, batch, owner="native.text", generation=revision)
         outcome = publish_reindex(
             _SourceGuardedPublication(port, source, selected, budget),

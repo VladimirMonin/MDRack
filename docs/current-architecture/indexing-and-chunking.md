@@ -68,6 +68,57 @@ trigger rename reuse. Files are independent: failures can produce
 The CLI accepts `scan --changed`, but that flag is currently ignored because
 normal scans already perform change detection.
 
+## Selected mixed-folder indexing
+
+`FolderImportService` is an additive application orchestrator, reached by registered
+`folder add` and `MDRackEngine.import_folders`. It requires explicit namespace/root
+pairs and a selected prepared provider; it never guesses a source root or loops
+`IndexingService.scan` over several roots. A private `<store>/folders.json` registry
+persists the trusted namespace/root mapping. A namespace cannot silently move to a
+different root, and the same root cannot acquire another namespace. Deterministic
+resource IDs use namespace plus relative source reference, so two roots containing
+`notes.md` stay distinct. Processing B neither deletes nor marks A missing. Missing,
+rename and interruption reconciliation remain separate work.
+
+Admission resolves selected roots and checks **physical** store/cache containment
+in both directions before catalog creation or encode dispatch. Existing symlink/
+junction ancestors are resolved even when the final derived leaf does not exist;
+unresolvable owner topology fails closed with the existing store/cache overlap
+reason. CLI admission also precedes prepared-provider construction. Sources remain
+read-only; the app registry, catalog and configured cache stay outside them.
+
+The folder enumerator retains configured `scan.exclude` patterns, adds explicit
+exclusions, and prunes the standard ignored directories. It refuses linked selected
+roots and does not follow symlink/junction/reparse entries. Relative file references
+remain portable; local registry root paths are not returned or logged. Unsupported
+entries and unavailable subtrees have explicit outcomes rather than silently
+claiming a complete traversal.
+
+Routing reuses existing owners:
+
+| Folder input | Existing preparation/publication path |
+|---|---|
+| `.md`, `.markdown` | `ingest_native_text` uses `prepare_selected_document`, the Markdown parser/chunker and conditional document publication. Image syntax remains prose-only; referenced files are never resolved. |
+| UTF-8 `.txt` | The same document path selects `prepare_selected_plain_text`: one literal paragraph IR, empty heading path, no Markdown/frontmatter interpretation, canonical structural chunks and exact source spans. The one resource is `document`/`text/plain`, not an extra `raw_text` copy. |
+| `.jpg`, `.jpeg`, `.png`, `.webp` | `ingest_native_image` uses the accepted image preparation and conditional image owner, retaining original source locators instead of prepared transport paths. |
+
+Text source capture is bounded to 32 MiB. Structural limits and the selected
+provider's actual input contract apply separately; oversized inputs are chunked or
+refused, never silently clipped. Complete embedding-space identity is retained;
+folder import does not migrate/relabel old vectors or create another persistence
+implementation. The document-space preflight precedes document encoding; an existing
+image with an incompatible visual space is refused without replacing its graph.
+
+One file's failure does not discard already published resources or stop the remaining
+candidates. Progress uses opaque file references and status/counts. Summary/status
+and per-file reasons distinguish added, updated, unchanged, skipped, failed and
+unprocessed input. An unchanged repeat, including fresh-process reopen, makes zero
+prepared-provider encode calls and no duplicate resources/units. Ready-image CAS
+bookkeeping need not be write-free. See the
+[CLI result/exit contract](../cli-contracts.md#selected-mixed-folders),
+[engine surface](public-interfaces.md#selected-mixed-folder-api) and
+[remaining limits](limitations.md#selected-mixed-folders).
+
 ## TEXT profile admission
 
 `application/embedding_preflight.py::preflight_text_embedding_profile` builds the
@@ -145,8 +196,10 @@ and become JSON arrays at public boundaries.
 
 ## Stable identities
 
-- A document logical ID is based on the root identity and relative path, except
-  when an unambiguous exact-content move reuses the prior identity.
+- A document logical ID is based on the root identity and relative path. The legacy
+  scan may reuse the prior identity for an unambiguous exact-content move; the
+  selected-folder path uses its durable namespace and relative source reference
+  and makes no rename-reconciliation promise.
 - A block logical ID combines document identity, block kind, normalized heading
   path, content fingerprint, duplicate ordinal, and parser version.
 - A chunk logical ID combines document identity, parent block IDs, chunk kind,
@@ -190,6 +243,8 @@ the prior complete graph visible.
 ## Primary source anchors
 
 - Scan orchestration and identities: `src/mdrack/application/indexing.py`
+- Mixed-folder selection/registry/routing: `src/mdrack/application/folder_import.py`
+- Selected document publication: `src/mdrack/application/native_text.py`
 - Parser: `src/mdrack/adapters/markdown_it/parser.py`
 - Structural policies and exact spans: `src/mdrack/application/chunking.py`
 - Scanner: `src/mdrack/indexing/scanner.py`
@@ -206,5 +261,5 @@ the prior complete graph visible.
 Explicit raw text ingestion is a separate CLI-owned producer in
 `src/mdrack/ingestion/raw_text.py`. It reuses the Markdown parser/chunker for
 Markdown, treats plain text as literal prose, and guards the single core write
-with an R0 after-read source check. The scanner remains the owner of in-root
-Markdown files.
+with an R0 after-read source check. That `raw_text` producer remains separate from
+both single-root Markdown scan and the selected mixed-folder `document` path.

@@ -57,6 +57,57 @@ See [geometry, limits and P04 qualification](../contracts/native-image-v1.md#ord
 That new source-CLI/one-IMAGE result does not extend the older installed/text/QUERY
 qualification to the changed producer/space or establish corpus/whole-release fitness.
 
+## Selected mixed-folder API
+
+`await MDRackEngine.import_folders(folders, *, exclude=())` and registered
+`folder add NAMESPACE=PATH ...` share the app-owned `FolderImportService`.
+`folders` is a namespace-to-`Path` mapping or sequence of `(namespace, Path)` pairs;
+paths resolve from the current working directory. The caller must inject an
+explicit `prepared_embedding_provider`; a legacy text HTTP provider alone refuses.
+For an engine with an already selected prepared provider:
+
+```python
+from pathlib import Path
+
+result = await engine.import_folders(
+    {"notes": Path("../chosen-notes"), "photos": Path("../chosen-photos")},
+    exclude=("private/**",),
+)
+complete = result.status == "success"  # Partial/failed results still contain useful outcomes.
+```
+
+The private `<store>/folders.json` mapping binds portable namespaces to explicitly
+selected roots and rejects remapping. Equal relative filenames in different roots
+produce distinct logical resources. Enumeration is scoped; processing one root
+never runs the legacy relative-path-only deletion planner over another root.
+Configured exclusions remain active. Source links/junctions/reparse entries are
+not followed, and linked selected roots refuse. Before creating the catalog, the
+shared admission checks physical store/cache containment in both directions,
+including existing alias ancestors with absent final leaves. Unresolvable owner
+topology refuses safely. The CLI performs this check before provider construction.
+
+Markdown and literal UTF-8 TXT enter the canonical document preparation/chunking/
+conditional-publication path; TXT records are `document`/`text/plain`, not duplicate
+`raw_text` records. JPEG/PNG/WEBP enter the accepted visual path without captions or
+per-file IDs. Original locators are retained; Markdown references do not trigger
+image access. All generic graph persistence remains with the existing SQLite owner.
+
+The application-owned `FolderImportResult.to_dict()` is
+`mdrack.folder-import.v1`: status, complete space ID/fingerprint, counts, per-root
+summaries, portable per-file outcomes and encode-dispatch counts. Its class stays
+in `mdrack.application.folder_import`; the frozen `mdrack.public_api.__all__` is
+unchanged. Inspect `status`, not object truthiness or CLI `ok`, for completeness.
+Unsupported/corrupt/non-UTF8/unavailable/oversize input leaves other files usable
+and has a sanitized outcome. Unchanged repeat/reopen makes zero encode calls and
+no resource/unit duplicates, not a write-free image-bookkeeping guarantee.
+
+Existing text/media search, logical unit reads and resource inspection return the
+respective original locators. This is not an OS-open action or a unified library
+search API. Exact fields and CLI exits are in
+[selected mixed folders](../cli-contracts.md#selected-mixed-folders);
+[known limits](limitations.md#selected-mixed-folders) retain missing/rename/
+interruption, multi-namespace relative-path projection and quality boundaries.
+
 ## Prepared OCR enrichment
 
 This first family is independently accepted on Windows/CPython 3.14.2 at source/
@@ -202,6 +253,7 @@ Live command registration exposes:
 |---|---|
 | `init` | Create or verify the only application store, `<store>/catalog.sqlite3`, as clean schema `mdrack_sqlite_catalog_v2`. |
 | `scan` | Change-detect and index Markdown with LM Studio or test-only fake composition where exposed. |
+| `folder add` | Add explicit mixed roots through the prepared document/image paths; no per-file resource IDs or captions. |
 | `search` | Text, semantic, or hybrid retrieval. |
 | `search --scope all\|notes\|audio\|video\|frames\|images` | Unified resource-level text retrieval from the fixed catalog. |
 | `find-similar RESOURCE_ID` | Provider-free 1.2 textual whole-resource similarity by logical resource ID. |
@@ -233,7 +285,8 @@ application degradation states to command errors; see [retrieval](retrieval.md).
 
 ## Explicit local-file adapters
 
-`scan` is the Markdown-root path. The other local-file commands are explicit,
+`scan` is the legacy single Markdown-root path; `folder add` is the separate
+namespace-scoped mixed-root path described above. The other local-file commands are explicit,
 separate app adapters: `ingest text` prepares one strict UTF-8 text or Markdown
 resource outside the scan root; `image ingest` prepares one direct image graph;
 `ingest audio` accepts only authorized RIFF/WAVE input; and `ingest raw-video`
@@ -255,6 +308,7 @@ built-in STT, a general media decoder, FFmpeg, or VLM capability.
 `MDRackEngine` supports:
 
 - scan with optional force reindex;
+- async `import_folders` for explicitly selected mixed roots with an injected prepared provider;
 - text, semantic, and hybrid search;
 - unified text search over notes, audio/video transcripts, frame captions, and image text;
 - file lookup by relative path and canonical heading outlines by file logical ID;
@@ -342,6 +396,8 @@ remain under `mdrack_core`.
 - Ports: `src/mdrack/ports/storage.py`, `src/mdrack/ports/embeddings.py`
 - Shared DTO: `src/mdrack/domain/retrieval.py`
 - Image API DTOs: `src/mdrack/ingestion/images.py`
+- Mixed-folder service/result: `src/mdrack/application/folder_import.py`
+- Selected document preparation/publication: `src/mdrack/application/native_text.py`
 - Resource discovery DTOs: `src/mdrack/application/resources.py`
 - Pure core exports: `packages/mdrack-core/src/mdrack_core/__init__.py`
 

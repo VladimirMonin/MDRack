@@ -40,6 +40,13 @@ and any skipped gate with a concrete reason.
 - Direct images: explicit local-file ingestion, deterministic resource identity,
   typed text/visual spaces, atomic replacement/delete, pre-limit filters, and safe
   missing/inaccessible-path failures across CLI and `MDRackEngine`.
+- Mixed folders: registered CLI/engine parity, durable namespaced two-root collision/
+  isolation, literal TXT media type/spans and one document identity, original locators,
+  configured exclusions and link/junction policy. Verify physical store/cache overlap
+  refusal before writes/encoding, including alias ancestors with absent final leaves
+  and a permitted disjoint control; skipped Windows alias cases are not proof. Retain
+  per-file failure/privacy/progress and fresh-process unchanged zero-encode/no-duplicate
+  checks without promoting synthetic vectors to live retrieval quality.
 - Documentation: relative links, heading anchors, Mermaid syntax/rendering or waiver,
   instruction routing/frontmatter, and `git diff --check`.
 - Performance: distinguish verified catalog open, lazy engine construction, already-open

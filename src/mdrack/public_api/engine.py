@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
 from typing import Any, cast
 
-from mdrack.adapters.sqlite.canonical_catalog import ApplicationSearchReadSessions
+from mdrack.adapters.sqlite.canonical_catalog import ApplicationSearchReadSessions, application_store_dir
 from mdrack.application.compatibility import create_application_storage
 from mdrack.application.durable_artifacts import DurableArtifactStore
+from mdrack.application.folder_import import FolderImportResult, FolderImportService
 from mdrack.application.indexing import IndexingService
 from mdrack.application.manifest import PreparedResourceFacade
 from mdrack.application.media_search import (
@@ -220,6 +221,39 @@ class MDRackEngine:
             root_id=self.root_id,
         )
         return service.scan(force_reindex=force_reindex)
+
+    async def import_folders(
+        self,
+        folders: Mapping[str, Path] | Sequence[tuple[str, Path]],
+        *,
+        exclude: Sequence[str] = (),
+    ) -> FolderImportResult:
+        """Add one or more explicitly selected mixed folders through existing owners.
+
+        The caller supplies a durable namespace for each selected root. This method
+        never infers a home/vault/checkout root and never uses the legacy
+        relative-path-only change planner across roots. A prepared document/image
+        provider is mandatory; legacy HTTP text-only injection is not promoted.
+        """
+        if self.prepared_embedding_provider is None:
+            raise ValueError("prepared_embedding_provider_required")
+        store_dir = application_store_dir(self.root, self.config)
+        cache_value = Path(self.config.cache.directory)
+        cache_dir = cache_value if cache_value.is_absolute() else self.root / cache_value
+        # Root/derived-state validation precedes catalog creation and provider work.
+        FolderImportService.validate_selection(
+            folders,
+            store_dir=store_dir,
+            cache_dir=cache_dir,
+        )
+        storage = self._application_storage(create=True)
+        return await FolderImportService(
+            self.prepared_embedding_provider,
+            storage,
+            config=self.config,
+            store_dir=store_dir,
+            cache_dir=cache_dir,
+        ).run(folders, exclude=exclude)
 
     def search_text(
         self,
