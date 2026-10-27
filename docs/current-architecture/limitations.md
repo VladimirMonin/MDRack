@@ -71,6 +71,13 @@ This page is a current-state boundary, not a roadmap promise.
   independent semantic quality and portable latency/SLO remain unqualified. Fake
   synthetic providers still prove orchestration only. Real-corpus/held-out/public A–D /
   quality-cost/W6 gates remain separate.
+- Ordinary JPEG/PNG/WEBP preparation is Windows WIC-specific. The separately qualified
+  [variable-image contract](../contracts/native-image-v1.md#ordinary-images-and-selected-native-geometry)
+  preserves oriented source RGB for pinned native `dyn_size`; it does not turn legacy
+  fixed224 admission into authoritative geometry or repair LM Studio HTTP image input.
+  The bounded P04 source-CLI IMAGE result adds no new installed/text-DOCUMENT/QUERY,
+  corpus, all-operator CUDA or SLO claim. Unchanged derivative/model reuse is supported;
+  existing ready-CAS rescans may refresh timestamps/state, not a write-free replay promise.
 - The [independently reviewed private caption pilot](../evaluation/native-corpus-review-2026-10-24.md)
   establishes bounded data/rights/shared-gold and pre-score policy only:22 parents,
   11+11 source groups,44 human texts/52 scope-cases, three grade changes and four pooled

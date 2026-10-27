@@ -14,6 +14,7 @@ from mdrack.application._native_observation import NativeObservation, ObservedPr
 from mdrack.application.source_resolution import SourceResolver
 from mdrack.application.vector_values import canonicalize_for_space
 from mdrack.domain.embedding_inputs import AudioInput, EmbeddingResult, EncodingRole, ImageInput, TextInput, VideoInput
+from mdrack.ingestion.image_preprocessing import ImageProcessPolicy
 from mdrack.ingestion.images import (
     ExtractedImageText,
     ImageEmbeddingSpace,
@@ -37,6 +38,7 @@ from mdrack_core.application.retrieval import RetrievalService
 from mdrack_core.domain.common import freeze_json_mapping, to_plain_json
 
 logger = AppEventLogger(logging.getLogger(__name__))
+_IMAGE_SOURCE_POLICY = ImageProcessPolicy()
 
 
 @dataclass(frozen=True)
@@ -173,6 +175,10 @@ class MediaSearchService:
             signature = _image_signature_probe(query.content)
             if signature.verified_media_type != query.media_type:
                 raise ValueError("mime_signature_mismatch")
+            prepare_image = getattr(provider, "prepare_image", None)
+            if prepare_image is not None and request.mode != "text":
+                provider.capabilities.require(EncodingRole.QUERY, "image", candidates)
+                query = prepare_image(query.content, query.media_type, query.identity)
         if request.mode == 'text':
             observation.plan_branches('lexical')
         if isinstance(query, StoredUnitInput) and not provider.capabilities.reuse_document_vector:
@@ -277,6 +283,22 @@ class MediaSearchService:
             )
 
 
+def _image_preparation(provider: PreparedEmbeddingProvider) -> dict[str, JSONValue] | None:
+    """Read the optional image-specific readiness hook without changing generic providers."""
+    value: object = getattr(provider, "image_preparation", None)
+    if callable(value):
+        value = value()
+    if isinstance(value, Mapping):
+        return {str(key): item for key, item in value.items()}
+    preprocessor = getattr(provider, "preprocessor", None)
+    identity = getattr(preprocessor, "identity", None)
+    if callable(identity):
+        result = identity()
+        if isinstance(result, Mapping):
+            return {str(key): item for key, item in result.items()}
+    return None
+
+
 class _VisualAdapter:
     def __init__(self, provider: PreparedEmbeddingProvider) -> None:
         self.provider = provider
@@ -284,7 +306,11 @@ class _VisualAdapter:
     async def embed_image(self, content: bytes, *, profile: str = "default") -> tuple[float, ...]:
         from mdrack.ingestion.images import _image_signature_probe
         from mdrack.ingestion.raw_source_provenance import sha256_digest
-        value = ImageInput(content, _image_signature_probe(content).verified_media_type, sha256_digest(content))
+        media_type = _image_signature_probe(content).verified_media_type
+        revision = sha256_digest(content)
+        prepare_image = getattr(self.provider, "prepare_image", None)
+        value = (prepare_image(content, media_type, revision) if prepare_image is not None
+                 else ImageInput(content, media_type, revision))
         self.provider.capabilities.validate(value, EncodingRole.DOCUMENT)
         result = await self.provider.encode(value, EncodingRole.DOCUMENT)
         if result.space != self.provider.space:
@@ -328,7 +354,7 @@ async def _ingest_native_image(provider: PreparedEmbeddingProvider, catalog_fact
                               derived_lexical: bool = True, derived_dense: bool = False,
                               _observation: NativeObservation) -> ImageIngestionResult:
     # This must precede both source resolution and catalog creation.
-    capability = provider.capabilities.require(EncodingRole.DOCUMENT, "image")
+    provider.capabilities.require(EncodingRole.DOCUMENT, "image")
     if type(derived_lexical) is not bool or type(derived_dense) is not bool:
         raise ValueError("invalid_derived_text_policy")
     if type(derived_text) is not tuple or any(not isinstance(i, ExtractedImageText) for i in derived_text):
@@ -339,7 +365,7 @@ async def _ingest_native_image(provider: PreparedEmbeddingProvider, catalog_fact
     if derived_dense:
         for artifact in derived_text:
             provider.capabilities.validate(TextInput(artifact.text, "prepared-artifact"), EncodingRole.DOCUMENT)
-    budget = RawInputBudget(max_source_bytes=capability.max_input_bytes)
+    budget = RawInputBudget(max_source_bytes=_IMAGE_SOURCE_POLICY.max_source_bytes)
     resolver = resolver or SourceResolver()
     # Time entry separately; do not include provider/publication time in source resolution.
     from contextlib import ExitStack
@@ -349,7 +375,8 @@ async def _ingest_native_image(provider: PreparedEmbeddingProvider, catalog_fact
                 namespace=source_namespace, source_ref=source_ref, selected=path,
                 expected_revision=expected_revision, budget=budget))
         _observation.fields['source_bytes'] = snapshot.provenance.byte_size
-        provider.capabilities.validate(value, EncodingRole.DOCUMENT)
+        if getattr(provider, 'prepare_image', None) is None:
+            provider.capabilities.validate(value, EncodingRole.DOCUMENT)
         record = provider.space
         space = ImageEmbeddingSpace(record.space_id, record.dimensions, record.fingerprint,
                                     record.metric, canonical_record=record)
@@ -358,7 +385,8 @@ async def _ingest_native_image(provider: PreparedEmbeddingProvider, catalog_fact
             text_embedding_provider=_PreparedTextAdapter(provider) if derived_dense else None,
             text_space=space if derived_dense else None, prepared_texts=derived_text,
             derived_lexical=derived_lexical, derived_dense=derived_dense,
-            max_image_bytes=capability.max_input_bytes,
+            max_image_bytes=_IMAGE_SOURCE_POLICY.max_source_bytes,
+            visual_preparation=_image_preparation(provider),
             conditional_publication=True,
             _publication_observer=_observation.publication,
         )

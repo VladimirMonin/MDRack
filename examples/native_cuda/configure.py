@@ -11,6 +11,13 @@ import json
 import os
 from pathlib import Path
 
+_IMAGE_CONTRACT_VARIABLE = "mdrack-native-image-variable-v1"
+_IMAGE_BOUNDS = {
+    "width": 8192, "height": 8192, "pixels": 16_777_216,
+    "RGB_bytes": 50_331_648, "PNG_bytes": 67_108_864,
+    "channels": 3, "max_tokens": 2048, "image_min_tokens": 70, "image_max_tokens": 1120,
+}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -28,6 +35,14 @@ def main() -> None:
         parser.error("profile fingerprint mismatch")
     if args.protocol == "mdrack-cuda-retrieval-v2" and metadata.get("protocol") != args.protocol:
         parser.error("extended producer profile required")
+    contract = metadata.get("image_input_contract")
+    if contract not in (None, _IMAGE_CONTRACT_VARIABLE):
+        parser.error("unknown image input contract")
+    if contract == _IMAGE_CONTRACT_VARIABLE:
+        if args.protocol != "mdrack-cuda-retrieval-v2":
+            parser.error("variable image contract requires retrieval-v2")
+        if metadata.get("bounds") != _IMAGE_BOUNDS:
+            parser.error("variable image contract bounds mismatch")
     pins = {row["path"]: row["sha256"] for row in metadata["runtime_file_identities"]}
     for row in metadata["actual_loaded_release_modules"]:
         pins[row["path"]] = row["sha256"]

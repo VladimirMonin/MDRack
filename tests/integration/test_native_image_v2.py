@@ -125,8 +125,9 @@ async def test_failure_preserves_old_graph_and_next_query(tmp_path: Path, failur
         original = await ingest(engine, source)
         old_graph = engine.export_resource_manifest('image')
         provider.failure = failure
+        source.write_bytes(PNG + b'changed-before')
         if failure == 'changed':
-            provider.hook = lambda: source.write_bytes(PNG + b'changed')
+            provider.hook = lambda: source.write_bytes(PNG + b'changed-during')
         error = asyncio.CancelledError if failure == 'cancel' else Exception
         with pytest.raises(error):
             await ingest(engine, source)
@@ -148,7 +149,8 @@ async def test_changed_source_is_not_logged_as_a_completed_commit(tmp_path: Path
     with make_engine(tmp_path, provider) as engine:
         original = await ingest(engine, source)
         caplog.clear()
-        provider.hook = lambda: source.write_bytes(PNG + b'changed')
+        source.write_bytes(PNG + b'changed-before')
+        provider.hook = lambda: source.write_bytes(PNG + b'changed-during')
         with pytest.raises(RawSourceError):
             await ingest(engine, source)
         messages = [record.getMessage() for record in caplog.records]

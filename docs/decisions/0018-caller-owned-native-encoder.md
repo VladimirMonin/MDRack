@@ -52,6 +52,30 @@ omitted. The exact v2 complete space, prefix/byte/context refusal and caller-own
 process lifecycle remain unchanged. The older prepared import/API/runner composition
 remains available, not removed or redefined.
 
+## Addendum 2026-10-27: ordinary image preparation
+
+`ImagePreprocessor` uses bounded Windows WIC decoding, EXIF normalization and white
+alpha composition before image-document encoding. Generic Core still receives only
+ready vectors/explicit space records; no codec, weights or model runtime moves into it.
+The selected Gemma4v enum13 path is native `dyn_size`, not fixed-size224 geometry.
+A separately qualified retrieval-v2 producer/profile must explicitly bind
+`mdrack-native-image-variable-v1` and its independent source/decode/prepared/token
+limits. Python then preserves oriented source RGB W,H; pinned MTMD owns geometry and
+tensors. Legacy profiles retain fixed224 caller policy, not retroactive selected-model
+geometry proof. Details: [ordinary-image contract](../contracts/native-image-v1.md#ordinary-images-and-selected-native-geometry).
+
+Image-only recipe/policy readiness is persisted with the visual representation and
+must not rewrite accepted text/shared metadata. Changed producer/source/profile means
+a distinct complete space; use a separately selected new collection, never relabel old
+vectors. The original locator is retained, not the temporary RGB PNG. Ready rescans
+avoid preparation/encoding, but existing guarded CAS is not a write-free no-op promise.
+
+The bounded P04 successor qualification is one real synthetic 7×3 IMAGE via source CLI,
+with actual bitmap/token/f32/CUDA admission, persisted original-locator result inspection,
+reopen and zero additional model calls. It adds no native QUERY, new text-DOCUMENT,
+installed-package, corpus, all-operator CUDA or quality/SLO qualification. Historical
+installed/text-image results below retain their original producer/space and cutoff.
+
 ## Observable product boundary
 
 Normal public ingest/search/read, source CLI and actual installed PE use the same

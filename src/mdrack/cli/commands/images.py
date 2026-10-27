@@ -17,6 +17,7 @@ from mdrack.embeddings.runtime import (
     create_embedding_provider,
     embedding_profile_from_config,
 )
+from mdrack.ingestion.image_preprocessing import ImagePreparationError
 from mdrack.ingestion.images import (
     ExtractedImageText,
     ImageEmbeddingSpace,
@@ -283,6 +284,8 @@ async def _close_native(engine: Any, provider: object | None) -> None:
 def _native_error_code(error: Exception, default: str) -> str:
     if isinstance(error, RawSourceError):
         return error.code.value.upper()
+    if isinstance(error, ImagePreparationError):
+        return error.code.upper()
     if isinstance(error, ValueError) and error.args == ("unsupported_embedding_route",):
         return "UNSUPPORTED_EMBEDDING_ROUTE"
     return default

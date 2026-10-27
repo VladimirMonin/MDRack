@@ -65,6 +65,21 @@ see the [latest opt-in text/image result](evaluation/native-text-image-product-2
 No OCR, caption, filename-as-text or hidden provider substitution is performed.
 Old `image ingest/search` and text search envelopes remain unchanged.
 
+For ordinary JPEG/PNG/WEBP documents, the external route uses bounded Windows WIC
+preparation (EXIF orientation, white alpha, RGB PNG) and keeps the original source ref.
+A separately qualified retrieval-v2 profile with explicit
+`metadata.image_input_contract = mdrack-native-image-variable-v1` preserves oriented W,H for
+native `dyn_size`; old profiles still use legacy fixed224 caller policy. There is no
+new CLI flag, automatic producer selection, folder discovery or image-QUERY capability.
+Corrupt/over-dimension preparation retains specific fixed error codes, including
+`IMAGE_DECODE_FAILED` / `IMAGE_DIMENSIONS_TOO_LARGE`; other operation failures retain
+the existing envelope. Unchanged ready images can skip preparation/encoding after
+reopen; guarded CAS is not guaranteed write-free. See
+[separate source/decode/transport/token limits](contracts/native-image-v1.md#ordinary-images-and-selected-native-geometry)
+and the [variable-image setup](../examples/native_cuda/README.md#ordinary-images-with-native-owned-geometry).
+The P04 one-IMAGE source check does not claim a new installed launcher, native QUERY,
+new text-DOCUMENT qualification or quality/SLO result.
+
 ## Ready OCR publication v1 (1.4.0rc2 source candidate)
 
 `resource ocr-binding RESOURCE_ID` exposes an explicit local source/lifecycle

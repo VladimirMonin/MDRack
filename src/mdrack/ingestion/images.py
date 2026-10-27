@@ -18,6 +18,7 @@ from mdrack.application.vector_values import (
     value_policy_metadata,
 )
 from mdrack.domain.identifiers import logical_id
+from mdrack.ingestion.image_preprocessing import ImagePreparationError
 from mdrack.ingestion.raw_source_provenance import (
     RawInputBudget,
     RawMediaKind,
@@ -36,6 +37,7 @@ from mdrack.ingestion.raw_source_provenance import (
 )
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingProvider
 from mdrack.ports.search_sessions import SearchReadSessionFactory
+from mdrack_core import JSONValue
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
 from mdrack_core.domain import (
@@ -288,6 +290,7 @@ class ImageIngestionService:
         text_space: ImageEmbeddingSpace | None = None,
         visual_embedding_provider: VisualEmbeddingProvider | None = None,
         visual_space: ImageEmbeddingSpace | None = None,
+        visual_preparation: Mapping[str, JSONValue] | None = None,
         profile: str = "default",
         max_image_bytes: int = 32 * 1024 * 1024,
         max_text_tokens: int = 8_000,
@@ -327,9 +330,40 @@ class ImageIngestionService:
         self._text_space = text_space
         self._visual_provider = visual_embedding_provider
         self._visual_space = visual_space
+        self._visual_preparation = dict(visual_preparation) if visual_preparation is not None else None
         self._profile = profile
         self._max_image_bytes = max_image_bytes
         self._max_text_tokens = max_text_tokens
+
+    def _visual_projection_ready(self, batch: PreparedResourceBatch) -> bool:
+        if self._visual_provider is None:
+            return True
+        if self._visual_space is None:
+            return False
+        required_space = self._visual_space.core_record(modality=MODALITY_IMAGE)
+        if required_space not in batch.spaces:
+            return False
+        for representation in batch.representations:
+            if (
+                representation.representation_kind != REPRESENTATION_VISUAL
+                or representation.producer_fingerprint != self._visual_space.fingerprint
+                or representation.metadata.get("image_preparation") != self._visual_preparation
+            ):
+                continue
+            unit_ids = {
+                unit.unit_id
+                for unit in batch.units
+                if unit.representation_id == representation.representation_id and unit.modality == MODALITY_IMAGE
+            }
+            if not unit_ids:
+                continue
+            if any(
+                vector.unit_id in unit_ids and vector.space_id == self._visual_space.space_id
+                for vector in batch.vectors
+            ):
+                return True
+        return False
+
 
     async def ingest(
         self,
@@ -371,15 +405,14 @@ class ImageIngestionService:
                 snapshot.cleanup()
                 raise RawSourceError(RawSourceErrorCode.MIME_SIGNATURE_MISMATCH)
             if (publication_before is not None and publication_before.batch is not None
-                    and self._visual_provider is None and self._extractor is None and not self._prepared_texts):
+                    and self._extractor is None and not self._prepared_texts):
                 old = publication_before.batch
                 replay_provenance = old.resource.metadata.get("provenance")
                 generation = old.resource.metadata.get("source_revision")
-                compatible = (self._visual_space is None
-                              or self._visual_space.core_record(modality=MODALITY_IMAGE) in old.spaces)
+                visual_ready = self._visual_projection_ready(old)
                 if (isinstance(replay_provenance, Mapping)
                         and replay_provenance.get("raw_source_sha256") == content_hash
-                        and isinstance(generation, str) and generation and compatible
+                        and isinstance(generation, str) and generation and visual_ready
                         and old.resource.source_namespace == source_namespace
                         and old.resource.locator == Locator("local_image", {"source_ref": source_ref})
                         and (title is None or title == old.resource.title)):
@@ -415,6 +448,8 @@ class ImageIngestionService:
                                 or current.state.lifecycle_id != publication_before.state.lifecycle_id
                                 or current.batch.resource != old.resource):
                             raise ValueError("image_rescan_stale")
+                        if not self._visual_projection_ready(current.batch):
+                            raise ValueError("image_rescan_conflict")
                     raise ValueError("image_rescan_conflict")
             if (publication_before is not None and publication_before.batch is not None
                     and self._visual_provider is None and self._extractor is None and not self._prepared_texts):
@@ -637,6 +672,8 @@ class ImageIngestionService:
                 unit_id = logical_id("image-unit", representation_id, UNIT_WHOLE_RESOURCE)
                 try:
                     visual = await self._visual_provider.embed_image(content, profile=self._profile)
+                except ImagePreparationError:
+                    raise
                 except Exception:
                     logger.warning(
                         "image.ingest.provider_failed",
@@ -656,6 +693,8 @@ class ImageIngestionService:
                         MODALITY_IMAGE,
                         None,
                         producer_fingerprint=self._visual_space.fingerprint,
+                        metadata=({"image_preparation": self._visual_preparation}
+                                  if self._visual_preparation is not None else {}),
                     )
                 )
                 units.append(

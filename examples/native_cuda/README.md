@@ -52,6 +52,43 @@ No evaluator rows, coverage/policy gates, SQL schema or Core ranker are changed.
 The outer caller owns every factory-created provider and closes it in finally, also
 when a later constructor, runner/report or cancellation fails; no default registration.
 
+## Ordinary images with native-owned geometry
+
+For ordinary JPEG/PNG/WEBP image documents on Windows, the adapter uses WIC to decode,
+apply EXIF orientation, composite alpha white and produce RGB8 PNG. Original files and
+portable source locators are unchanged. The selected Gemma4v enum13 processor is native
+`dyn_size`: the qualified additive producer receives oriented source W,H, not a caller
+resize to 224. Native MTMD owns geometry/tensors. See the exact
+[ordinary-image limits and acceptance scope](../../docs/contracts/native-image-v1.md#ordinary-images-and-selected-native-geometry).
+
+This requires a separately qualified matching executable/source/profile, explicitly
+binding `metadata.image_input_contract` to `mdrack-native-image-variable-v1` and the
+canonical `metadata.bounds`. `configure.py` validates that declaration; it does not qualify a binary or make
+an old fixed224 producer variable-sized. Pin the actual ingress source components too.
+The original ABI12 build illustration below is not a variable-producer implementation.
+Do not change the existing kit/profile or relabel old vectors. Select a new collection
+and the changed producer's distinct complete space; previous text/QUERY qualifications
+remain tied to their original complete identity.
+
+With those caller-owned qualified variable artifacts and an existing private work dir:
+
+```text
+uv run --frozen --offline --no-sync python examples/native_cuda/configure.py --protocol mdrack-cuda-retrieval-v2 --profile C:/caller/qualified-variable-profile.json --executable C:/caller/encoder-variable.exe --source C:/caller/host_variable.cpp --runtime-path C:/caller/runtime --vendor-path C:/caller/vendor --work-directory C:/caller/work --output C:/caller/native-host-variable.json
+mdrack --root C:/caller/new-project image native-ingest C:/caller/photo.jpg --resource-id photo-A --source-namespace caller --source-ref photos/A.jpg --provider external --host-config C:/caller/native-host-variable.json
+```
+
+Profiles without the explicit variable contract keep legacy fixed224 caller policy.
+No image QUERY, OCR/caption, fallback or filename-derived text is added. Cache/readiness
+bind actual source bytes/revision and image recipe/policy; unchanged ready images can
+skip another derivative/model call after reopen. Existing guarded CAS can republish
+bookkeeping, so this is not a write-free replay guarantee. Prepared images are private
+transport/cache data, never replacements for original locators.
+
+The bounded P04 result is one real synthetic 7×3 IMAGE via source CLI and provider-free
+stored-result/read/reopen checks, not a new installed/text-DOCUMENT/QUERY, corpus,
+quality/SLO or all-operator CUDA qualification. Decoder/preparation and normalization
+still include CPU work; no model weights/vendor DLLs are loaded into Python.
+
 ## Producer/source/build contract
 
 The caller retains the matching producer C++ source, selected ABI headers/import

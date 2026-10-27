@@ -134,6 +134,10 @@ class ObservedProvider:
     def capabilities(self) -> RouteCapabilities:
         return self.provider.capabilities
 
+    def __getattr__(self, name: str) -> object:
+        """Expose optional outer-host hooks (for example image preparation)."""
+        return getattr(self.provider, name)
+
     async def encode(self, value: PreparedInput, role: EncodingRole) -> EmbeddingResult:
         fields = self.observation.fields
         self.call_count += 1

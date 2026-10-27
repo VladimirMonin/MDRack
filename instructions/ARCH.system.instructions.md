@@ -43,6 +43,14 @@ explicitly changes that architecture.
   do not load weights/vendor DLLs; host Win32 process/job calls are OS ownership, not model
   loading. Keep producer qualification, complete space identity and lifecycle at that outer
   edge; see `docs/decisions/0018-caller-owned-native-encoder.md`.
+- Ordinary-image decoding and derivative identity stay outside generic Core. Do not
+  infer selected model geometry from fixed224 PNG admission. Only the explicitly bound
+  `mdrack-native-image-variable-v1` caller profile preserves oriented RGB dimensions
+  for pinned native geometry/tensors; legacy fixed224 remains caller policy. Keep
+  image recipe/policy readiness separate from accepted text/shared-space metadata,
+  original locators separate from prepared transport, and changed producers in their
+  own qualified complete space rather than relabelling old vectors. See
+  [ordinary-image contract](../docs/contracts/native-image-v1.md#ordinary-images-and-selected-native-geometry).
 - Explicit LM Studio HTTP text recipes are client policy/space identity, not native
   qualification. Keep canonical factory/raw-sender admission fail-closed while a
   supported runtime-bound input contract is unavailable; no model-name guess,

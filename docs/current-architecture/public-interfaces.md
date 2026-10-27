@@ -47,6 +47,16 @@ and caller allowlist; read-unit coordinates remain redacted. Image-query/similar
 document-vector reuse, legacy-space compatibility, audio/video model quality, default
 or legacy method changes do not follow; corpus fitness remains separate.
 
+The ordinary JPEG/PNG/WEBP image-document path now has bounded Windows WIC preparation:
+EXIF orientation, white alpha and RGB PNG transport. With the explicit qualified
+`mdrack-native-image-variable-v1` retrieval-v2 profile, oriented source dimensions reach
+native `dyn_size` unchanged; legacy profiles keep fixed224 caller policy. Image-only
+recipe/policy readiness is separate from shared/text-space identity. Reopen can avoid
+another derivative/model call, but ready-CAS publication is not promised write-free.
+See [geometry, limits and P04 qualification](../contracts/native-image-v1.md#ordinary-images-and-selected-native-geometry).
+That new source-CLI/one-IMAGE result does not extend the older installed/text/QUERY
+qualification to the changed producer/space or establish corpus/whole-release fitness.
+
 ## Prepared OCR enrichment
 
 This first family is independently accepted on Windows/CPython 3.14.2 at source/

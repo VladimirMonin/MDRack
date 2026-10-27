@@ -18,7 +18,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from mdrack.domain.embedding_inputs import (
     EmbeddingResult,
@@ -29,6 +29,7 @@ from mdrack.domain.embedding_inputs import (
     RouteCapabilities,
     TextInput,
 )
+from mdrack.ingestion.image_preprocessing import ImagePreprocessor, ImageProcessPolicy, ImageProcessRecipe
 from mdrack.ports.embeddings import EmbeddingError
 from mdrack_core import EmbeddingSpaceRecord, JSONValue
 
@@ -44,6 +45,61 @@ _ROLE_RECIPE = {
     "roles": ("document:image:image", "document:text:text", "query:text:image,text"),
 }
 _MAX = 2 * 1024 * 1024
+_IMAGE_CONTRACT_VARIABLE = "mdrack-native-image-variable-v1"
+_IMAGE_MAX_WIDTH = 8192
+_IMAGE_MAX_HEIGHT = 8192
+_IMAGE_MAX_PIXELS = 16_777_216
+_IMAGE_MAX_RGB_BYTES = 50_331_648
+_IMAGE_MAX_PNG_BYTES = 67_108_864
+
+
+def _png_dimensions(data: bytes) -> tuple[int, int] | None:
+    if (len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n"
+            or data[8:16] != b"\x00\x00\x00\rIHDR"
+            or data[24:29] != b"\x08\x02\x00\x00\x00"):
+        return None
+    return struct.unpack(">II", data[16:24])
+
+
+def _is_prepared_png(data: bytes, variable: bool, policy: ImageProcessPolicy) -> bool:
+    dimensions = _png_dimensions(data)
+    if dimensions is None:
+        return False
+    width, height = dimensions
+    if not variable:
+        return (width, height) == (224, 224)
+    return (width <= policy.max_prepared_width and height <= policy.max_prepared_height
+            and width * height <= policy.max_pixels
+            and width * height * 3 <= policy.max_prepared_rgb_bytes
+            and len(data) <= policy.max_prepared_bytes)
+
+
+
+def _selected_image_recipe(processor_sha256: str, runtime_sha256: str, variable: bool) -> ImageProcessRecipe:
+    if not variable:
+        return ImageProcessRecipe()
+    factory = getattr(ImageProcessRecipe, "selected_gemma4v", None)
+    if callable(factory):
+        return cast(ImageProcessRecipe, factory(
+            processor_artifact_sha256=processor_sha256,
+            native_runtime_sha256=runtime_sha256,
+        ))
+    return ImageProcessRecipe(
+        geometry="native-dyn-size-source-rgb",
+        pad_style="native",
+        pad_color="native",
+        bicubic_kernel="native-owned",
+        geometry_authority="selected-gemma4v-dyn-size-enum13",
+        interpolation_authority="native-mtmd-dyn-size-bicubic",
+        pad_authority="native-mtmd-dyn-size-center-black",
+        pad_color_authority="native-mtmd-dyn-size",
+        bicubic_kernel_authority="native-mtmd-dyn-size",
+        tensor_owner="pinned-mtmd-dyn-size",
+        native_target="dyn_size",
+        processor_artifact_sha256=processor_sha256,
+        native_runtime_sha256=runtime_sha256,
+    )
+
 
 
 def _hash(path: Path) -> str:
@@ -135,6 +191,29 @@ class CUDAEncoderProvider:
                                or _canonical(encoder.get("role_recipe")) != _canonical(_ROLE_RECIPE)):
             raise ValueError("external_host_profile_invalid")
         pinned = dict(self._pins)
+        contract = encoder.get("image_input_contract")
+        if contract not in (None, _IMAGE_CONTRACT_VARIABLE):
+            raise ValueError("external_host_profile_invalid")
+        self._variable_image = contract == _IMAGE_CONTRACT_VARIABLE
+        if self._variable_image and not self._extended:
+            raise ValueError("external_host_profile_invalid")
+        if self._variable_image:
+            bounds = encoder.get("bounds")
+            if not isinstance(bounds, dict) or any(bounds.get(key) != value for key, value in {
+                "PNG_bytes": _IMAGE_MAX_PNG_BYTES, "width": _IMAGE_MAX_WIDTH,
+                "height": _IMAGE_MAX_HEIGHT, "pixels": _IMAGE_MAX_PIXELS,
+                "RGB_bytes": _IMAGE_MAX_RGB_BYTES, "channels": 3,
+                "max_tokens": 2048, "image_min_tokens": 70, "image_max_tokens": 1120,
+            }.items()):
+                raise ValueError("external_host_profile_invalid")
+            self._image_policy = ImageProcessPolicy.selected_native_geometry()
+        else:
+            self._image_policy = ImageProcessPolicy()
+        mtmd_sha256 = next((digest for path, digest in self._pins if path.name.lower() == "mtmd.dll"), "")
+        self._image_preprocessor = ImagePreprocessor(
+            _selected_image_recipe(pinned[self._projector], mtmd_sha256, self._variable_image),
+            policy=self._image_policy,
+        )
         expected = encoder["runtime_file_identities"]
         if (pinned[self._exe] != encoder["host_exe_sha256"]
                 or pinned[self._source] != encoder["host_source_sha256"]
@@ -162,20 +241,34 @@ class CUDAEncoderProvider:
         if self._extended:
             metadata.update({
                 "document_prefix": _DOCUMENT_PREFIX, "title_rule": "literal-none-no-filename",
-                "document_input": "image/png224RGB-or-text-UTF8;no-derived-image-text",
+                "document_input": ("image/png;oriented-source-WxH;8bit RGB;native WIC decode;"
+                                   "native dyn_size geometry;no caller resize"
+                                   if self._variable_image else
+                                   "image/png224RGB-or-text-UTF8;no-derived-image-text"),
                 "roles": ("document:image:image", "document:text:text", "query:text:image,text"),
                 "role_recipe_fingerprint": _canonical(_ROLE_RECIPE),
                 "formatted_wire_bytes": 65536, "context_batch_ubatch": 2048,
             })
+            if self._variable_image:
+                metadata.update({
+                    "image_input_contract": _IMAGE_CONTRACT_VARIABLE,
+                    "image_bounds": {"width": _IMAGE_MAX_WIDTH, "height": _IMAGE_MAX_HEIGHT,
+                                     "pixels": _IMAGE_MAX_PIXELS, "RGB_bytes": _IMAGE_MAX_RGB_BYTES,
+                                     "PNG_bytes": _IMAGE_MAX_PNG_BYTES, "image_min_tokens": 70,
+                                     "image_max_tokens": 1120, "max_tokens": 2048},
+                    "image_geometry_owner": "pinned-mtmd-dyn-size",
+                })
         fingerprint = _canonical(metadata)
         self.space = EmbeddingSpaceRecord("external-cuda-" + fingerprint, 768, "cosine", fingerprint, metadata)
         self.capabilities = RouteCapabilities((
-            InputCapability(EncodingRole.DOCUMENT, "image", ("image",), 1048576),
+            InputCapability(EncodingRole.DOCUMENT, "image", ("image",),
+                            _IMAGE_MAX_PNG_BYTES if self._variable_image else 1048576),
             InputCapability(EncodingRole.QUERY, "text", ("image",), 65536 - len(_PREFIX)),
         ))
         if self._extended:
             self.capabilities = RouteCapabilities((
-                InputCapability(EncodingRole.DOCUMENT, "image", ("image",), 1048576),
+                InputCapability(EncodingRole.DOCUMENT, "image", ("image",),
+                                _IMAGE_MAX_PNG_BYTES if self._variable_image else 1048576),
                 InputCapability(EncodingRole.DOCUMENT, "text", ("text",),
                                 65536 - len(_DOCUMENT_PREFIX.encode("utf-8"))),
                 InputCapability(EncodingRole.QUERY, "text", ("image", "text"),
@@ -196,16 +289,43 @@ class CUDAEncoderProvider:
         async with self._lock:
             pass
 
+    @property
+    def image_recipe(self) -> ImageProcessRecipe:
+        """Versioned ordinary-image processor identity for this pinned host."""
+        return self._image_preprocessor.recipe
+
+    @property
+    def image_preparation(self) -> dict[str, JSONValue]:
+        """Image-specific readiness binding; the shared encoder/text space is unchanged."""
+        return self._image_preprocessor.identity()
+
+    def prepare_image(self, content: bytes, media_type: str, source_revision: str | None = None) -> ImageInput:
+        """Turn ordinary JPEG/PNG/WEBP bytes into the contracted RGB PNG input.
+
+        The variable-size contract preserves oriented source W,H for native
+        dyn_size geometry; the legacy fixed profile remains 224x224. The original
+        content hash is only the derived-cache source revision, never a locator.
+        """
+        revision = source_revision or "sha256:" + hashlib.sha256(content).hexdigest()
+        prepared = self._image_preprocessor.prepare(content, media_type, revision)
+        return ImageInput(prepared.content, prepared.media_type, prepared.identity)
+
     def _prepare(self, value: PreparedInput, role: EncodingRole) -> tuple[bytes, str]:
-        self.capabilities.validate(value, role, () if self._extended else ("image",))
         if isinstance(value, ImageInput):
-            data = value.content
-            if (value.media_type != "image/png" or len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n"
-                    or data[8:16] != b"\x00\x00\x00\rIHDR"
-                    or struct.unpack(">II", data[16:24]) != (224, 224) or data[24:29] != b"\x08\x02\x00\x00\x00"):
-                raise ValueError("external_host_image_bounds")
+            already_prepared = value.media_type == "image/png" and _is_prepared_png(
+                value.content, self._variable_image, self._image_policy
+            )
+            candidate = value if already_prepared else self.prepare_image(
+                value.content, value.media_type, value.identity
+            )
+            # A header is not preparation authority: WIC must decode the exact
+            # prepared bitmap before this value may reach the native dispatch edge.
+            self._image_preprocessor.validate_prepared(candidate.content)
+            self.capabilities.validate(candidate, role)
+            data = candidate.content
             kind = "image"
         elif isinstance(value, TextInput):
+            self.capabilities.validate(value, role, () if self._extended else ("image",))
             document = self._extended and role is EncodingRole.DOCUMENT
             data = ((_DOCUMENT_PREFIX if document else _PREFIX) + value.text).encode("utf-8")
             if len(data) > 65536:

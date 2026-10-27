@@ -1,6 +1,7 @@
 # Native image API v1 (app 1.4.0rc1)
 
-This is the W2 declaration freeze before consumer wiring, not runtime acceptance.
+The initial W2 declaration predates consumer wiring; later bounded product
+qualifications are recorded below, not implied by that declaration.
 The old text and image methods/envelopes remain unchanged. Core, media and SQLite
 contracts and distributions do not change. No schema migration is needed.
 
@@ -56,6 +57,65 @@ Markdown link never grants permission. `SourceResolver` uses RawInputBudget,
 signatures and snapshots and checks revision/range. Host retains durable mapping;
 temporary snapshot paths are not persisted as reopen authority. Fresh reopen read
 and search do not need original file access. Enrichment/CAS remains W3/W4.
+
+## Ordinary images and selected native geometry
+
+The explicit external image-document route now prepares ordinary JPEG/PNG/WEBP on
+Windows through `ImagePreprocessor` and Windows WIC, without a new decoder package.
+It applies EXIF orientation, composites alpha onto white and emits noninterlaced
+RGB8 PNG outside the original. Unsupported/multiframe or corrupt input refuses;
+preparation errors retain specific CLI codes such as `IMAGE_DECODE_FAILED` and
+`IMAGE_DIMENSIONS_TOO_LARGE`, without exposing private exception details.
+
+For the selected Gemma4v enum13 processor, geometry belongs to the pinned native
+`mtmd_image_preprocessor_dyn_size`, not the neighboring fixed-size processor.
+Only a separately qualified retrieval-v2 producer/profile explicitly declaring
+`metadata.image_input_contract = mdrack-native-image-variable-v1` selects this recipe.
+Python preserves the oriented source W,H: no caller resize/crop/pad to 224 is used.
+Native MTMD owns q48 geometry, interpolation/padding and tensor/mean/std work.
+A contract label or successful 224 admission alone is not processor qualification.
+Profiles without this explicit contract retain legacy fixed224 caller policy.
+
+The variable contract separates its budgets:
+
+| Boundary | Limit |
+|---|---|
+| Original encoded source | 33,554,432 bytes |
+| Source dimensions / pixels | W,H<=8192; pixels<=16,777,216 |
+| Decoded RGBA buffer | 67,108,864 bytes |
+| Prepared RGB PNG transport | 67,108,864 bytes; W,H<=8192; pixels<=16,777,216 |
+| Prepared RGB bytes | 50,331,648 bytes |
+| Native image / complete sequence | 70..1120 image tokens; <=2048 total tokens before forward |
+
+Profile `metadata.bounds` uses `PNG_bytes`, `width`, `height`, `pixels`, `RGB_bytes`,
+`channels=3`, `max_tokens`, `image_min_tokens` and `image_max_tokens` with these values.
+Unknown contracts or mismatched variable bounds refuse configuration.
+
+Prepared input is fully WIC-decoded under its own transport budget, not admitted
+from a PNG header alone or constrained by the smaller original-source byte cap.
+The producer must check actual decoded/bitmap W,H/RGB length/data before forward;
+there is no clipping, CPU-vector or text-substitution fallback.
+
+The bounded in-memory preparation cache keys actual source bytes, source revision,
+recipe and policy (up to 8 entries/8MiB). Persistent readiness binds image-specific
+recipe/policy identity on the visual representation, not accepted shared/text-space
+metadata. A changed recipe/policy requires preparation/validation or refusal.
+An unchanged ready projection survives reopen without another derivative/model call.
+Its existing guarded CAS may republish the retained batch and refresh timestamps/state;
+this is not a write-free replay guarantee. Original locators/revisions remain original,
+never a prepared PNG/temp path. Producer changes require a distinct complete space;
+old vectors, legacy text spaces and catalogs are not relabelled or migrated.
+
+P04 was independently accepted on 2026-10-27 using retained Windows WIC/refusal/cache
+controls and one actual selected-producer IMAGE forward through source CLI ingestion:
+7×3 bitmap, 63 RGB bytes, 78 image/82 total tokens, 768-f32 admission and 16 sampled
+post-evaluation CUDA outputs (8 vision, 8 backbone). Fresh reopen reused the derivative
+with zero model calls; public CLI read and provider-free Core stored-vector result
+inspection retained the original locator. No native QUERY was run in this successor
+case. This is not new installed-package, native text-DOCUMENT, all-operator CUDA,
+real-corpus, quality/SLO or whole-release qualification. See the
+[active P04 status](../plans/2026-10-26-personal-library-release.md#p04-обычная-картинка--вход-выбранной-модели)
+and [caller setup](../../examples/native_cuda/README.md#ordinary-images-with-native-owned-geometry).
 
 ## Native observations v1
 
@@ -163,7 +223,8 @@ role prefix (`title: none | text: ` or `task: search result | query: `), preserv
 body and never using a filename as text. Formatted text is bounded to 65,536 bytes;
 native tokenization includes prefix/special tokens and refuses more than 2,048 tokens
 before forward. There is no truncation or long-context guarantee. V2 keeps the same
-image bound, uses at most 120 seconds per native call and has a distinct complete space;
+legacy fixed224 transport unless the explicit variable-image contract above is selected.
+Calls use at most 120 seconds and each producer profile has its own complete space;
 it does not add image-query, SIMILARITY, audio/video or reuse-document-vector roles.
 Default/v1 identity and existing catalogs are not rewritten. See the
 [independent text/image result](../evaluation/native-text-image-product-2026-10-24.md).

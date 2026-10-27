@@ -251,6 +251,10 @@ real corpus, quality/SLO и L1/L2 остаются P04 и следующими �
 
 **Приёмка:** безопасные тесты обычных размеров/ориентаций/альфа и ошибки; одна реальная внешняя проба отдельно от offline. В поисковом результате указан исходник, не подготовленная копия.
 
+**Реализовано и независимо технически принято, 27 октября 2026 года (только P04):** Windows WIC обрабатывает JPEG/PNG/WEBP, EXIF и alpha-white без новой decoder-зависимости. Закреплённый enum13 использует `dyn_size`: явный новый `mdrack-native-image-variable-v1` передаёт ориентированный RGB W,H без caller-resize; геометрия/тензоры принадлежат native MTMD. Source/decode/prepared/token budgets раздельны, recipe/policy readiness привязана к image-представлению, locator остаётся исходным. Legacy text/shared spaces и прежние коллекции не переименованы; изменённый producer имеет отдельную полную identity и проверен в новой коллекции. См. [текущий контракт](../contracts/native-image-v1.md#ordinary-images-and-selected-native-geometry) и [настройку](../../examples/native_cuda/README.md#ordinary-images-with-native-owned-geometry).
+
+Независимые 97 affected +21 behavioral и 12 WIC/stub controls переиспользованы вместе с квалифицированным full 2801/6 и текущими gates. После исправления собственного guard выполнен ровно один реальный IMAGE: 7×3/63 RGB bytes, 78 image/82 total tokens, 768-f32, 16 sampled CUDA outputs (8 vision+8 backbone), exit0/закрытый Job. Первая неудачная before-create reservation сохранена как spent; две команды суммарно, QUERY не выполнялся. Fresh reopen не готовит производную и не кодирует повторно; public CLI read и provider-free Core result inspection сохраняют исходник. Более сильный all-row/no-state-write predicate не является этой приёмкой: existing ready CAS перепубликует batch и обновляет bookkeeping. Новые installed/text-DOCUMENT/QUERY, quality/SLO, P05+ и весь L1/L2 этим не приняты.
+
 ### P05. Одна команда добавляет выбранную папку
 
 **Основные места:** существующие CLI/engine indexing owners, adapters, media ingest; до кода проверяются текущие определения/вызывающие места.

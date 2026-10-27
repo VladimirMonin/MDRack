@@ -132,10 +132,14 @@ async def test_ingest_source_prepared_publication_stages_and_failure(tmp_path: P
     with make_engine(tmp_path, provider) as engine:
         original = await ingest(engine, source)
         old_graph = engine.export_resource_manifest('image')
+        submitted = PNG
+        if outcome in ('success', 'provider', 'changed'):
+            submitted = PNG + b'PRIVATE_CHANGED_BEFORE'
+            source.write_bytes(submitted)
         if outcome == 'provider':
             provider.failure = 'raise'
         if outcome == 'changed':
-            provider.hook = lambda: source.write_bytes(PNG + b'PRIVATE_CHANGED')
+            provider.hook = lambda: source.write_bytes(PNG + b'PRIVATE_CHANGED_DURING')
         if outcome == 'missing':
             source.unlink()
         if outcome == 'unsupported':
@@ -153,8 +157,8 @@ async def test_ingest_source_prepared_publication_stages_and_failure(tmp_path: P
         assert terminal['schema_version'] == 1 and terminal['query_modality'] == 'image'
         assert terminal['encoding_role'] == 'document' and terminal['profile_fingerprint'] == FP
         resolved = outcome not in ('missing', 'unsupported')
-        assert terminal['source_bytes'] == (len(PNG) if resolved else None)
-        assert terminal['prepared_input_bytes'] == (len(PNG) if resolved else 0)
+        assert terminal['source_bytes'] == (len(submitted) if resolved else None)
+        assert terminal['prepared_input_bytes'] == (len(submitted) if resolved else 0)
         assert terminal['provider_call_count'] == int(resolved)
         assert terminal['extraction_call_count'] == 0
         assert terminal['publication_status'] == ('published' if outcome == 'success' else
