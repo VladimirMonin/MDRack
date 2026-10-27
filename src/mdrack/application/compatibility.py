@@ -30,6 +30,7 @@ from mdrack.application.vector_values import (
 )
 from mdrack.domain.identifiers import logical_id
 from mdrack.domain.indexing import PreparedFile, SourceLocator
+from mdrack.domain.profiles import EmbeddingProfile, IncompatibleEmbeddingProfileError
 from mdrack.domain.retrieval import (
     RetrievalCandidate,
     RetrievalItem,
@@ -37,6 +38,7 @@ from mdrack.domain.retrieval import (
     RetrievalResult,
 )
 from mdrack.indexing.change_detector import ChangePlan, compute_file_hash
+from mdrack.ports.storage import IndexStorage, LegacyTextEmbeddingBinding
 from mdrack.search.text import TextSearchItem, TextSearchResult
 from mdrack_core.application.indexing import CoreIndexingService
 from mdrack_core.application.retrieval import RetrievalService as CoreRetrievalService
@@ -783,6 +785,54 @@ class CoreCompatibilityStorage:
         """Rebuild the active core FTS projection and return FTS/unit counts."""
         return self.resource_store.rebuild_fts_index()
 
+    def read_text_embedding_spaces(self, profile_name: str) -> tuple[EmbeddingSpaceRecord, ...]:
+        """Read active app TEXT bindings, not unused or unrelated typed spaces.
+
+        Document projections are included regardless of their recorded slot: a
+        caller cannot bypass admission by choosing a new profile name. App-owned
+        TEXT identities with missing/conflicting slot metadata remain unknown,
+        including captions/OCR/aggregates; they must not disappear from admission.
+        Valid other slots and unrelated native/visual spaces remain independent.
+        """
+        rows = self.connection.execute(
+            "SELECT DISTINCT s.space_id,s.dimensions,s.metric,s.fingerprint,s.metadata_json,"
+            "r.resource_kind,p.representation_kind "
+            "FROM core_embedding_spaces s "
+            "JOIN core_unit_embeddings e ON e.space_id=s.space_id "
+            "JOIN core_search_units u ON u.unit_id=e.unit_id "
+            "JOIN core_representations p ON p.representation_id=u.representation_id "
+            "JOIN core_resources r ON r.resource_id=u.resource_id "
+            "WHERE u.modality=? ORDER BY s.space_id",
+            (MODALITY_TEXT,),
+        ).fetchall()
+        spaces: dict[str, EmbeddingSpaceRecord] = {}
+        for row in rows:
+            metadata = json.loads(str(row["metadata_json"]))
+            if not isinstance(metadata, Mapping):
+                raise IncompatibleEmbeddingProfileError()
+            document_projection = (
+                row["resource_kind"] == RESOURCE_DOCUMENT
+                and row["representation_kind"] in {REPRESENTATION_RETRIEVAL_TEXT, "whole_resource_text"}
+            )
+            declared_profile = metadata.get("profile")
+            # This is the existing logical-ID kind emitted by the canonical app
+            # TEXT owner, not an alias or proof of compatibility. Retain unknown
+            # app bindings even if their profile declaration was removed. Native
+            # producers use their own typed identities, including dense captions.
+            unknown_app_identity = str(row["space_id"]).startswith("embedding-space_") and (
+                not isinstance(declared_profile, str)
+                or str(row["space_id"]) != embedding_space_id(
+                    declared_profile, str(row["fingerprint"]), value_policy_from_space_metadata(metadata),
+                )
+            )
+            if document_projection or declared_profile == profile_name or unknown_app_identity:
+                space = EmbeddingSpaceRecord(
+                    str(row["space_id"]), int(row["dimensions"]), str(row["metric"]),
+                    str(row["fingerprint"]), metadata,
+                )
+                spaces[space.space_id] = space
+        return tuple(spaces.values())
+
     def resolve_embedding_space(
         self,
         profile: str,
@@ -995,6 +1045,45 @@ class CoreCompatibilityStorage:
             else:
                 self.connection.close()
             self._closed = True
+
+
+def assert_text_embedding_profile_compatible(storage: object, profile: EmbeddingProfile) -> bool:
+    """Check authoritative active bindings without adopting or rewriting identity.
+
+    IndexStorage declares the mandatory authoritative metadata read. Unknown or
+    unsupported injected storage fails closed, never falling back to a disk store.
+    Legacy adapters expose their real recorded identity through the same port;
+    null/``legacy:name`` markers never prove compatibility with a full profile.
+    """
+    if not isinstance(storage, IndexStorage):
+        raise IncompatibleEmbeddingProfileError()
+    try:
+        spaces = storage.read_text_embedding_spaces(profile.name)
+        if not isinstance(spaces, tuple):
+            raise IncompatibleEmbeddingProfileError()
+        expected = CanonicalTextEmbeddingSpace(profile).record
+        for space in spaces:
+            if isinstance(space, LegacyTextEmbeddingBinding):
+                if (
+                    space.profile_name != profile.name
+                    or space.profile_fingerprint != profile.fingerprint
+                    or space.vector_fingerprint != profile.fingerprint
+                    or space.dimensions != profile.output_dimensions
+                ):
+                    raise IncompatibleEmbeddingProfileError()
+            elif (
+                not isinstance(space, EmbeddingSpaceRecord)
+                or space.metadata.get("profile") != profile.name
+                or space.space_id != expected.space_id
+                or space.fingerprint != expected.fingerprint
+                or space.dimensions != expected.dimensions
+                or space.metric != expected.metric
+                or value_policy_from_space_metadata(space.metadata) != profile.vector_value_policy
+            ):
+                raise IncompatibleEmbeddingProfileError()
+        return bool(spaces)
+    except (sqlite3.Error, TypeError, ValueError):
+        raise IncompatibleEmbeddingProfileError() from None
 
 
 def create_application_storage(

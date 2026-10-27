@@ -85,6 +85,20 @@ explicitly changes that architecture.
   migration identity, and active-store switching. Compatibility wrappers delegate.
 - Query and index providers remain app-side and pass ready vectors plus explicit
   embedding-space identity to core.
+- TEXT-profile admission belongs to the shared application preflight. Service scan
+  checks before run/traversal/writes; CLI scan/rebuild/switch must also check before
+  external provider/control construction or dispatch. Keep full identity proof,
+  unknown app bindings and unrelated typed spaces distinct; confirmations/force do
+  not authorize hot migration or metadata adoption. See
+  [TEXT profile admission](../docs/current-architecture/indexing-and-chunking.md#text-profile-admission).
+- Injected `IndexStorage`/`KnowledgeStorage` must provide the declared authoritative
+  `read_text_embedding_spaces` capability, including for empty/providerless scans.
+  Canonical records and actual `LegacyTextEmbeddingBinding` rows use the same
+  application comparison; unknown is not empty and never enables a disk fallback.
+- Activation consumers must inspect the full indexing result status. A performed
+  rebuild with partial/failed/missing status or an operation exception must not
+  activate config or unload the previous model. Preserve the scan CLI's existing
+  partial-result envelope; do not infer full success from truthiness alone.
 - Legacy public/import surfaces survive only according to
   `docs/compatibility/v0.3-compatibility-registry.md`; removal requires its exact
   importer, parity, and installed-package oracles.

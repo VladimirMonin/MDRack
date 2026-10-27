@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from mdrack.domain.indexing import PreparedFile, SourceLocator
 from mdrack.domain.retrieval import RetrievalCandidate
-from mdrack_core.domain import SearchRequest, SearchResult
+from mdrack_core.domain import EmbeddingSpaceRecord, SearchRequest, SearchResult
 
 
 class ChangePlan(Protocol):
@@ -18,8 +19,34 @@ class ChangePlan(Protocol):
     deleted_files: list[str]
 
 
+@dataclass(frozen=True)
+class LegacyTextEmbeddingBinding:
+    """Recorded legacy TEXT identity; absent fingerprints remain unknown.
+
+    Legacy vectors have no canonical space/codec metadata. Keep their actual
+    profile and vector fingerprints rather than manufacturing a canonical space.
+    """
+
+    profile_name: str
+    profile_fingerprint: str | None
+    vector_fingerprint: str | None
+    dimensions: int
+
+
+@runtime_checkable
 class IndexStorage(Protocol):
-    """Persistence contract required by the indexing application service."""
+    """Persistence contract required by indexing, including admission metadata."""
+
+    def read_text_embedding_spaces(
+        self, profile_name: str,
+    ) -> tuple[EmbeddingSpaceRecord | LegacyTextEmbeddingBinding, ...]:
+        """Read active app TEXT bindings, retaining unknown relevant identities.
+
+        Empty means authoritatively unbound, not unavailable metadata. Include
+        document projections that scan can replace and unknown app-owned TEXT
+        bindings; exclude unused and unrelated typed spaces. Never create/write.
+        """
+        ...
 
     def start_run(
         self,

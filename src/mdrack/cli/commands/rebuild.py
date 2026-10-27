@@ -10,7 +10,8 @@ from typing import Any
 import click
 
 from mdrack.application.compatibility import create_application_storage
-from mdrack.domain.profiles import EmbeddingProfile
+from mdrack.application.embedding_preflight import preflight_text_embedding_profile
+from mdrack.domain.profiles import EmbeddingProfile, IncompatibleEmbeddingProfileError
 from mdrack.embeddings.runtime import (
     close_async_resource,
     create_embedding_provider,
@@ -126,9 +127,11 @@ def rebuild_embeddings_cmd(
         return
 
     provider_name: str = embedding_provider or config.embedding.provider
-    provider = create_embedding_provider(provider_name, config)
+    provider: EmbeddingProvider | None = None
     try:
         root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+        preflight_text_embedding_profile(root, config, provider_name=provider_name, profile_name=profile_name)
+        provider = create_embedding_provider(provider_name, config)
         result = run_indexer(
             root,
             config,
@@ -160,6 +163,12 @@ def rebuild_embeddings_cmd(
             )
             raise click.exceptions.Exit(1)
         _output(ctx, envelope_success(data, command=cmd))
+    except IncompatibleEmbeddingProfileError:
+        _output(ctx, envelope_error(
+            "Embedding profile is incompatible; use a new collection", "EMBEDDING_ERROR", cmd,
+            details={"reason_code": "incompatible_embedding_profile"},
+        ))
+        raise click.exceptions.Exit(1) from None
     finally:
         try:
             asyncio.run(close_async_resource(provider))

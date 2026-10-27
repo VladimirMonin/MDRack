@@ -12,6 +12,8 @@ from typing import Any
 import click
 
 from mdrack._observability import AppEventLogger
+from mdrack.application.embedding_preflight import preflight_text_embedding_profile
+from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.indexing.indexer import IndexerResult, run_indexer
 from mdrack.output.envelope import error as envelope_error
@@ -62,9 +64,11 @@ def cli_scan(
         return
 
     provider_name: str = embedding_provider or config.embedding.provider
-    provider = _create_provider(provider_name, config)
+    provider: object | None = None
 
     try:
+        preflight_text_embedding_profile(root, config, provider_name=provider_name)
+        provider = _create_provider(provider_name, config)
         result: IndexerResult = run_indexer(
             root=root,
             config=config,
@@ -90,6 +94,12 @@ def cli_scan(
             raise click.exceptions.Exit(1)
     except click.exceptions.Exit:
         raise
+    except IncompatibleEmbeddingProfileError:
+        _output(ctx, envelope_error(
+            "Embedding profile is incompatible; use a new collection", "EMBEDDING_ERROR", cmd,
+            details={"reason_code": "incompatible_embedding_profile"},
+        ))
+        ctx.exit(1)
     except Exception:
         logger.error("cli.scan.failed", extra={"status": "failed", "reason": "internal_error"})
         _output(ctx, envelope_error("Scan failed", "INTERNAL_ERROR", cmd))

@@ -16,9 +16,11 @@ sequenceDiagram
     participant Chunker as "StructuralChunker"
     participant Projection as "Resource projection"
     participant Embedder as "EmbeddingProvider"
-    participant Storage as "SQLiteIndexStorage"
+    participant Storage as "IndexStorage / app catalog projection"
 
     Caller->>Service: "scan"
+    Service->>Storage: "read_text_embedding_spaces"
+    Note over Service,Storage: "Full-profile admission; refuse incompatible or unknown binding"
     Service->>Storage: "start_run"
     Service->>Scanner: "scan relative Markdown paths"
     Scanner-->>Service: "current paths"
@@ -30,13 +32,13 @@ sequenceDiagram
         Parser-->>Service: "Document and SourceBlock records"
         Service->>Chunker: "build bounded RetrievalChunk records"
         Chunker-->>Service: "display text, embedding text, exact spans"
-        Service->>Projection: "project document resource graph"
-        Projection-->>Service: "typed resources and units"
         opt Embedding provider configured
             Service->>Embedder: "embed chunk embedding_text values"
             Embedder-->>Service: "vectors"
         end
-        Service->>Storage: "replace legacy file and ready resource graph atomically"
+        Service->>Projection: "project prepared document and ready vectors"
+        Projection-->>Service: "typed resource graph"
+        Service->>Storage: "replace resource graph atomically"
     end
 
     loop Each deleted file
@@ -49,8 +51,11 @@ sequenceDiagram
 
 ## Scan and change planning
 
-`IndexingService.scan` starts an `index_runs` row, scans root-relative Markdown
-paths, and delegates hash comparison to storage. The scanner always prunes
+`IndexingService.scan` first checks TEXT-profile compatibility, then starts a run,
+scans root-relative Markdown paths, and delegates hash comparison to storage.
+Normal app composition uses `CoreCompatibilityStorage` over the fixed clean-v2
+catalog; its run ID does not create a legacy `index_runs` row. Only the retained
+direct `SQLiteIndexStorage` adapter records that legacy row. The scanner always prunes
 `.git`, `.venv`, `node_modules`, `.mdrack`, and `__pycache__`; configuration adds
 patterns such as the default `tests/**` exclusion.
 
@@ -62,6 +67,40 @@ trigger rename reuse. Files are independent: failures can produce
 
 The CLI accepts `scan --changed`, but that flag is currently ignored because
 normal scans already perform change detection.
+
+## TEXT profile admission
+
+`application/embedding_preflight.py::preflight_text_embedding_profile` builds the
+existing complete profile and delegates comparison to the application compatibility
+owner. `IndexingService.scan` invokes it before run creation, source traversal,
+planning/deletion or replacement. `MDRackEngine.scan` and `run_indexer` delegate to
+that service. CLI scan/rebuild additionally check before external provider
+construction; model switch checks before any control construction/dispatch.
+Force, confirmations and rebuild-mode selection do not bypass the check.
+
+The authoritative read selects active app TEXT bindings: document retrieval/whole
+text projections that scan can replace, the relevant named slot, and unknown
+app-canonical identities including caption/OCR/image-text aggregates. The existing
+`embedding-space_` logical-ID kind retains unknown bindings conservatively; it is
+not positive compatibility proof. A valid other named slot and unrelated native
+TEXT/visual spaces remain independent. Unused space records without active vectors
+do not bind an empty collection.
+
+Admission requires the exact profile name, canonical space ID, full fingerprint,
+dimensions, metric and existing value-policy/codec compatibility. Neither a model
+alias nor matching dimensions alone proves it. There is no new recipe or schema,
+old-vector relabeling, or hot migration. Missing/conflicting immutable metadata
+remains unknown even for the original model: unsafe writes refuse without adopting
+it. Existing queries with a known original identity can remain useful; try new
+writes/profiles in a separate collection. Intact compatible bindings still permit
+normal same-store scans and rebuilds. The declared injected-storage read and retained
+legacy-row transport are described in [public interfaces](public-interfaces.md#injected-indexing-storage).
+
+`IndexingResult.status` distinguishes `success`, `partial_success` and `failed`.
+Per-file publication remains atomic; partial execution retains useful completed
+resources. Model-switch activation consumes the full status, not a truthy result or
+absence of an exception. Exact CLI envelopes and activation/unload ordering are in
+[CLI contracts](../cli-contracts.md#mdrack-model-switch-model-and-mdrack-rebuild-embeddings).
 
 ## Parser output
 
@@ -127,10 +166,11 @@ neighboring chunks.
 
 ## Persistence handoff
 
-The compatibility path still prepares file metadata, sections, chunks, and
-optional vectors. The v0.3 projection also prepares a complete core resource graph.
-The core validates ownership, UTF-8/JSON/vector invariants before the resource
-adapter opens its serialized transaction. Any write/FTS/vector/facet failure leaves
+The application still prepares the compatibility `PreparedFile` metadata, sections,
+chunks and optional vectors. Normal composition projects it into one complete core
+resource graph; it does not duplicate that graph into legacy SQL tables. The core
+validates ownership and UTF-8/JSON/vector invariants before the resource adapter
+opens its serialized transaction. Any write/FTS/vector/facet failure leaves
 the prior complete graph visible.
 
 ## Primary source anchors
@@ -139,8 +179,10 @@ the prior complete graph visible.
 - Parser: `src/mdrack/adapters/markdown_it/parser.py`
 - Structural policies and exact spans: `src/mdrack/application/chunking.py`
 - Scanner: `src/mdrack/indexing/scanner.py`
-- Atomic handoff: `src/mdrack/adapters/sqlite/index_storage.py`
-- Core projection: `src/mdrack/application/compatibility.py`
+- Admission and core projection: `src/mdrack/application/embedding_preflight.py`,
+  `src/mdrack/application/compatibility.py`
+- Authoritative metadata port: `src/mdrack/ports/storage.py`
+- Retained direct legacy adapter: `src/mdrack/adapters/sqlite/index_storage.py`
 - Metadata normalization: `src/mdrack/application/metadata_normalization.py`
 - Provider-free validation:
   `packages/mdrack-core/src/mdrack_core/application/indexing.py`

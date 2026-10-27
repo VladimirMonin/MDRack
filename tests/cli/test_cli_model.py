@@ -384,6 +384,7 @@ def test_model_switch_persists_config_after_successful_rebuild(
         return {
             "performed": True,
             "mode": kwargs["rebuild_mode"],
+            "status": "success",
             "embedded_count": 3,
             "total_chunks": 3,
             "profile": "default",
@@ -408,6 +409,7 @@ def test_model_switch_persists_config_after_successful_rebuild(
     assert payload["data"]["rebuild"] == {
         "performed": True,
         "mode": "embeddings",
+        "status": "success",
         "embedded_count": 3,
         "total_chunks": 3,
         "profile": "default",
@@ -501,6 +503,7 @@ def test_model_switch_resolves_user_alias_to_lmstudio_key(
         return {
             "performed": True,
             "mode": kwargs["rebuild_mode"],
+            "status": "success",
             "embedded_count": 1,
             "total_chunks": 1,
             "profile": "default",
@@ -552,7 +555,7 @@ def test_model_switch_skips_unload_when_switching_to_same_model(
     )
     monkeypatch.setattr(
         "mdrack.cli.commands.model._run_switch_rebuild",
-        lambda **kwargs: {"performed": True, "mode": kwargs["rebuild_mode"]},
+        lambda **kwargs: {"performed": True, "mode": kwargs["rebuild_mode"], "status": "success"},
     )
 
     runner = CliRunner()

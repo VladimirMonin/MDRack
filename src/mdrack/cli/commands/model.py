@@ -14,7 +14,9 @@ from typing import Any, TypeVar
 import click
 
 from mdrack.application.compatibility import resolve_application_database_path
+from mdrack.application.embedding_preflight import preflight_text_embedding_profile
 from mdrack.config.loader import write_config
+from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 from mdrack.embeddings.runtime import close_async_resource, create_lmstudio_control_client
 from mdrack.indexing.indexer import run_indexer
 from mdrack.integrations.lmstudio import LMStudioProvider
@@ -121,8 +123,23 @@ def _provider_to_jsonable(value: Any) -> Any:
     return value
 
 
+class _IncompleteRebuildError(EmbeddingError):
+    def __init__(self, status: object) -> None:
+        super().__init__("embedding_rebuild_incomplete")
+        self.status = status if status in {"partial_success", "failed"} else "failed"
+
+
 def _handle_error(ctx: click.Context, cmd: str, exc: Exception) -> None:
-    if isinstance(exc, ProviderEmbeddingError):
+    message: str | None = None
+    details: dict[str, Any] = {"reason_code": "operation_failed"}
+    if isinstance(exc, IncompatibleEmbeddingProfileError):
+        message = "Embedding profile is incompatible; use a new collection"
+        details = {"reason_code": "incompatible_embedding_profile"}
+        exc = EmbeddingError("incompatible_embedding_profile")
+    elif isinstance(exc, _IncompleteRebuildError):
+        message = "Embedding rebuild did not complete successfully"
+        details = {"reason_code": "embedding_rebuild_incomplete", "status": exc.status}
+    elif isinstance(exc, ProviderEmbeddingError):
         exc = EmbeddingError("provider_operation_failed")
 
     if isinstance(exc, MDRackError):
@@ -134,10 +151,10 @@ def _handle_error(ctx: click.Context, cmd: str, exc: Exception) -> None:
         _output(
             ctx,
             envelope_error(
-                message=_FIXED_ERROR_MESSAGES.get(exc.code, "Model command failed"),
+                message=message or _FIXED_ERROR_MESSAGES.get(exc.code, "Model command failed"),
                 code=exc.code,
                 command=cmd,
-                details={"reason_code": "operation_failed"},
+                details=details,
             ),
         )
         ctx.exit(1)
@@ -235,8 +252,8 @@ def _build_switched_config(config: Any, model_name: str, dimensions: int) -> Any
     return config.model_copy(update={"embedding": embedding_config})
 
 
-def _find_model(models: list[Any], model_name: str) -> Any | None:
-    resolved_key = _resolve_model_key(models, model_name)
+def _find_model(models: list[Any], model_name: str, *, exact: bool = False) -> Any | None:
+    resolved_key = model_name if exact else _resolve_model_key(models, model_name)
     if resolved_key is None:
         return None
     for item in models:
@@ -512,6 +529,7 @@ def _run_switch_rebuild(
         return {
             "performed": True,
             "mode": rebuild_mode,
+            "status": result.status,
             "files_seen": result.files_seen,
             "files_changed": result.files_changed,
             "files_deleted": result.files_deleted,
@@ -687,12 +705,22 @@ def model_switch(
     logger.info("cli.command.started command=%s", cmd)
     client: object | None = None
     try:
+        root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
+        candidate_dimensions = dimensions if dimensions is not None else config.embedding.dimensions
+        has_active_bindings = preflight_text_embedding_profile(
+            root, _build_switched_config(config, model_name, candidate_dimensions),
+        )
+        # A populated collection requires an exact already-proven full identity.
+        # Alias/catalog discovery and a dimension probe cannot establish that proof
+        # after control dispatch. Keep the admitted key/dimensions pinned instead.
         client = create_model_control_client(ctx)
         models = _invoke_client_method(client, "list_models")
-        resolved_model_name = _resolve_model_key(models, model_name) or model_name
-        existing_model = _find_model(models, model_name)
-        previous_model = _find_model(models, config.embedding.model)
-        previous_model_name = (
+        resolved_model_name = (
+            model_name if has_active_bindings else (_resolve_model_key(models, model_name) or model_name)
+        )
+        existing_model = _find_model(models, model_name, exact=has_active_bindings)
+        previous_model = _find_model(models, config.embedding.model, exact=has_active_bindings)
+        previous_model_name = config.embedding.model if has_active_bindings else (
             getattr(previous_model, "key", None)
             or _resolve_model_key(models, config.embedding.model)
             or config.embedding.model
@@ -708,14 +736,18 @@ def model_switch(
             _invoke_client_method(client, "download_model", model_name)
             download_info = asyncio.run(_wait_for_model_download(client, model_name))
             models = asyncio.run(_wait_for_model_visibility(client, model_name))
-            resolved_model_name = _resolve_requested_model_name_from_models(models, model_name)
-            existing_model = _find_model(models, resolved_model_name)
+            resolved_model_name = (
+                model_name if has_active_bindings else _resolve_requested_model_name_from_models(models, model_name)
+            )
+            existing_model = _find_model(models, resolved_model_name, exact=has_active_bindings)
         elif download:
             _invoke_client_method(client, "download_model", resolved_model_name)
             download_info = asyncio.run(_wait_for_model_download(client, resolved_model_name))
             models = asyncio.run(_wait_for_model_visibility(client, resolved_model_name))
-            resolved_model_name = _resolve_requested_model_name_from_models(models, model_name)
-            existing_model = _find_model(models, resolved_model_name)
+            resolved_model_name = (
+                model_name if has_active_bindings else _resolve_requested_model_name_from_models(models, model_name)
+            )
+            existing_model = _find_model(models, resolved_model_name, exact=has_active_bindings)
 
         load_result: Any = None
         if load:
@@ -732,7 +764,7 @@ def model_switch(
                 "'--no-load' requires '--dimensions' when the target model is not already loaded"
             )
 
-        detected_dimensions = dimensions
+        detected_dimensions = candidate_dimensions if has_active_bindings else dimensions
         if detected_dimensions is None:
             detected_dimensions = _invoke_client_method(
                 client,
@@ -744,6 +776,7 @@ def model_switch(
             raise EmbeddingError(f"Invalid embedding dimension detected for '{model_name}'")
 
         switched_config = _build_switched_config(config, resolved_model_name, detected_dimensions)
+        preflight_text_embedding_profile(root, switched_config)
         rebuild_data = _run_switch_rebuild(
             ctx=ctx,
             config=config,
@@ -752,6 +785,9 @@ def model_switch(
             dimensions=detected_dimensions,
             rebuild_mode=rebuild_mode,
         )
+
+        if rebuild_data.get("performed") and rebuild_data.get("status") != "success":
+            raise _IncompleteRebuildError(rebuild_data.get("status"))
 
         write_config(switched_config, Path(config_path))
         if ctx.obj is not None:

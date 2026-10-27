@@ -130,6 +130,7 @@ classDiagram
     }
 
     class IndexStorage {
+        +read_text_embedding_spaces(profile_name) tuple
         +plan_changes(scanned, root) ChangePlan
         +replace_file(prepared)
         +delete_file(relative_path)
@@ -262,8 +263,35 @@ facet listing. It does not use `MDRackEngine`, the configured application store,
 source files, or the network.
 
 The engine imports no Click modules. By default it composes
-`SQLiteIndexStorage`, while callers may inject compatible storage/read/search
-ports and an embedding provider.
+`CoreCompatibilityStorage` over the verified fixed clean-v2 catalog, while callers
+may inject compatible storage/read/search ports and an embedding provider. The
+retained direct `SQLiteIndexStorage` adapter is not a normal store-selection fallback.
+
+### Injected indexing storage
+
+[`IndexStorage`](../../src/mdrack/ports/storage.py) explicitly requires
+`read_text_embedding_spaces(profile_name)`; `KnowledgeStorage`, the engine's
+replacement-storage contract, inherits it. The read returns a tuple of existing
+canonical `EmbeddingSpaceRecord` values or retained `LegacyTextEmbeddingBinding`
+records. An empty tuple means authoritatively unbound, not unreadable/unknown.
+It must retain unknown relevant app TEXT bindings and document projections that
+scan can replace, while excluding unused/unrelated typed spaces; it never creates
+or rewrites a store. The caller must supply this capability even for an empty or
+providerless injected scan. An unsupported replacement fails closed; the application
+never silently substitutes an on-disk catalog.
+
+`CoreCompatibilityStorage` supplies the active canonical records.
+`SQLiteIndexStorage.read_text_embedding_spaces` reads actual active legacy rows.
+Its small immutable `LegacyTextEmbeddingBinding` carries `profile_name`,
+`profile_fingerprint`, `vector_fingerprint` and `dimensions`; null/legacy markers
+remain unknown, not manufactured canonical-space/codec metadata. The shared checker
+requires exact recorded full fingerprints and dimensions. This is an application
+port transport, not a new core DTO, persistence schema or migration.
+
+`IndexingService.scan`, the embedded facade and the legacy wrapper use the same
+[TEXT admission rule](indexing-and-chunking.md#text-profile-admission) before run,
+traversal or writes. The optional search read-session factory is a separate
+consistency capability; providing it alone does not satisfy this mandatory read.
 
 The additive 1.2 unified search contract is documented in
 [v1.2 unified text search](../contracts/v1.2-unified-search.md). It uses typed

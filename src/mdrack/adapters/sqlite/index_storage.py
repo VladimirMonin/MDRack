@@ -15,6 +15,7 @@ from mdrack.domain.indexing import PreparedFile, SourceLocator, StoredChunk
 from mdrack.domain.profiles import EmbeddingProfile, IncompatibleEmbeddingProfileError
 from mdrack.domain.retrieval import RetrievalCandidate
 from mdrack.indexing.change_detector import ChangePlan, detect_changes
+from mdrack.ports.storage import LegacyTextEmbeddingBinding
 from mdrack.search.text import TextSearchResult, text_search
 from mdrack.storage.sqlite.vector import VectorIndex
 
@@ -37,6 +38,27 @@ class SQLiteIndexStorage:
     def __init__(self, connection: sqlite3.Connection, *, owns_connection: bool = False) -> None:
         self.connection = connection
         self._owns_connection = owns_connection
+
+    def read_text_embedding_spaces(self, profile_name: str) -> tuple[LegacyTextEmbeddingBinding, ...]:
+        """Read actual active legacy bindings without adopting/writing identity.
+
+        Replacing a legacy document removes all of its chunk vectors, including
+        other named profiles. Keep all such bindings in the admission decision.
+        """
+        del profile_name
+        rows = self.connection.execute(
+            "SELECT p.name,p.fingerprint,p.dimensions,e.profile_fingerprint "
+            "FROM embedding_profiles p "
+            "JOIN chunk_embeddings e ON e.profile_name=p.name "
+            "JOIN chunks c ON c.id=e.chunk_id JOIN files f ON f.id=c.file_id "
+            "WHERE f.status='active'"
+        ).fetchall()
+        return tuple(
+            LegacyTextEmbeddingBinding(
+                row["name"], row["fingerprint"], row["profile_fingerprint"], row["dimensions"],
+            )
+            for row in rows
+        )
 
     def start_run(
         self,

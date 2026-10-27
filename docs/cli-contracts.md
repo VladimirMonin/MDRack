@@ -144,9 +144,10 @@ Successful commands write one JSON value to stdout:
 }
 ```
 
-Command failures write one JSON value with `ok: false`, an error `message`, a
-stable `code`, and the command name in `meta`. The message never includes an
-absolute local path or a caller-provided logical identifier.
+Command errors normally write one JSON value with `ok: false`, an error `message`,
+a stable `code`, and the command name in `meta`. Completed scan-run statuses retain
+the legacy envelope described below; `ok` alone does not prove full completion.
+Error messages never include an absolute local path or a caller-provided logical identifier.
 
 ## Catalog lifecycle
 
@@ -160,7 +161,7 @@ Creates or opens the fixed catalog without indexing source files.
   "data": {
     "status": "initialized",
     "catalog_path": "catalog.sqlite3",
-    "schema_version": "0004"
+    "schema_version": "0005"
   },
   "meta": {"command": "init"}
 }
@@ -172,14 +173,65 @@ files under the root are outside the catalog lifecycle and are not removed.
 
 ### `mdrack scan [--changed] [--provider lmstudio|fake]`
 
-Creates the fixed catalog if needed, then indexes Markdown under `--root`. The
-command never edits Markdown or fetches linked assets. Its response reports run
-counts (`files_seen`, `files_indexed`, `files_deleted`, `chunks_created`, and
-`errors_count`) and a success or failure status.
+Checks the configured TEXT profile before constructing the external embedding
+provider, then creates the fixed catalog if needed and indexes Markdown under
+`--root`. A manually changed incompatible profile cannot bypass admission.
+`--changed` is accepted but currently ignored: ordinary scans already use change
+detection. The command never edits Markdown or fetches linked assets.
+
+The response reports run counts (`files_seen`, `files_indexed`, `files_failed`,
+`files_deleted`, `chunks_created`, and `errors_count`) and `data.status`:
+`success`, `partial_success`, or `failed`. The legacy partial-result contract is
+**`ok: true`, exit 0, `data.status: "partial_success"`**; callers requiring full
+completion must inspect status, not just `ok` or absence of an exception. A
+completed `failed` indexing run also retains `ok: true` with `data.status: "failed"`,
+but exits 1. Existing specific scan errors such as `CORPUS_SCAN_FAILED` retain
+their error envelopes. Successfully published resources survive a partial run.
+
+### `mdrack model switch MODEL` and `mdrack rebuild embeddings`
+
+`model switch` checks the requested TEXT identity before constructing a control
+client or dispatching list/load/download/probe/unload. `rebuild embeddings` checks
+before constructing its external provider. All switch rebuild modes
+(`embeddings`, `full`, `none`), `--yes`, `--download`, `--no-load` and force indexing
+retain the same compatibility rule. `--rebuild none` still requires `--yes`; that
+confirmation never overrides an incompatible or unknown binding. Empty/unbound
+TEXT and separate new collections are allowed; unrelated native/visual spaces do
+not make the catalog a single-profile store.
+
+A profile-incompatibility refusal exits 1 with `ok: false`, code
+`EMBEDDING_ERROR`, message `Embedding profile is incompatible; use a new collection`,
+and `error.details.reason_code: "incompatible_embedding_profile"`. It occurs before
+source traversal, run creation, deletion/replacement or config activation. Full
+identity, unknown immutable metadata and mixed-space rules are defined in
+[TEXT profile admission](current-architecture/indexing-and-chunking.md#text-profile-admission).
+A bound compatible switch pins the admitted exact model key/dimensions rather than
+using alias discovery or a dimension probe as compatibility proof.
+
+A **performed** switch rebuild adds `data.rebuild.status` on success and must have
+status `success` before config is written/activated or the previous model is
+unloaded. Partial/failed/missing status or an operation exception cannot activate
+that config or unload the previous model. A returned partial/failed switch rebuild
+result returns `EMBEDDING_ERROR` with fixed message `Embedding rebuild did not complete successfully`
+and details `{ "reason_code": "embedding_rebuild_incomplete", "status": "partial_success" }`
+(or `"failed"`). The target may already have been loaded; useful committed resources
+are not deleted to manufacture rollback. Config-write failure also prevents the
+subsequent previous-model unload. Best-effort provider/control cleanup does not
+undo confirmed successful product state.
+
+Standalone `rebuild embeddings` has a different non-success consumer: it exits 1
+with an error envelope containing counts, `details.status` and `details.error_codes`,
+not the scan command's partial-success envelope. A skipped switch rebuild reports
+`performed: false` with its reason and does not invent a completed rebuild status.
 
 ### Embedded API
 
-`MDRackEngine.scan()` has the same fixed-catalog creation rule. Engine reads
+`MDRackEngine.scan()` and direct `IndexingService.scan()` use the same application
+preflight before `start_run`, traversal or writes; `run_indexer` delegates to that
+service. Incompatibility raises `IncompatibleEmbeddingProfileError`; completed scans
+return the full `IndexingResult.status`, including partial/failed results. Injected
+storage must provide the declared [authoritative metadata read](current-architecture/public-interfaces.md#injected-indexing-storage).
+The engine has the same fixed-catalog creation rule. Engine reads
 (`search_text`, `get_file`, and `get_chunk`) fail safely when the catalog is
 absent and do not create one.
 

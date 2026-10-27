@@ -148,6 +148,10 @@ retains both complete corpus families and does not grant model execution or publ
 - SQLite is the only persistent database. Fresh compact generations use canonical
   float32 vectors and the builtin exact Python scan; there is no ANN/vector
   extension dependency in the base distribution.
+- Incompatible or unknown active app TEXT profile bindings refuse before model
+  lifecycle or indexing writes, including manual-config scans and rebuilds.
+  `--yes`/force do not enable hot migration; try another profile in a separate
+  collection. See [TEXT profile admission](docs/current-architecture/indexing-and-chunking.md#text-profile-admission).
 - Structural `overlap_chars` is currently not consumed, so structural chunks do
   not overlap.
 - Production reranking is disabled. `rerank_rank` and `rerank_score` remain

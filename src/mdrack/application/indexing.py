@@ -15,6 +15,7 @@ from typing import Any
 from mdrack._observability import AppEventLogger
 from mdrack.adapters.markdown_it import MarkdownItParser
 from mdrack.application.chunking import StructuralChunker, StructuralChunkingConfig
+from mdrack.application.embedding_preflight import preflight_text_embedding_profile
 from mdrack.application.metadata_normalization import normalize_metadata
 from mdrack.domain.blocks import BlockType
 from mdrack.domain.chunks import RetrievalChunk
@@ -85,6 +86,9 @@ class IndexingService:
 
 
     def scan(self, *, force_reindex: bool = False) -> IndexingResult:
+        preflight_text_embedding_profile(
+            self.root, self.config, provider=self.provider, profile_name=self.profile, storage=self.storage,
+        )
         parser_name, parser_version, chunk_strategy_name, chunk_strategy_version = self._strategy_identity()
         run_id = self.storage.start_run(
             parser_name=parser_name,

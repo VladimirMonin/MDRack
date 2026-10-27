@@ -81,6 +81,19 @@ This page is a current-state boundary, not a roadmap promise.
   video transcripts, frame-caption text, and explicit image caption/OCR text. Its
   `find-similar` command reuses stored textual whole-resource vectors only; it does
   not call a provider and does not accept the frame-only query scope.
+- Replacing an active app TEXT profile is not a hot-migration feature. Scan,
+  embedded/direct indexing, model switch and embeddings rebuild reject incompatible
+  or unknown bindings before external lifecycle or indexing side effects; force,
+  `--yes` and `--rebuild none` are not overrides. Compatible bindings and separate
+  empty/new TEXT collections remain usable alongside unrelated native/visual spaces.
+  Unknown immutable space metadata is not adopted even with the original model;
+  known-original-identity queries can remain useful while unsafe writes refuse.
+  Use a separate collection for new writes/profiles. See
+  [TEXT profile admission](indexing-and-chunking.md#text-profile-admission).
+- Injected indexing storage must implement the declared authoritative metadata read,
+  including when empty/providerless; an unavailable capability fails closed without
+  silently opening a different catalog. The optional search-snapshot capability
+  does not replace it. See [injected storage](public-interfaces.md#injected-indexing-storage).
 - Production reranking is unsupported. Non-null reranker injection and rerank
   requests fail closed; rerank result fields remain null.
 - Standard Markdown hybrid retrieval applies configured `text_weight` and

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+from mdrack.application.textual_embedding_space import CanonicalTextEmbeddingSpace
 from mdrack.config.models import MDRackConfig, PathsConfig
 from mdrack.domain.indexing import SourceLocator
 from mdrack.domain.retrieval import RetrievalCandidate
@@ -50,6 +51,13 @@ class _FakeStorage:
     def __init__(self) -> None:
         self.prepared = []
         self.closed = False
+
+    def read_text_embedding_spaces(self, profile_name):
+        return tuple(
+            CanonicalTextEmbeddingSpace(prepared.embedding_profile).record
+            for prepared in self.prepared
+            if prepared.embedding_profile is not None
+        )
 
     def start_run(self, **kwargs) -> str:
         return "fake-run"

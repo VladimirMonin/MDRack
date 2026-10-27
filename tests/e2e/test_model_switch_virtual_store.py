@@ -11,6 +11,8 @@ from typing import Any
 from click.testing import CliRunner
 
 from mdrack.cli import main
+from mdrack.config.loader import load_config, write_config
+from mdrack.config.models import PathsConfig
 from mdrack.embeddings.lmstudio import EmbeddingHealth, LMStudioLoadResult, LMStudioModelInfo
 from mdrack.storage.sqlite.connection import get_connection
 
@@ -161,6 +163,10 @@ def _write_config(root: Path, store_name: str, model_name: str, dimensions: int)
 def _copy_fixtures(root: Path) -> None:
     for file_name in FIXTURE_FILE_NAMES:
         shutil.copy2(FIXTURES_DIR / file_name, root / file_name)
+    # This is the full-success scenario. The heading-only fixture has no
+    # retrieval chunks; partial/failed rebuilds have separate explicit oracles.
+    headings = root / "simple_headings.md"
+    headings.write_text(headings.read_text(encoding="utf-8") + "\nSynthetic retrieval body.\n", encoding="utf-8")
 
 
 def _provider_factory(provider_name: str, config: object) -> DeterministicLMStudioProvider:
@@ -208,7 +214,7 @@ def _read_vectors(db_path: Path) -> dict[str, tuple[str, bytes]]:
         conn.close()
 
 
-def test_model_switch_rebuilds_canonical_catalog_vectors_end_to_end(
+def test_model_switch_refuses_hot_migration_and_allows_a_separate_collection(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -240,6 +246,7 @@ def test_model_switch_rebuilds_canonical_catalog_vectors_end_to_end(
     assert init_payload["data"]["status"] == "initialized"
 
     scan_payload = _invoke_json(runner, root, "scan")
+    assert scan_payload["data"]["status"] == "success"
     assert scan_payload["data"]["files_seen"] == len(FIXTURE_FILE_NAMES)
     assert scan_payload["data"]["chunks_created"] > 0
 
@@ -253,79 +260,51 @@ def test_model_switch_rebuilds_canonical_catalog_vectors_end_to_end(
     assert initial_vectors
     assert {space_id for space_id, _vector in initial_vectors.values()} == {initial_profile["space_id"]}
 
-    switch_to_large = _invoke_json(runner, root, "model", "switch", MODEL_LARGE)
-    assert switch_to_large["data"]["new_model"] == MODEL_LARGE
-    assert switch_to_large["data"]["new_dimensions"] == LARGE_DIMENSIONS
-    assert switch_to_large["data"]["rebuild"]["performed"] is True
-    assert switch_to_large["data"]["rebuild"]["chunks_created"] > 0
-    assert switch_to_large["data"]["unload_previous"] == {
-        "attempted": True,
-        "model": MODEL_SMALL,
-        "status": "unloaded",
-        "results": [
-            {
-                "instance_id": "instance-Qwen3-Embedding-0.6B-GGUF",
-                "status": "unloaded",
-            }
-        ],
-    }
+    config_path = root / ".mdrack" / "config.toml"
+    original_config_bytes = config_path.read_bytes()
+    original_catalog_bytes = db_path.read_bytes()
+    for mode in ("embeddings", "full", "none"):
+        refused = runner.invoke(
+            main, ["--root", str(root), "model", "switch", MODEL_LARGE, "--rebuild", mode, "--yes"],
+        )
+        assert refused.exit_code == 1, refused.output
+        payload = json.loads(refused.output)
+        assert payload["ok"] is False
+        assert payload["error"]["details"]["reason_code"] == "incompatible_embedding_profile"
+        assert control_client.calls == []
+        assert config_path.read_bytes() == original_config_bytes
+        assert db_path.read_bytes() == original_catalog_bytes
+        assert _read_profile_metadata(db_path) == initial_profile
+        assert _read_vectors(db_path) == initial_vectors
+        assert _invoke_json(runner, root, "search", "Subtitle", "--mode", "semantic", "--limit", "3") == semantic_before
 
-    status_large = _invoke_json(runner, root, "status")
-    assert status_large["data"]["configured_model"] == MODEL_LARGE
-    assert status_large["data"]["configured_dimensions"] == LARGE_DIMENSIONS
-    assert status_large["data"]["profile_dimensions"] is None
-
-    semantic_large = _invoke_json(runner, root, "search", "Subtitle", "--mode", "semantic", "--limit", "3")
-    assert semantic_large["data"]["results"]
-
-    large_profile = _read_profile_metadata(db_path)
-    large_vectors = _read_vectors(db_path)
+    # A separate empty collection admits the other model without renaming old vectors.
+    separate_config = load_config(root=root).model_copy(update={"paths": PathsConfig(store=".separate-store")})
+    separate_path = root / "separate.toml"
+    write_config(separate_config, separate_path)
+    _invoke_json(runner, root, "--config-file", "separate.toml", "init")
+    switched = _invoke_json(runner, root, "--config-file", "separate.toml", "model", "switch", MODEL_LARGE)
+    assert switched["data"]["new_model"] == MODEL_LARGE
+    assert switched["data"]["rebuild"]["status"] == "success"
+    assert switched["data"]["rebuild"]["chunks_created"] > 0
+    separate_db = root / ".separate-store" / "catalog.sqlite3"
+    large_profile = _read_profile_metadata(separate_db)
+    large_vectors = _read_vectors(separate_db)
     assert large_profile["dimensions"] == LARGE_DIMENSIONS
-    assert large_profile["space_id"] != initial_profile["space_id"]
     assert large_profile["fingerprint"] != initial_profile["fingerprint"]
+    assert large_profile["space_id"] != initial_profile["space_id"]
     assert set(large_vectors) == set(initial_vectors)
-    assert {space_id for space_id, _vector in large_vectors.values()} == {large_profile["space_id"]}
     assert all(large_vectors[unit_id] != initial_vectors[unit_id] for unit_id in initial_vectors)
-
-    switch_back = _invoke_json(runner, root, "model", "switch", MODEL_SMALL)
-    assert switch_back["data"]["new_model"] == MODEL_SMALL
-    assert switch_back["data"]["new_dimensions"] == SMALL_DIMENSIONS
-    assert switch_back["data"]["rebuild"]["performed"] is True
-    assert switch_back["data"]["rebuild"]["chunks_created"] > 0
-    assert switch_back["data"]["load"] == {
-        "key": MODEL_SMALL,
-        "state": "loaded",
-        "instance_id": "instance-Qwen3-Embedding-0.6B-GGUF",
-    }
-    assert switch_back["data"]["unload_previous"] == {
-        "attempted": True,
-        "model": MODEL_LARGE,
-        "status": "unloaded",
-        "results": [
-            {
-                "instance_id": "instance-Qwen3-Embedding-4B-GGUF",
-                "status": "unloaded",
-            }
-        ],
-    }
-
-    status_small = _invoke_json(runner, root, "status")
-    assert status_small["data"]["configured_model"] == MODEL_SMALL
-    assert status_small["data"]["configured_dimensions"] == SMALL_DIMENSIONS
-    assert status_small["data"]["profile_dimensions"] is None
-
-    semantic_after = _invoke_json(runner, root, "search", "Subtitle", "--mode", "semantic", "--limit", "3")
-    assert semantic_after["data"]["results"]
-
-    final_profile = _read_profile_metadata(db_path)
-    final_vectors = _read_vectors(db_path)
-    assert final_profile == initial_profile
-    assert final_vectors == initial_vectors
+    assert _invoke_json(
+        runner, root, "--config-file", "separate.toml", "search", "Subtitle", "--mode", "semantic",
+    )["data"]["results"]
+    assert config_path.read_bytes() == original_config_bytes
+    assert db_path.read_bytes() == original_catalog_bytes
+    assert _read_vectors(db_path) == initial_vectors
+    assert _invoke_json(runner, root, "scan")["data"]["files_changed"] == 0
+    assert _invoke_json(runner, root, "search", "Subtitle", "--mode", "semantic", "--limit", "3") == semantic_before
     assert control_client.calls == [
         ("load_model", MODEL_LARGE),
         ("probe_embedding_dimensions", MODEL_LARGE),
         ("unload_model", "instance-Qwen3-Embedding-0.6B-GGUF"),
-        ("load_model", MODEL_SMALL),
-        ("probe_embedding_dimensions", MODEL_SMALL),
-        ("unload_model", "instance-Qwen3-Embedding-4B-GGUF"),
     ]
