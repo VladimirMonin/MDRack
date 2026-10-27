@@ -29,6 +29,19 @@ This page is a current-state boundary, not a roadmap promise.
   closes the named native B text-DOCUMENT functional blocker with fresh installed/CUDA
   evidence; this does not execute a target-corpus A–D experiment or optional dense E.
   The runner still requires the complete A–D/optional-E matrix and policy/coverage gates.
+- Explicit `embedding.text_recipe` on LM Studio HTTP is **unsupported at runtime**.
+  Every explicit recipe, including empty role rules, refuses with
+  `embedding_input_contract_unqualified` before HTTP dispatch; a new collection,
+  model name or confirmation is not an override. Local exact-once formatting,
+  versioned identity and whole-input UTF-8/byte checks are implemented, not a
+  qualified native integration. Final native template ownership, full tokens with
+  specials before clipping, usable capacity and binding to evaluated tokens remain
+  unproven. Byte limits, context metadata, separate token counting, string-forwarding
+  layers and short successful vectors cannot supply that proof. No evidence here
+  establishes that native clipping actually occurred. The unchanged legacy HTTP
+  route remains usable but is not thereby qualified for arbitrary long inputs.
+  See [input admission](system-overview.md#lm-studio-text-recipe-and-input-admission).
+  This limitation is separate from the external native provider's bounded contract.
 - Legacy raw audio/video textual paths still consume supplied transcripts/frame captions
   or explicit local STT/extractor output. The separate 1.4.0rc3
   [native temporal component](../contracts/native-temporal-v1.md) performs bounded

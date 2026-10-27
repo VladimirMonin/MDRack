@@ -17,9 +17,13 @@ from mdrack.application.compatibility import resolve_application_database_path
 from mdrack.application.embedding_preflight import preflight_text_embedding_profile
 from mdrack.config.loader import write_config
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
-from mdrack.embeddings.runtime import close_async_resource, create_lmstudio_control_client
+from mdrack.embeddings.runtime import (
+    close_async_resource,
+    create_embedding_provider,
+    create_lmstudio_control_client,
+)
 from mdrack.indexing.indexer import run_indexer
-from mdrack.integrations.lmstudio import LMStudioProvider
+from mdrack.integrations.lmstudio.client import LMStudioInputContractError
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.errors import ConfigError, EmbeddingError, MDRackError
@@ -136,6 +140,10 @@ def _handle_error(ctx: click.Context, cmd: str, exc: Exception) -> None:
         message = "Embedding profile is incompatible; use a new collection"
         details = {"reason_code": "incompatible_embedding_profile"}
         exc = EmbeddingError("incompatible_embedding_profile")
+    elif isinstance(exc, LMStudioInputContractError):
+        message = "Embedding input contract is unqualified for this runtime"
+        details = {"reason_code": exc.code}
+        exc = EmbeddingError("embedding_input_contract_unqualified")
     elif isinstance(exc, _IncompleteRebuildError):
         message = "Embedding rebuild did not complete successfully"
         details = {"reason_code": "embedding_rebuild_incomplete", "status": exc.status}
@@ -510,14 +518,7 @@ def _run_switch_rebuild(
             "reason": "database_missing",
         }
 
-    provider = LMStudioProvider(
-        endpoint=switched_config.embedding.endpoint,
-        model=model_name,
-        dimensions=dimensions,
-        timeout=switched_config.embedding.timeout_secs,
-        requested_dimensions=switched_config.embedding.requested_dimensions,
-        dimensions_capability=switched_config.embedding.dimensions_capability,
-    )
+    provider = create_embedding_provider("lmstudio", switched_config)
     try:
         result = run_indexer(
             root=root,
@@ -707,9 +708,14 @@ def model_switch(
     try:
         root: Path = ctx.obj.get("root", Path(".")) if ctx.obj else Path(".")
         candidate_dimensions = dimensions if dimensions is not None else config.embedding.dimensions
-        has_active_bindings = preflight_text_embedding_profile(
-            root, _build_switched_config(config, model_name, candidate_dimensions),
-        )
+        candidate_config = _build_switched_config(config, model_name, candidate_dimensions)
+        has_active_bindings = preflight_text_embedding_profile(root, candidate_config)
+        if candidate_config.embedding.text_recipe is not None:
+            # P03 full-identity admission stays first. An unqualified opt-in
+            # route must then refuse even when --rebuild none skips the sender,
+            # and before constructing any model-control/lifecycle client.
+            admission_provider = create_embedding_provider("lmstudio", candidate_config)
+            asyncio.run(close_async_resource(admission_provider))
         # A populated collection requires an exact already-proven full identity.
         # Alias/catalog discovery and a dimension probe cannot establish that proof
         # after control dispatch. Keep the admitted key/dimensions pinned instead.

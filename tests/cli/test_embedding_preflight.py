@@ -99,8 +99,7 @@ def external_edges(monkeypatch, events, *, failure=None):
         return Provider(events=events, failure=failure, **kwargs)
 
     monkeypatch.setattr("mdrack.cli.commands.model.create_model_control_client", control_factory)
-    monkeypatch.setattr("mdrack.cli.commands.model.LMStudioProvider", provider_factory)
-    for command in ("scan", "rebuild"):
+    for command in ("model", "scan", "rebuild"):
         monkeypatch.setattr(
             f"mdrack.cli.commands.{command}.create_embedding_provider",
             lambda name, config: provider_factory(model=config.embedding.model, dimensions=config.embedding.dimensions),

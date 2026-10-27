@@ -43,6 +43,14 @@ explicitly changes that architecture.
   do not load weights/vendor DLLs; host Win32 process/job calls are OS ownership, not model
   loading. Keep producer qualification, complete space identity and lifecycle at that outer
   edge; see `docs/decisions/0018-caller-owned-native-encoder.md`.
+- Explicit LM Studio HTTP text recipes are client policy/space identity, not native
+  qualification. Keep canonical factory/raw-sender admission fail-closed while a
+  supported runtime-bound input contract is unavailable; no model-name guess,
+  byte limit, config flag, fake response or silent legacy fallback supplies proof.
+  Exact local role formatting must not be duplicated by raw batching or query
+  dispatch. Preserve legacy serialized identity and require separate collection
+  identity for changed recipes. See
+  [text recipe admission](../docs/current-architecture/system-overview.md#lm-studio-text-recipe-and-input-admission).
 - The default parser is the markdown-it adapter and produces parser-independent domain blocks.
 - Parser injection still uses the `MarkdownParser` port; do not broaden the concrete
   default-parser exception or describe it as edge-only composition. Moving that default

@@ -238,9 +238,11 @@ top_k = 20
 ```
 
 The model name, output dimensions, and stored profile fingerprint must match the
-LM Studio model actually serving the endpoint. A model or dimension change
-requires rebuilding derived vectors; MDRack fails closed rather than mixing
-incompatible spaces. Inspect the available lifecycle commands with:
+LM Studio model actually serving the endpoint. A changed model, dimension or
+recipe is not a hot migration: use a separate collection rather than relabeling
+existing vectors. MDRack refuses incompatible or unknown active bindings;
+`--yes`, force and `--rebuild none` do not override this. Inspect the available
+lifecycle commands with:
 
 ```bash
 uv run mdrack model --help
@@ -251,6 +253,42 @@ LM Studio HTTP is the only production embedding boundary. MDRack does not load
 model weights through Python, and fake embeddings are an explicit offline/test
 choice. Model lifecycle and any live provider call require a reachable local LM
 Studio instance; text mode does not call an embedding provider.
+
+### Explicit text recipes are not runtime-enabled
+
+Omitting `embedding.text_recipe` retains the useful legacy HTTP behavior:
+documents are sent unchanged; queries use the stripped `query_instruction`
+followed by `: ` and the unchanged query body. The default instruction is
+`Represent the query for retrieval`. Legacy serialized configuration and profile
+fingerprints do not gain a default recipe field. Python `None` also selects this
+legacy mode; an explicitly empty role string in a recipe is different.
+
+The optional `embedding.text_recipe` table records a client policy, **not a working
+qualified LM Studio mode**. Every explicit recipe is currently refused with
+`embedding_input_contract_unqualified`, regardless of model name or empty rules,
+even in a separate new collection. It is not silently cleared or replaced by the
+legacy route. Text-only search needs no embedding provider; the fake provider
+remains offline testing only, not a way to qualify a native runtime.
+
+For configuration/API inspection, the recipe has these fields:
+
+| Field | Contract |
+|---|---|
+| `version` | Required nonblank version string. |
+| `document_prefix`, `document_suffix` | Required exact strings, including explicit `""`; missing/null is invalid. |
+| `query_prefix`, `query_suffix` | Required exact strings, including explicit `""`; no generic instruction is added. |
+| `max_input_bytes` | Required positive integer; bounds the complete formatted UTF-8 input, not native tokens. |
+| `template_owner`, `title_policy`, `long_input_policy` | Only `client`, `none`, `reject` respectively; these are also the defaults. |
+
+All recipe fields participate in full profile/space identity. Prefix, body and
+suffix are concatenated without trimming, normalization, title lookup, inserted
+separators or role guessing. The existing nonempty `query_instruction` setting
+remains part of identity, but does not wrap an explicit recipe again. There is no
+query-only compatibility switch or automatic migration. This grammar is not an
+instruction to enable the unavailable mode. The native template/tokenizer,
+special-token-inclusive capacity and evaluated-input binding still require
+supported runtime evidence; see [the input boundary](current-architecture/system-overview.md#lm-studio-text-recipe-and-input-admission)
+and [CLI refusals](cli-contracts.md#unqualified-lm-studio-text-recipe).
 
 ## Everyday workflow
 

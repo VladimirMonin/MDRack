@@ -147,8 +147,7 @@ def _edges(monkeypatch, events):
         events.append("control_created")
         return Control(events)
     monkeypatch.setattr("mdrack.cli.commands.model.create_model_control_client", control)
-    monkeypatch.setattr("mdrack.cli.commands.model.LMStudioProvider", lambda **kw: Provider(events=events, **kw))
-    for command in ("scan", "rebuild"):
+    for command in ("model", "scan", "rebuild"):
         monkeypatch.setattr(
             f"mdrack.cli.commands.{command}.create_embedding_provider",
             lambda name, cfg: Provider(model=cfg.embedding.model, dimensions=cfg.embedding.dimensions, events=events),

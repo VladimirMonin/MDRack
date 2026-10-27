@@ -148,6 +148,11 @@ retains both complete corpus families and does not grant model execution or publ
 - SQLite is the only persistent database. Fresh compact generations use canonical
   float32 vectors and the builtin exact Python scan; there is no ANN/vector
   extension dependency in the base distribution.
+- Explicit `embedding.text_recipe` on LM Studio HTTP is currently **unavailable**:
+  it refuses with `embedding_input_contract_unqualified`, even in a new collection.
+  Exact client formatting/identity and offline safety checks do not qualify native
+  templates, token limits or evaluated inputs. The unchanged legacy configuration
+  remains usable; see [text recipe admission](docs/current-architecture/system-overview.md#lm-studio-text-recipe-and-input-admission).
 - Incompatible or unknown active app TEXT profile bindings refuse before model
   lifecycle or indexing writes, including manual-config scans and rebuilds.
   `--yes`/force do not enable hot migration; try another profile in a separate

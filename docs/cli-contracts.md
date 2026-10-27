@@ -196,8 +196,9 @@ before constructing its external provider. All switch rebuild modes
 (`embeddings`, `full`, `none`), `--yes`, `--download`, `--no-load` and force indexing
 retain the same compatibility rule. `--rebuild none` still requires `--yes`; that
 confirmation never overrides an incompatible or unknown binding. Empty/unbound
-TEXT and separate new collections are allowed; unrelated native/visual spaces do
-not make the catalog a single-profile store.
+TEXT and separate new collections pass this identity rule, subject to the separate
+input qualification below; unrelated native/visual spaces do not make the catalog
+a single-profile store.
 
 A profile-incompatibility refusal exits 1 with `ok: false`, code
 `EMBEDDING_ERROR`, message `Embedding profile is incompatible; use a new collection`,
@@ -223,6 +224,35 @@ Standalone `rebuild embeddings` has a different non-success consumer: it exits 1
 with an error envelope containing counts, `details.status` and `details.error_codes`,
 not the scan command's partial-success envelope. A skipped switch rebuild reports
 `performed: false` with its reason and does not invent a completed rebuild status.
+
+### Unqualified LM Studio text recipe
+
+After the existing TEXT-identity check, `scan`, `rebuild embeddings` and
+`model switch` refuse **every explicit** `embedding.text_recipe` on the LM Studio
+HTTP route. The refusal exits 1 with `ok: false`, `error.code: "EMBEDDING_ERROR"`,
+message `Embedding input contract is unqualified for this runtime`, and
+`error.details: {"reason_code": "embedding_input_contract_unqualified"}`.
+It occurs before HTTP/control client dispatch, source traversal, run/catalog
+creation or config activation in these CLI paths. For model switch it also
+precedes control construction, including `--rebuild none --yes` and empty/new
+collections. A prior profile mismatch still reports `incompatible_embedding_profile`
+first. This does not change the scan partial-result envelope above.
+
+There is no supported checked native producer on this ingress. Neither an empty
+role string, a model name, a config flag nor fake/response metadata qualifies it;
+there is no silent legacy fallback. The unchanged no-recipe HTTP route remains
+available. Text-only search does not need an embedding provider; deterministic
+fake vectors are offline controls, not native qualification. Configuration and
+remaining runtime obligations: [text recipe admission](current-architecture/system-overview.md#lm-studio-text-recipe-and-input-admission).
+
+Direct `LMStudioProvider` calls raise the content-free `LMStudioInputContractError`
+subtype of `EmbeddingError`; whole-input byte/UTF-8 validation may refuse an invalid
+input first. A directly injected provider in indexing retains the existing per-file
+`failed` / `FILE_INDEX_ERROR` result, while `LegacyTextEmbeddingAdapter` retains
+`embedding_provider_error`. These wrappers do not publish vectors or report native
+success. Other consumers keep their existing error/degradation contracts rather
+than acquiring a new success route. Source/offline and bounded installed-console
+checks use scripted HTTP/local fixtures, not the selected native runtime.
 
 ### Embedded API
 

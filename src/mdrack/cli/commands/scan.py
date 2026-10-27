@@ -16,6 +16,7 @@ from mdrack.application.embedding_preflight import preflight_text_embedding_prof
 from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 from mdrack.embeddings.runtime import close_async_resource, create_embedding_provider
 from mdrack.indexing.indexer import IndexerResult, run_indexer
+from mdrack.integrations.lmstudio.client import LMStudioInputContractError
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
@@ -94,6 +95,12 @@ def cli_scan(
             raise click.exceptions.Exit(1)
     except click.exceptions.Exit:
         raise
+    except LMStudioInputContractError as exc:
+        _output(ctx, envelope_error(
+            "Embedding input contract is unqualified for this runtime", "EMBEDDING_ERROR", cmd,
+            details={"reason_code": exc.code},
+        ))
+        ctx.exit(1)
     except IncompatibleEmbeddingProfileError:
         _output(ctx, envelope_error(
             "Embedding profile is incompatible; use a new collection", "EMBEDDING_ERROR", cmd,

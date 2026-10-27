@@ -18,6 +18,7 @@ from mdrack.embeddings.runtime import (
     embedding_profile_from_config,
 )
 from mdrack.indexing.indexer import run_indexer
+from mdrack.integrations.lmstudio.client import LMStudioInputContractError
 from mdrack.output.envelope import error as envelope_error
 from mdrack.output.envelope import success as envelope_success
 from mdrack.output.json_output import emit_json
@@ -163,6 +164,12 @@ def rebuild_embeddings_cmd(
             )
             raise click.exceptions.Exit(1)
         _output(ctx, envelope_success(data, command=cmd))
+    except LMStudioInputContractError as exc:
+        _output(ctx, envelope_error(
+            "Embedding input contract is unqualified for this runtime", "EMBEDDING_ERROR", cmd,
+            details={"reason_code": exc.code},
+        ))
+        raise click.exceptions.Exit(1) from None
     except IncompatibleEmbeddingProfileError:
         _output(ctx, envelope_error(
             "Embedding profile is incompatible; use a new collection", "EMBEDDING_ERROR", cmd,

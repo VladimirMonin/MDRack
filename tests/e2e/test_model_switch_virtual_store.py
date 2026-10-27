@@ -237,8 +237,8 @@ def test_model_switch_refuses_hot_migration_and_allows_a_separate_collection(
         lambda ctx: control_client,
     )
     monkeypatch.setattr(
-        "mdrack.cli.commands.model.LMStudioProvider",
-        DeterministicLMStudioProvider,
+        "mdrack.cli.commands.model.create_embedding_provider",
+        _provider_factory,
     )
 
     runner = CliRunner()

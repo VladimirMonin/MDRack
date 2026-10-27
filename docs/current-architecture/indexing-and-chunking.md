@@ -88,13 +88,27 @@ do not bind an empty collection.
 
 Admission requires the exact profile name, canonical space ID, full fingerprint,
 dimensions, metric and existing value-policy/codec compatibility. Neither a model
-alias nor matching dimensions alone proves it. There is no new recipe or schema,
-old-vector relabeling, or hot migration. Missing/conflicting immutable metadata
+alias nor matching dimensions alone proves it. An explicit `TextEmbeddingRecipe`
+adds its complete versioned policy to that fingerprint; legacy identities remain
+unchanged. There is no schema change, old-vector relabeling or hot migration.
+Missing/conflicting immutable metadata
 remains unknown even for the original model: unsafe writes refuse without adopting
 it. Existing queries with a known original identity can remain useful; try new
 writes/profiles in a separate collection. Intact compatible bindings still permit
 normal same-store scans and rebuilds. The declared injected-storage read and retained
 legacy-row transport are described in [public interfaces](public-interfaces.md#injected-indexing-storage).
+
+Profile compatibility and runtime input qualification are separate checks. After
+identity admission, CLI scan/rebuild/model switch refuse every explicit LM Studio
+HTTP recipe with `embedding_input_contract_unqualified`, before external provider
+or lifecycle dispatch, including an empty/new collection and `--rebuild none`.
+A compatible fingerprint alone cannot qualify native inputs. The canonical factory
+and raw sender own this refusal; see [text recipe admission](system-overview.md#lm-studio-text-recipe-and-input-admission).
+Legacy-without-recipe indexing remains available. A directly injected unqualified
+HTTP provider reaches the same sender refusal, but existing per-file indexing
+bookkeeping still reports `failed` / `FILE_INDEX_ERROR`; it is not an early-run
+exception or a successful vector publication. Identity mismatches still refuse
+before traversal/run work, regardless of injection.
 
 `IndexingResult.status` distinguishes `success`, `partial_success` and `failed`.
 Per-file publication remains atomic; partial execution retains useful completed

@@ -71,7 +71,7 @@ PDF/DOCX не объявляются поддерживаемыми. Если **
 |---|---|---|---|
 | P00 | Воспроизводимый локальный комплект и исходные полные замеры | начальная консультация, P02/P03 для закреплённого нового профиля; metadata inventory можно раньше | TODO |
 | P01 | Строгие ответы HTTP embeddings, правильная привязка по `index` | базовый checkout; не требует личного корпуса | ACCEPTED (technical), опубликован `12fe6a2` — Windows offline и ограниченная installed-wheel совместимость |
-| P02 | Точный рецепт документа/запроса, версия пространства | P01 и защитный P03; не активировать новую recipe раньше guard | IN_PROGRESS — подтверждён отдельный запуск Кодера; не ACCEPT |
+| P02 | Точный рецепт документа/запроса, версия пространства | P01 и защитный P03; не активировать новую recipe раньше guard | ACCEPTED_SOURCE_SAFETY_SLICE_ONLY — конечная source/safety-часть принята; весь P02 OPEN, выбранный native input contract BLOCKED/NOT_RUN |
 | P03 | Запрет несовместимой смены до записи; честная частичная индексация | P01 | ACCEPTED (technical) — Windows source/offline и synthetic local components; без горячей миграции |
 | P04 | Подготовка обычного изображения по рецепту модели | P00, P02 | TODO |
 | P05 | Единое добавление смешанной папки и TXT | P02, P03, P04 | TODO |
@@ -125,6 +125,48 @@ PDF/DOCX не объявляются поддерживаемыми. Если **
 - Проверить загрузку сохранённой конфигурации, документ, запрос, пустую инструкцию, Unicode, batch и свежий процесс. Если выбранная модель нуждается в ограничении входа, длинный текст разбивается либо честно отклоняется; молчаливое усечение не допускается.
 
 **Приёмка:** известны точные входные строки реального комплекта, тесты покрывают все используемые входы, несовместимый recipe не смешивается со старым пространством.
+
+**27 октября 2026 года — независимо принята только конечная source/safety-часть
+(`ACCEPTED_SOURCE_SAFETY_SLICE_ONLY`), не весь P02.** Явная versioned recipe,
+полная fingerprint/space identity и точный локальный formatter реализованы;
+legacy config/fingerprints и прежние HTTP-правила сохранены. Общий raw sender не
+форматирует повторно. Полный formatted batch проверяется как UTF-8 и по byte policy
+до первого dispatch; долгий/некорректный input не обрезается клиентом. P01 response
+admission и P03 identity-first guard, сохранение коллекции/reopen/следующая полезная
+операция, partial/error envelopes и запреты activation/unload при non-success
+сохранены. Текущие владельцы: [input admission](../current-architecture/system-overview.md#lm-studio-text-recipe-and-input-admission)
+и [CLI refusal](../cli-contracts.md#unqualified-lm-studio-text-recipe).
+
+**Практическое ограничение:** всякая explicit `embedding.text_recipe` на LM Studio
+HTTP сейчас недоступна, включая пустые role rules и новую коллекцию. Factory и
+общий sender честно отказывают с `embedding_input_contract_unqualified`, без
+unchecked fallback, config-флага «квалификации» или fake native producer. CLI
+scan/rebuild/switch сохраняют первенство полного identity-check и отказывают до
+provider/control dispatch, даже при `--rebuild none --yes`. Обычный legacy путь
+без recipe остаётся полезным, но не становится квалифицированным для произвольных
+длинных входов.
+
+**Исходный положительный runtime-критерий остаётся OPEN/NOT_RUN.** Для выбранного
+LM Studio Gemma2 известна кандидатная клиентская пара `title: none | text: ` и
+`task: search result | query: ` с пустыми suffixes. Не доказаны конечный native
+владелец шаблона, полная special-token-inclusive последовательность до clipping,
+реальная usable capacity и совпадение с evaluated tokens под закреплёнными
+runtime/model/tokenizer/instance/context identities. Byte policy 1024, context
+metadata 2048, отдельный countTokens, пересылка строк в JS и прежние короткие
+успешные vectors этого не доказывают; фактическое truncation также не установлено.
+Поддержанный достаточный native producer не найден. Native capacity−1/capacity/
+capacity+1 и text/token binding checks — **BLOCKED/NOT_RUN**, не mock PASS.
+Положительные integrated opt-in single/batch/saved/fresh-process/engine/prepared/
+CLI/new-collection сценарии остаются незакрытыми. Их прежние точные клиентские
+byte expectations сохранены на настоящей formatter boundary; это не заменяет
+требуемого runtime-positive результата.
+
+Конечная внешняя развилка: предоставить поддержанный runtime-bound путь, который
+подтверждает окончательный текст, полный token preparation до усечения, ёмкость
+и те же evaluated tokens, либо оставлять opt-in mode явно unsupported. Новая
+модельная матрица, ещё один прежний успешный POST, предполагаемый SDK-флаг или
+самовольный патч установленного runtime не закрывают этот пробел. Исходная
+приёмка P02, зависимости остальных задач и рубежи L1/L2 не сокращены.
 
 ### P03. Заполненная коллекция и ошибки операции
 
@@ -308,7 +350,8 @@ PDF/DOCX не объявляются поддерживаемыми. Если **
 - [x] Получены и учтены начальные source/test-source замечания Оракула; они сами по себе не являются runtime-приёмкой.
 - [x] **P01 — ACCEPTED (technical), опубликован `12fe6a2cd3781d9c244a8e496f277b2ba4b40411`:** строгий HTTP batch admission и правильная связь документа с вектором независимо проверены.
 - [x] **P03 — ACCEPTED (technical):** весь cumulative safety slice независимо принят после исправления unknown-binding admission и явного storage contract; точная ревизия поставки фиксируется отдельной квитанцией публикации.
-- [ ] P02 и остальные задачи завершены и независимо приняты согласно зависимостям.
+- [x] **P02 — только конечная source/safety-часть:** независимо приняты явная recipe/identity, exact client formatter и честный fail-closed отказ отсутствующей native qualification; весь P02 не принят.
+- [ ] Положительный native input contract и полная исходная приёмка P02; остальные задачи завершены и независимо приняты согласно зависимостям.
 - [ ] L1 принят и передан для личного использования.
 - [ ] L2 принят; конечный Оракул проверил весь результат.
 
@@ -326,4 +369,39 @@ Installed evidence ограничено HTTP-поведением и соотв�
 
 Это source/offline и synthetic local SQLite/filesystem с подменой только внешних edges. Штатные build/install tests полного suite не означают dedicated installed-release приёмку P03. Live модели/GPU, личный корпус, quality/SLO, L1/L2 и конечный Oracle не квалифицированы.
 
-**Следующая зависимость: P03 → P02** — защитный prerequisite закрыт, recipe/identity ещё не приняты. P02 передан отдельному Кодеру и находится в IN_PROGRESS на непересекающихся файлах; его source и результаты не входят в принятие/публикацию P03 и требуют собственной независимой приёмки. P01 уже опубликован `12fe6a2`; P00/P02/P04–P13 остаются отдельными целевыми обязательствами. Цели L1/L2, несколько корней, критерий полного повторного поиска и пороги качества неизменны.
+### Проверенные границы конечной P02 source/safety-части
+
+На точном замороженном cumulative кандидате относительно опубликованного P03
+`821d0557776a2ef0a138ebcb68b2a9f4f7252576` выполнены независимые Windows/CPython
+3.14.2 проверки с uv 0.11.15: полный pytest — **2758 passed, 6 skipped**;
+собственные независимые controls — **24 passed**. Семь одинаковых missing-admission
+assertions дали поведенческий RED на изолированном историческом predecessor и
+GREEN на кандидате после успешных legacy controls. Исходная ошибка частного
+проверочного overlay при collection сохранена отдельно и не названа product RED.
+Ruff обоих scope, strict mypy по четырём roots/script и все dependency/boundary
+scripts прошли на стабильных входах. Шесть inherited skips сохранены с прежними
+причинами, не названы PASS.
+
+Ограниченная installed-wheel совместимость — **182 passed** из non-editable
+установки вне source import path; source bytes изменённых production modules
+совпали с wheel. Дополнительно настоящий Windows console launcher с обычным
+startup прошёл legacy scan/search, refusal, reopen и следующую полезную операцию
+на собственном scripted HTTP/SQLite fixture. Это не выбранный LM Studio/native
+runtime и не whole installed release. Числа пересекающихся source/installed/
+focused прогонов не складываются. Exact formatter/assertion preservation,
+serialized/logged errors, клиентское закрытие и actual command exits проверены;
+подробные частные receipts остаются вне Git.
+
+Новых target embedding/control/source/native/GPU операций в независимой проверке
+не выполнялось. Предыдущие короткие live vectors сохранены как историческое
+functional evidence, не доказательство native input contract. Документационный
+checker ограничен выбранным корпусом и не проверяет внешние URL или Mermaid
+rendering; эти ограничения не превращены в runtime PASS. Личный корпус,
+CUDA/quality/SLO, полная installed-поставка и L1/L2 не квалифицированы.
+
+**Оставшаяся зависимость P02:** защитный P03 опубликован, конечная recipe/identity/
+negative-admission source-часть независимо принята, но выбранный native input
+contract и положительная интеграция остаются BLOCKED/NOT_RUN. P00/P02/P04–P13 —
+отдельные незавершённые целевые обязательства. Публикация принятой safety-части не
+разрешает объявить весь P02 или выпуск готовым. Цели L1/L2, несколько корней,
+критерий полного повторного поиска и пороги качества неизменны.

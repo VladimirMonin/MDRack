@@ -102,6 +102,57 @@ The canonical service path is `IndexingService`, `RetrievalService`, and
 `indexing/indexer.py` wrapper, and thin `search/` modules are compatibility
 surfaces rather than the preferred home for new behavior.
 
+## LM Studio text recipe and input admission
+
+`domain/profiles.py::TextEmbeddingRecipe` and `config/models.py::EmbeddingConfig`
+own an explicit versioned client policy. Absent/`None` preserves legacy config
+serialization and fingerprints. Explicit recipes add all role strings, version,
+byte bound and fixed policies to the complete profile fingerprint used by
+`CanonicalTextEmbeddingSpace`; old vectors are never relabeled. The
+[configuration contract](../getting-started.md#explicit-text-recipes-are-not-runtime-enabled)
+describes required fields and explicit empty strings.
+
+The canonical `LMStudioProvider` owns `_format_role` and the shared `_embed_raw`
+sender. Local document/query formatting is exactly `prefix + text + suffix`:
+no title lookup, whitespace/Unicode normalization, role inference or generic
+query wrapper over a recipe. Query formatting never passes through document
+formatting, and raw batch recursion never formats again. The whole formatted
+operation is checked for strict UTF-8 and `max_input_bytes` before its first
+batch; invalid/oversized input raises content-free `embedding_input_invalid_utf8`
+or `embedding_input_too_large`. A byte bound is not a tokenizer capacity proof.
+
+**Every explicit recipe on this HTTP ingress is currently unavailable.**
+`LMStudioProvider.require_input_contract()` raises `LMStudioInputContractError`
+(an `EmbeddingError`) with stable code/message
+`embedding_input_contract_unqualified`. The raw sender checks before client
+construction or any batch dispatch; `create_embedding_provider` checks before
+returning an opt-in provider. Empty opt-in batches return no vectors or requests,
+not successful qualification. Direct `health()` reports unavailable. No supported
+checked native producer is established, and no config flag, model name, callback,
+response decoration or synthetic successful vector can authorize the route.
+There is no implicit fallback to legacy. CLI ordering and injected-provider error
+wrappers are described in [CLI contracts](../cli-contracts.md#unqualified-lm-studio-text-recipe).
+
+For the selected LM Studio Gemma2 route, the candidate client prefixes remain
+`title: none | text: ` for DOCUMENT and `task: search result | query: ` for QUERY,
+with empty suffixes. They are not inferred from the model name or enabled by
+this source implementation. Inspected string-forwarding layers and retained
+short-input HTTP vectors do not establish the final native template owner,
+complete special-token-inclusive sequence before clipping, real usable capacity
+or equality with evaluated tokens under a pinned model/tokenizer/runtime instance.
+Neither a 1,024-byte policy nor context metadata of 2,048 tokens proves those
+properties; separate token counting and zero HTTP usage do not bind evaluation.
+Native capacity-boundary and text/token binding checks remain **NOT_RUN/BLOCKED**.
+This does not assert that wrapping or truncation actually occurred.
+
+Source/offline and bounded installed-wheel/Windows-console checks establish
+client formatting, unchanged useful legacy behavior and truthful refusal only.
+They use synthetic local files/SQLite and scripted HTTP, not native qualification,
+quality, GPU execution or whole-release acceptance. The original runtime-positive
+obligations remain open in the [active plan](../plans/2026-10-26-personal-library-release.md#p02-рецепт-и-пространство-векторов).
+The separately selected external native text/image provider has its own contract;
+its qualification is not transferred to LM Studio HTTP.
+
 ## LM Studio HTTP response admission
 
 The canonical [`LMStudioProvider`](../../src/mdrack/integrations/lmstudio/client.py)

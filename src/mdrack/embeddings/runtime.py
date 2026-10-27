@@ -5,7 +5,7 @@ from __future__ import annotations
 from inspect import isawaitable
 from typing import Any
 
-from mdrack.domain.profiles import EmbeddingProfile
+from mdrack.domain.profiles import EmbeddingProfile, IncompatibleEmbeddingProfileError
 from mdrack.embeddings.fake import FakeEmbeddingProvider
 from mdrack.integrations.lmstudio import LMStudioControlClient, LMStudioProvider
 from mdrack.ports.embeddings import EmbeddingProvider
@@ -20,7 +20,7 @@ def create_embedding_provider(provider_name: str, config: Any) -> EmbeddingProvi
         )
     if provider_name != "lmstudio":
         raise ValueError("unsupported_embedding_provider")
-    return LMStudioProvider(
+    provider = LMStudioProvider(
         endpoint=config.embedding.endpoint,
         model=config.embedding.model,
         dimensions=config.embedding.dimensions,
@@ -28,7 +28,10 @@ def create_embedding_provider(provider_name: str, config: Any) -> EmbeddingProvi
         requested_dimensions=config.embedding.requested_dimensions,
         dimensions_capability=config.embedding.dimensions_capability,
         query_instruction=config.embedding.query_instruction,
+        text_recipe=config.embedding.text_recipe,
     )
+    provider.require_input_contract()
+    return provider
 
 
 def embedding_profile_from_config(
@@ -37,6 +40,11 @@ def embedding_profile_from_config(
     profile_name: str = "default",
 ) -> EmbeddingProfile:
     """Build the complete vector identity used by indexing and retrieval."""
+    if isinstance(provider, LMStudioProvider) and provider.text_recipe != config.embedding.text_recipe:
+        # A manually injected HTTP provider must not label legacy-formatted
+        # vectors as a configured recipe (or the reverse). Other provider ports
+        # retain their existing caller-owned identity contract.
+        raise IncompatibleEmbeddingProfileError()
     provider_name = str(
         getattr(provider, "provider_name", getattr(provider, "_provider_name", config.embedding.provider))
     )
@@ -60,6 +68,7 @@ def embedding_profile_from_config(
         instruction_profile=config.embedding.instruction_profile,
         schema_version=config.embedding.profile_schema_version,
         vector_value_policy=config.embedding.vector_value_policy,
+        text_recipe=config.embedding.text_recipe,
     )
 
 

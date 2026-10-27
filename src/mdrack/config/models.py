@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+
+from mdrack.domain.profiles import TextEmbeddingRecipe
 
 
 class PathsConfig(BaseModel):
@@ -163,6 +173,26 @@ class EmbeddingConfig(BaseModel):
     vector_value_policy: Literal["ieee754-f32-canonical-v1"] | None = Field(
         default="ieee754-f32-canonical-v1"
     )
+
+    text_recipe: TextEmbeddingRecipe | None = None
+
+    @field_validator("text_recipe", mode="before")
+    @classmethod
+    def validate_explicit_recipe(cls, value: object) -> object:
+        if isinstance(value, dict):
+            if set(value) - {field.name for field in fields(TextEmbeddingRecipe)}:
+                raise ValueError("unknown text recipe field")
+            if type(value.get("max_input_bytes")) is not int:
+                raise ValueError("text recipe max_input_bytes must be an integer")
+        return value
+
+    @model_serializer(mode="wrap")
+    def serialize_legacy_without_recipe(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        """Preserve legacy serialized fields; only explicit recipes are persisted."""
+        result: dict[str, object] = handler(self)
+        if self.text_recipe is None:
+            result.pop("text_recipe", None)
+        return result
 
     model_config = {"frozen": True}
 

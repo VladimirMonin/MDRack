@@ -15,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from mdrack.domain.profiles import CapabilityStatus
+from mdrack.domain.profiles import CapabilityStatus, TextEmbeddingRecipe
 from mdrack.ports.embeddings import EmbeddingError, EmbeddingHealth
 from mdrack_core.observability import _log_safely
 
@@ -535,6 +535,15 @@ class LMStudioControlClient:
             raise LMStudioControlError(f"Failed to parse LM Studio {operation} response") from exc
 
 
+class LMStudioInputContractError(EmbeddingError):
+    """No supported bound native input producer exists for an opt-in recipe."""
+
+    code = "embedding_input_contract_unqualified"
+
+    def __init__(self) -> None:
+        super().__init__(self.code)
+
+
 class LMStudioProvider:
     """Embedding provider that calls LM Studio HTTP API.
 
@@ -553,6 +562,7 @@ class LMStudioProvider:
         dimensions_capability: CapabilityStatus = "not_tested",
         native_dimensions: int | None = None,
         query_instruction: str = "Represent the query for retrieval",
+        text_recipe: TextEmbeddingRecipe | None = None,
     ) -> None:
         """Initialize the LM Studio provider.
 
@@ -567,7 +577,12 @@ class LMStudioProvider:
                 request parameter. Configuration alone is not live evidence.
             native_dimensions: Known full model output dimension. Reduced MRL
                 is not claimed unless this is greater than the request.
-            query_instruction: Exact configured instruction used for query vectors.
+            query_instruction: Legacy instruction (stripped, then ': ' appended).
+                Ignored for wire formatting when text_recipe is explicit.
+            text_recipe: Opt-in exact client-owned document/query templates and
+                formatted UTF-8 byte bound. Never inferred from a model name.
+                The unchecked HTTP/native route currently refuses this mode;
+                client formatting alone cannot qualify the native input contract.
         """
         self._provider_name = "lmstudio"
         self._model = model
@@ -580,6 +595,7 @@ class LMStudioProvider:
         if not isinstance(query_instruction, str) or not query_instruction.strip():
             raise ValueError("query_instruction must be non-empty")
         self._query_instruction = query_instruction.strip()
+        self._text_recipe = text_recipe
         self._returned_dimensions: int | None = None
         self._vector_length_valid: bool | None = None
         self._timeout = timeout
@@ -598,6 +614,17 @@ class LMStudioProvider:
         """
         return None
 
+    def require_input_contract(self) -> None:
+        """Fail closed: this ingress has no supported checked native producer.
+
+        Recipe strings and byte limits describe client policy, not native
+        template/tokenization/evaluation evidence. No config flag, model name,
+        response decoration or caller callback can qualify this unchecked route.
+        Legacy mode retains its historical behavior, not a qualification claim.
+        """
+        if self._text_recipe is not None:
+            raise LMStudioInputContractError()
+
     async def embed(self, texts: list[str], profile: str = "default") -> list[list[float]]:
         """Embed a batch of texts via LM Studio API.
 
@@ -612,11 +639,35 @@ class LMStudioProvider:
             EmbeddingError: On timeout, connection error, HTTP error,
                 or dimension mismatch.
         """
+        formatted = self._format_role(texts, query=False)
+        if self._text_recipe is not None and not formatted:
+            return []
+        return await self._embed_raw(formatted, profile)
+
+    def _format_role(self, texts: list[str], *, query: bool) -> list[str]:
+        recipe = self._text_recipe
+        if recipe is None:
+            return [f"{self._query_instruction}: {text}" for text in texts] if query else texts
+        prefix = recipe.query_prefix if query else recipe.document_prefix
+        suffix = recipe.query_suffix if query else recipe.document_suffix
+        formatted = [prefix + text + suffix for text in texts]
+        # Validate the entire operation before sending its first batch. No
+        # truncation, guessed tokenization, or partial dispatch on a late item.
+        try:
+            if any(len(text.encode("utf-8")) > recipe.max_input_bytes for text in formatted):
+                raise EmbeddingError("embedding_input_too_large")
+        except UnicodeEncodeError:
+            raise EmbeddingError("embedding_input_invalid_utf8") from None
+        return formatted
+
+    async def _embed_raw(self, texts: list[str], profile: str) -> list[list[float]]:
+        """Send already formatted inputs; batching never re-enters role formatting."""
+        self.require_input_contract()
         if len(texts) > _MAX_EMBEDDING_BATCH_SIZE:
             embeddings: list[list[float]] = []
             for start in range(0, len(texts), _MAX_EMBEDDING_BATCH_SIZE):
                 embeddings.extend(
-                    await self.embed(
+                    await self._embed_raw(
                         texts[start : start + _MAX_EMBEDDING_BATCH_SIZE],
                         profile,
                     )
@@ -820,9 +871,15 @@ class LMStudioProvider:
         Returns:
             Embedding vector for the query.
         """
-        prefixed = f"{self._query_instruction}: {text}"
-        vectors = await self.embed([prefixed], profile)
+        vectors = await self.embed_queries([text], profile)
         return vectors[0]
+
+    async def embed_queries(self, texts: list[str], profile: str = "default") -> list[list[float]]:
+        """Embed an explicit query batch without passing through document formatting."""
+        formatted = self._format_role(texts, query=True)
+        if self._text_recipe is not None and not formatted:
+            return []
+        return await self._embed_raw(formatted, profile)
 
     async def health(self) -> EmbeddingHealth:
         """Check LM Studio health by attempting a small embedding.
@@ -860,6 +917,11 @@ class LMStudioProvider:
     def dimensions(self) -> int:
         """Return the configured embedding dimension size."""
         return self._dimensions
+
+    @property
+    def text_recipe(self) -> TextEmbeddingRecipe | None:
+        """Return the actual formatting contract, including explicit legacy mode."""
+        return self._text_recipe
 
     @property
     def requested_dimensions(self) -> int | None:

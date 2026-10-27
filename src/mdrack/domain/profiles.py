@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Literal
 
 
@@ -16,6 +16,39 @@ class IncompatibleEmbeddingProfileError(ValueError):
     def __init__(self, unsafe_detail: str | None = None) -> None:
         del unsafe_detail
         super().__init__(self.code)
+
+
+@dataclass(frozen=True)
+class TextEmbeddingRecipe:
+    """Opt-in exact client templates; the bound counts formatted UTF-8 bytes.
+
+    All four strings are mandatory (empty is valid, missing/None is not). No
+    title lookup, fallback, separator insertion or content-based role detection
+    is performed. The caller must qualify this policy against its actual server;
+    a byte limit alone is not evidence of a tokenizer/context window.
+    """
+
+    version: str
+    document_prefix: str
+    document_suffix: str
+    query_prefix: str
+    query_suffix: str
+    max_input_bytes: int
+    template_owner: Literal["client"] = "client"
+    title_policy: Literal["none"] = "none"
+    long_input_policy: Literal["reject"] = "reject"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.version, str) or not self.version.strip():
+            raise ValueError("text recipe version must be non-empty")
+        for value in (self.document_prefix, self.document_suffix, self.query_prefix, self.query_suffix):
+            if not isinstance(value, str):
+                raise ValueError("text recipe role strings must be explicit strings")
+            value.encode("utf-8")
+        if type(self.max_input_bytes) is not int or self.max_input_bytes < 1:
+            raise ValueError("text recipe max_input_bytes must be positive")
+        if (self.template_owner, self.title_policy, self.long_input_policy) != ("client", "none", "reject"):
+            raise ValueError("unsupported text recipe policy")
 
 
 @dataclass(frozen=True)
@@ -35,6 +68,7 @@ class EmbeddingProfile:
     instruction_profile: str = "default"
     schema_version: int = 1
     vector_value_policy: str | None = None
+    text_recipe: TextEmbeddingRecipe | None = None
 
     def __post_init__(self) -> None:
         identity = (
@@ -60,7 +94,7 @@ class EmbeddingProfile:
 
     @property
     def fingerprint(self) -> str:
-        payload = {
+        payload: dict[str, object] = {
             "endpoint_family": self.endpoint_family,
             "model_family": self.model_family,
             "model_key": self.model_key,
@@ -74,6 +108,9 @@ class EmbeddingProfile:
             "schema_version": self.schema_version,
             "vector_value_policy": self.vector_value_policy,
         }
+        # Do not add even a null/default recipe field to historical identities.
+        if self.text_recipe is not None:
+            payload["text_recipe"] = asdict(self.text_recipe)
         canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
