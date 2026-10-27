@@ -85,6 +85,7 @@ def test_folder_add_partial_and_unsupported_only_are_honest(tmp_path: Path) -> N
         "skipped": 1,
         "failed": 1,
         "unprocessed": 0,
+        "unavailable": 0,
         "excluded": 0,
         "total": 3,
     }

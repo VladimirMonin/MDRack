@@ -146,6 +146,9 @@ def test_scan_policy_preserves_exclusions_and_refuses_links(
     assert ("linked_dir", "skipped", "link_not_followed") in reasons
     assert ("unknown.pdf", "skipped", "unsupported_media_type") in reasons
     assert all("inside.md" not in item.source_ref for item in outcome.candidates)
+    assert outcome.complete is True
+    assert {"private/secret.md", "skip.tmp", "unknown.pdf"} <= outcome.observed_refs
+    assert {"linked.md", "linked_dir"} <= outcome.blocked_prefixes
 
 
 def test_status_and_reason_mapping_are_honest_and_payload_free() -> None:
@@ -163,6 +166,11 @@ def test_status_and_reason_mapping_are_honest_and_payload_free() -> None:
     assert _overall_status((
         result("added"),
         result("skipped", "link_not_followed"),
+    )) == "partial_success"
+    assert _overall_status((result("unavailable", "source_missing"),)) == "success"
+    assert _overall_status((
+        result("unavailable", "source_missing"),
+        result("failed", "source_too_large"),
     )) == "partial_success"
 
     assert _reason_for_exception(
@@ -206,4 +214,5 @@ def test_scan_reports_directory_errors_as_unprocessed(
         and item.source_ref == "locked"
         for item in outcome.results
     )
+    assert outcome.complete is False
     assert "PRIVATE_OS_SENTINEL" not in repr(outcome)

@@ -19,6 +19,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from mdrack.application.folder_lifecycle import (
+    FOLDER_LIFECYCLE_FILENAME,
+    FolderLifecycle,
+    FolderLifecycleError,
+    LifecycleFile,
+    mark_unavailable,
+)
 from mdrack.application.media_search import ingest_native_image
 from mdrack.application.native_text import ingest_native_text, preflight_native_text_space
 from mdrack.domain.embedding_inputs import EmbeddingResult, EncodingRole, PreparedInput
@@ -32,7 +39,7 @@ from mdrack.ingestion.raw_source_provenance import (
     validate_source_ref,
 )
 from mdrack.ports.embeddings import EmbeddingError, PreparedEmbeddingProvider
-from mdrack_core import PublicationPort, ResourceSnapshot
+from mdrack_core import ExpectedPublication, PublicationPort, ResourceSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +108,7 @@ class FolderRootSummary:
     skipped: int
     failed: int
     unprocessed: int
+    unavailable: int
     excluded: int
 
     def to_dict(self) -> dict[str, object]:
@@ -112,6 +120,7 @@ class FolderRootSummary:
             "skipped": self.skipped,
             "failed": self.failed,
             "unprocessed": self.unprocessed,
+            "unavailable": self.unavailable,
             "excluded": self.excluded,
         }
 
@@ -155,6 +164,9 @@ class _ScanOutcome:
     candidates: tuple[_Candidate, ...]
     results: tuple[FolderFileResult, ...]
     excluded: int
+    observed_refs: frozenset[str]
+    blocked_prefixes: frozenset[str]
+    complete: bool
 
 
 class _CountingProvider:
@@ -375,6 +387,11 @@ def _classify(name: str) -> tuple[Literal["document", "image"], str] | None:
     return None
 
 
+def _is_under_relative_prefix(source_ref: str, prefix: str) -> bool:
+    """True when a portable relative reference is the prefix or a descendant."""
+    return source_ref == prefix or source_ref.startswith(prefix + "/")
+
+
 def _scan_root(
     namespace: str,
     root: Path,
@@ -383,6 +400,9 @@ def _scan_root(
 ) -> _ScanOutcome:
     candidates: list[_Candidate] = []
     results: list[FolderFileResult] = []
+    observed_refs: set[str] = set()
+    blocked_prefixes: set[str] = set()
+    incomplete = False
     excluded = 0
     stack: list[tuple[Path, str]] = [(root, "")]
     while stack:
@@ -391,6 +411,7 @@ def _scan_root(
             with os.scandir(directory) as iterator:
                 entries = sorted(iterator, key=lambda item: (item.name.casefold(), item.name))
         except OSError:
+            incomplete = True
             results.append(FolderFileResult(
                 namespace,
                 rel_directory or ".",
@@ -404,7 +425,14 @@ def _scan_root(
             name = entry.name
             rel = f"{rel_directory}/{name}" if rel_directory else name
             path = Path(entry.path)
+            # Presence is observed even when the entry is excluded, linked or
+            # unsupported. Only a genuinely unseen scope may be reconciled as missing.
+            observed_refs.add(rel)
             if _is_link_like(path):
+                # The link itself is observed, but its descendants are deliberately
+                # not enumerated. They are blocked from missing reconciliation
+                # rather than being inferred deleted.
+                blocked_prefixes.add(rel)
                 results.append(FolderFileResult(
                     namespace, rel, "other", None, "skipped", "link_not_followed",
                 ))
@@ -412,6 +440,7 @@ def _scan_root(
             try:
                 if entry.is_dir(follow_symlinks=False):
                     if name in _ALWAYS_IGNORED:
+                        blocked_prefixes.add(rel)
                         continue
                     stack.append((path, rel))
                     continue
@@ -421,6 +450,7 @@ def _scan_root(
                     ))
                     continue
             except OSError:
+                incomplete = True
                 results.append(FolderFileResult(
                     namespace, rel, "other", None, "unprocessed", "source_unavailable",
                 ))
@@ -445,7 +475,14 @@ def _scan_root(
             candidates.append(_Candidate(namespace, rel, path, kind, media_type))
     candidates.sort(key=lambda item: (item.namespace, item.source_ref))
     results.sort(key=lambda item: (item.namespace, item.source_ref, item.reason or ""))
-    return _ScanOutcome(tuple(candidates), tuple(results), excluded)
+    return _ScanOutcome(
+        tuple(candidates),
+        tuple(results),
+        excluded,
+        frozenset(observed_refs),
+        frozenset(blocked_prefixes),
+        not incomplete,
+    )
 
 
 def _derived_resource_id(candidate: _Candidate) -> str:
@@ -511,7 +548,7 @@ def _reason_for_exception(error: Exception, kind: str) -> str:
 def _overall_status(files: Sequence[FolderFileResult]) -> Literal["success", "partial_success", "failed"]:
     hard = [item for item in files if item.status in {"failed", "unprocessed"}]
     usable = any(
-        item.status in {"added", "updated"}
+        item.status in {"added", "updated", "unavailable"}
         or (item.status == "skipped" and item.reason == _UNCHANGED_REASON)
         for item in files
     )
@@ -533,6 +570,7 @@ def _counts(files: Sequence[FolderFileResult], excluded: int) -> dict[str, int]:
         "skipped": 0,
         "failed": 0,
         "unprocessed": 0,
+        "unavailable": 0,
         "excluded": excluded,
     }
     for item in files:
@@ -558,6 +596,7 @@ def _root_summaries(
             skipped=sum(item.status == "skipped" for item in selected),
             failed=sum(item.status == "failed" for item in selected),
             unprocessed=sum(item.status == "unprocessed" for item in selected),
+            unavailable=sum(item.status == "unavailable" for item in selected),
             excluded=excluded_by_namespace.get(namespace, 0),
         ))
     return tuple(summaries)
@@ -586,6 +625,7 @@ class FolderImportService:
             raise FolderImportError("publication_capability_required")
         self._port = port
         self.registry_path = store_dir / _REGISTRY_FILENAME
+        self.lifecycle_path = store_dir / FOLDER_LIFECYCLE_FILENAME
 
     @staticmethod
     def validate_selection(
@@ -614,6 +654,10 @@ class FolderImportService:
             store_dir=self._store_dir,
             cache_dir=self._cache_dir,
         )
+        try:
+            lifecycle = FolderLifecycle.load(self.lifecycle_path)
+        except FolderLifecycleError as error:
+            raise FolderImportError(error.reason) from None
         registry_entries = _load_registry(self.registry_path)
         bound_entries = _bind_registry(registry_entries, selections)
         if bound_entries != registry_entries:
@@ -624,11 +668,17 @@ class FolderImportService:
         candidates: list[_Candidate] = []
         results: list[FolderFileResult] = []
         excluded_by_namespace: dict[str, int] = {}
+        observed_by_namespace: dict[str, frozenset[str]] = {}
+        blocked_by_namespace: dict[str, frozenset[str]] = {}
+        complete_by_namespace: dict[str, bool] = {}
         for namespace, root in selections:
             scanned = _scan_root(namespace, root, exclude=excluded_patterns)
             candidates.extend(scanned.candidates)
             results.extend(scanned.results)
             excluded_by_namespace[namespace] = scanned.excluded
+            observed_by_namespace[namespace] = scanned.observed_refs
+            blocked_by_namespace[namespace] = scanned.blocked_prefixes
+            complete_by_namespace[namespace] = scanned.complete
 
         text_candidates = [item for item in candidates if item.kind == "document"]
         image_candidates = [item for item in candidates if item.kind == "image"]
@@ -644,8 +694,50 @@ class FolderImportService:
             len(candidates),
             sum(item.status == "skipped" for item in results),
         )
+        # Reconcile disappeared known files only after a complete local enumeration.
+        # Missing-old/new-source is the deliberate policy: no rename detector and
+        # no equal-byte merge. A reference outside the effective selected scope
+        # (explicit exclusion or blocked linked/ignored subtree) is not deletion
+        # authority. The old graph is withdrawn before a new path is added.
+        for namespace, _root in selections:
+            if not complete_by_namespace.get(namespace, False):
+                continue
+            observed = observed_by_namespace.get(namespace, frozenset())
+            blocked = blocked_by_namespace.get(namespace, frozenset())
+            for entry in lifecycle.files(namespace):
+                if entry.source_ref in observed:
+                    continue
+                if _matches_any(entry.source_ref, list(excluded_patterns)):
+                    logger.info(
+                        "folder.file.preserved file_ref=%s reason=excluded_scope",
+                        safe_file_ref(namespace, entry.source_ref),
+                    )
+                    continue
+                if any(
+                    _is_under_relative_prefix(entry.source_ref, prefix)
+                    for prefix in blocked
+                ):
+                    logger.info(
+                        "folder.file.preserved file_ref=%s reason=blocked_scope",
+                        safe_file_ref(namespace, entry.source_ref),
+                    )
+                    continue
+                result, next_entry = self._reconcile_missing(namespace, entry)
+                if next_entry is not None and lifecycle.update(namespace, next_entry):
+                    self._save_lifecycle(lifecycle)
+                results.append(result)
+                logger.info(
+                    "folder.file.finished file_ref=%s kind=%s status=%s reason=%s model_calls=%d",
+                    safe_file_ref(namespace, entry.source_ref),
+                    entry.kind,
+                    result.status,
+                    result.reason,
+                    result.model_calls,
+                )
         for candidate in candidates:
-            result = await self._process_candidate(candidate)
+            result, lifecycle_entry = await self._process_candidate(candidate)
+            if lifecycle_entry is not None and lifecycle.update(candidate.namespace, lifecycle_entry):
+                self._save_lifecycle(lifecycle)
             results.append(result)
             logger.info(
                 "folder.file.finished file_ref=%s kind=%s status=%s reason=%s model_calls=%d",
@@ -662,13 +754,15 @@ class FolderImportService:
         status = _overall_status(files)
         model_calls = sum(item.model_calls for item in files)
         logger.info(
-            "folder.import.finished status=%s added=%d updated=%d skipped=%d failed=%d unprocessed=%d model_calls=%d",
+            "folder.import.finished status=%s added=%d updated=%d skipped=%d failed=%d "
+            "unprocessed=%d unavailable=%d model_calls=%d",
             status,
             counts["added"],
             counts["updated"],
             counts["skipped"],
             counts["failed"],
             counts["unprocessed"],
+            counts["unavailable"],
             model_calls,
         )
         return FolderImportResult(
@@ -681,7 +775,60 @@ class FolderImportService:
             profile_fingerprint=self._provider.space.fingerprint,
         )
 
-    async def _process_candidate(self, candidate: _Candidate) -> FolderFileResult:
+    def _save_lifecycle(self, lifecycle: FolderLifecycle) -> None:
+        try:
+            lifecycle.save()
+        except FolderLifecycleError as error:
+            raise FolderImportError(error.reason) from None
+
+    def _reconcile_missing(
+        self, namespace: str, entry: LifecycleFile,
+    ) -> tuple[FolderFileResult, LifecycleFile | None]:
+        """Withdraw one known vanished resource, preserving its last identity/hash."""
+        def result(status: str, reason: str | None) -> FolderFileResult:
+            return FolderFileResult(
+                namespace,
+                entry.source_ref,
+                entry.kind,
+                entry.media_type,
+                status,
+                reason,
+                resource_id=entry.resource_id,
+                model_calls=0,
+                source_bytes=entry.source_bytes,
+            )
+
+        if entry.availability == "unavailable":
+            return result("unavailable", entry.reason or "source_missing"), None
+        try:
+            before = self._port.read_snapshot(entry.resource_id)
+        except Exception:
+            raise FolderImportError("catalog_read_failed") from None
+        state = before.state
+        if state.status == "published":
+            batch = before.batch
+            if (
+                batch is None
+                or batch.resource.resource_id != entry.resource_id
+                or state.source_namespace != namespace
+                or batch.resource.source_namespace != namespace
+            ):
+                return result("failed", "lifecycle_identity_conflict"), None
+            try:
+                outcome = self._port.withdraw_if_current(
+                    entry.resource_id, ExpectedPublication(state),
+                )
+            except Exception:
+                raise FolderImportError("catalog_write_failed") from None
+            if outcome.applied:
+                return result("unavailable", "source_missing"), mark_unavailable(entry)
+            if outcome.state.status == "published":
+                return result("failed", "withdrawal_conflict"), None
+        return result("unavailable", "source_missing"), mark_unavailable(entry)
+
+    async def _process_candidate(
+        self, candidate: _Candidate,
+    ) -> tuple[FolderFileResult, LifecycleFile | None]:
         resource_id = _derived_resource_id(candidate)
         try:
             before = self._port.read_snapshot(resource_id)
@@ -695,7 +842,7 @@ class FolderImportService:
                 candidate.media_type,
                 "failed",
                 "resource_deleted",
-            )
+            ), None
         if candidate.kind == "image" and _image_uses_incompatible_space(
             before, self._provider.space
         ):
@@ -706,7 +853,7 @@ class FolderImportService:
                 candidate.media_type,
                 "failed",
                 "incompatible_embedding_space",
-            )
+            ), None
 
         calls_before = self._counter.calls
         try:
@@ -737,6 +884,14 @@ class FolderImportService:
                     resource_id=result.resource_id,
                     model_calls=model_calls,
                     source_bytes=result.source_bytes,
+                ), LifecycleFile(
+                    candidate.source_ref,
+                    "document",
+                    candidate.media_type,
+                    result.resource_id,
+                    "available",
+                    result.source_revision,
+                    result.source_bytes,
                 )
             image = await ingest_native_image(
                 self._provider,
@@ -762,6 +917,14 @@ class FolderImportService:
                 resource_id=image.resource_id,
                 model_calls=model_calls,
                 source_bytes=image.byte_size,
+            ), LifecycleFile(
+                candidate.source_ref,
+                "image",
+                image.media_type,
+                image.resource_id,
+                "available",
+                image.content_hash,
+                image.byte_size,
             )
         except Exception as error:
             return FolderFileResult(
@@ -772,7 +935,7 @@ class FolderImportService:
                 "failed",
                 _reason_for_exception(error, candidate.kind),
                 model_calls=self._counter.calls - calls_before,
-            )
+            ), None
 
 
 __all__ = [
