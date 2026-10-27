@@ -6,12 +6,15 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import os
 import socket
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import wave
+from asyncio import proactor_events as _proactor_events
+from asyncio import selector_events as _selector_events
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -53,6 +56,7 @@ REGISTRY_IMPORTS = {
         "VisualEmbeddingProvider",
         "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
         "AudioInput", "VideoInput", "NativeMediaPolicy", "NativeMediaResult", "NativeMediaDecoder",
+        "NativeTextIngestionResult",
     ),
     "mdrack_media": (
         "NativeAudioObservation", "NativeBatchInput", "NativeFrameObservation", "NativeVideoObservation",
@@ -60,6 +64,7 @@ REGISTRY_IMPORTS = {
     ),
     "mdrack.public_api.models": (
         "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput",
+        "NativeTextIngestionResult",
         "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability", "RouteCapabilities", "TextInput",
         "EmbeddingCapabilities",
         "EmbeddingProfile",
@@ -144,6 +149,52 @@ REGISTRY_IMPORTS = {
 }
 EXPECTED_PUBLIC_API_EXPORTS = REGISTRY_IMPORTS["mdrack.public_api"]
 EXPECTED_PUBLIC_API_MODEL_EXPORTS = REGISTRY_IMPORTS["mdrack.public_api.models"]
+
+
+_LOOPBACK_SELF_PIPE_HOSTS = frozenset({"127.0.0.1", "::1"})
+_FALLBACK_SOCKETPAIR_CODE = getattr(getattr(socket, "_fallback_socketpair", None), "__code__", None)
+_SELF_PIPE_CODES = frozenset(
+    code for code in (
+        getattr(
+            getattr(getattr(_proactor_events, "BaseProactorEventLoop", None), "_make_self_pipe", None),
+            "__code__", None,
+        ),
+        getattr(
+            getattr(getattr(_selector_events, "BaseSelectorEventLoop", None), "_make_self_pipe", None),
+            "__code__", None,
+        ),
+    ) if code is not None
+)
+
+
+def _owned_asyncio_self_pipe_connect(sock: object, address: object) -> bool:
+    """Recognize the actual loaded CPython Windows self-pipe implementation.
+
+    The allowance is bound to the exact stdlib code objects and the immediate
+    ``_fallback_socketpair`` -> ``_make_self_pipe`` call relationship, not to
+    application-controlled filenames or function labels. The self-pipe frame's
+    ``self`` must be a real ``asyncio.AbstractEventLoop`` instance. All other
+    application connects remain blocked.
+    """
+    if _FALLBACK_SOCKETPAIR_CODE is None or not _SELF_PIPE_CODES:
+        return False
+    if not isinstance(sock, socket.socket):
+        return False
+    if sock.family not in {socket.AF_INET, socket.AF_INET6} or sock.type != socket.SOCK_STREAM:
+        return False
+    if sock.gettimeout() != 0.0:
+        return False
+    if not isinstance(address, tuple) or len(address) < 2:
+        return False
+    if address[0] not in _LOOPBACK_SELF_PIPE_HOSTS:
+        return False
+    frame = sys._getframe(1)
+    while frame is not None and frame.f_code is not _FALLBACK_SOCKETPAIR_CODE:
+        frame = frame.f_back
+    if frame is None or frame.f_back is None or frame.f_back.f_code not in _SELF_PIPE_CODES:
+        return False
+    loop = frame.f_back.f_locals.get("self")
+    return isinstance(loop, asyncio.AbstractEventLoop)
 
 
 class _MemoryCatalog:
@@ -452,6 +503,30 @@ def _check_installed_image_cli() -> None:
         assert str(source) not in search.stdout and "installed image needle" not in search.stdout
 
 
+def _installed_fake_python_command(
+    directory: Path, payload: dict[str, object], name: str,
+) -> tuple[str, dict[str, str]]:
+    """Return the installed interpreter and an env that emits payload once.
+
+    The temporary sitecustomize activates only for the no-argument child
+    interpreter (``sys.argv == ['']``), never for the mdrack launcher. This is a
+    checker-owned fake STT/extractor, not product source injection.
+    """
+    fake_site = directory / f"{name}-site"
+    fake_site.mkdir()
+    literal = json.dumps(payload, separators=(",", ":"))
+    (fake_site / "sitecustomize.py").write_text(
+        "import os, sys\n"
+        "if sys.argv == ['']:\n"
+        f"    sys.stdout.write({literal!r})\n"
+        "    sys.stdout.flush()\n"
+        "    os._exit(0)\n",
+        encoding="utf-8",
+    )
+    assert [path.name for path in fake_site.iterdir()] == ["sitecustomize.py"]
+    return sys.executable, {**os.environ, "PYTHONPATH": str(fake_site)}
+
+
 def _check_installed_raw_audio_cli() -> None:
     with tempfile.TemporaryDirectory(prefix="mdrack-installed-raw-audio-") as directory:
         root = Path(directory) / "root"
@@ -462,22 +537,21 @@ def _check_installed_raw_audio_cli() -> None:
             stream.setsampwidth(2)
             stream.setframerate(8000)
             stream.writeframes(b"\0\0" * 8000)
-        fake = Path(directory) / "fake-stt.py"
-        fake.write_text(
-            "#!/usr/bin/env python3\n"
-            "import sys\n"
-            "sys.stdin.buffer.read()\n"
-            "print('{\"schema\":\"mdrack.timed-transcript.v1\",\"atoms\":["
-            "{\"start_ms\":0,\"end_ms\":100,\"text\":\"installed audio needle\"}]}')\n",
-            encoding="utf-8",
+        # A console .py file is not directly executable on Windows. Use the
+        # installed interpreter as a checker-owned fake STT producer.
+        stt_command, environment = _installed_fake_python_command(
+            Path(directory),
+            {"schema": "mdrack.timed-transcript.v1",
+             "atoms": [{"start_ms": 0, "end_ms": 100, "text": "installed audio needle"}]},
+            "fake-stt",
         )
-        fake.chmod(0o755)
         executable = str(Path(sys.executable).with_name("mdrack"))
         ingest = subprocess.run(
             [executable, "--root", str(root), "ingest", "audio", str(source),
              "--source-ref", "recordings/installed.wav", "--allow-external-stt",
-             "--stt-command", str(fake)],
-            check=False, capture_output=True, text=True,
+             "--stt-command", stt_command],
+            check=False, capture_output=True, text=True, encoding="utf-8",
+            env=environment,
         )
         assert ingest.returncode == 0, ingest.stderr
         payload = json.loads(ingest.stdout)
@@ -485,7 +559,7 @@ def _check_installed_raw_audio_cli() -> None:
         assert str(source) not in ingest.stdout
         search = subprocess.run(
             [executable, "--root", str(root), "search", "needle", "--scope", "audio", "--mode", "text"],
-            check=False, capture_output=True, text=True,
+            check=False, capture_output=True, text=True, encoding="utf-8",
         )
         assert search.returncode == 0, search.stderr
         search_payload = json.loads(search.stdout)
@@ -499,25 +573,22 @@ def _check_installed_raw_video_cli() -> None:
         root.mkdir()
         source = Path(directory) / "outside-root.mp4"
         source.write_bytes(b"0000ftypisompayload")
-        fake = Path(directory) / "fake-video-extractor.py"
-        fake.write_text(
-            "#!/usr/bin/env python3\n"
-            "import json, sys\n"
-            "sys.stdin.buffer.read()\n"
-            "print(json.dumps({'schema':'mdrack.raw-video-extraction.v1',"
-            "'media_type':'video/mp4','duration_ms':1000,"
-            "'transcript':{'schema':'mdrack.timed-transcript.v1','duration_ms':1000,"
-            "'atoms':[{'start_ms':0,'end_ms':100,'text':'installed video needle'}]},"
-            "'frames':[{'timestamp_ms':50,'caption':'installed frame'}]}))\n",
-            encoding="utf-8",
+        extractor_command, environment = _installed_fake_python_command(
+            Path(directory),
+            {"schema": "mdrack.raw-video-extraction.v1", "media_type": "video/mp4",
+             "duration_ms": 1000,
+             "transcript": {"schema": "mdrack.timed-transcript.v1", "duration_ms": 1000,
+                            "atoms": [{"start_ms": 0, "end_ms": 100, "text": "installed video needle"}]},
+             "frames": [{"timestamp_ms": 50, "caption": "installed frame"}]},
+            "fake-video",
         )
-        fake.chmod(0o755)
         executable = str(Path(sys.executable).with_name("mdrack"))
         ingest = subprocess.run(
             [executable, "--root", str(root), "ingest", "raw-video", str(source),
              "--source-ref", "videos/installed.mp4", "--allow-external-video-extractor",
-             "--video-extractor-command", str(fake)],
-            check=False, capture_output=True, text=True,
+             "--video-extractor-command", extractor_command],
+            check=False, capture_output=True, text=True, encoding="utf-8",
+            env=environment,
         )
         assert ingest.returncode == 0, ingest.stderr
         payload = json.loads(ingest.stdout)
@@ -525,7 +596,7 @@ def _check_installed_raw_video_cli() -> None:
         assert str(source) not in ingest.stdout
         search = subprocess.run(
             [executable, "--root", str(root), "search", "needle", "--scope", "video", "--mode", "text"],
-            check=False, capture_output=True, text=True,
+            check=False, capture_output=True, text=True, encoding="utf-8",
         )
         assert search.returncode == 0, search.stderr
         assert json.loads(search.stdout)["data"]["results"]
@@ -626,11 +697,60 @@ def _check_installed_native_image() -> None:
         assert source.read_bytes() == content
 
 
+def _check_installed_native_text_cli() -> None:
+    """Installed ordinary-document route with the explicit synthetic provider only."""
+    with tempfile.TemporaryDirectory(prefix='mdrack-native-text-installed-') as directory:
+        root = Path(directory) / 'root'
+        root.mkdir()
+        source = Path(directory) / 'outside-root.md'
+        source.write_text('# Installed\n\nordinary installed needle with ёж\n', encoding='utf-8')
+        executable = str(Path(sys.executable).with_name('mdrack'))
+        command = [executable, '--root', str(root)]
+        ingest = subprocess.run(
+            command + ['native', 'text-ingest', str(source), '--source-namespace', 'installed',
+                       '--source-ref', 'docs/installed.md', '--provider', 'synthetic'],
+            check=False, capture_output=True, text=True, encoding="utf-8",
+        )
+        assert ingest.returncode == 0, ingest.stderr + ingest.stdout
+        data = json.loads(ingest.stdout)['data']
+        assert data['schema'] == 'mdrack.native-text-ingest.v1' and data['unit_ids']
+        assert str(source) not in ingest.stdout and 'ordinary installed needle' not in ingest.stdout
+        repeat = subprocess.run(
+            command + ['native', 'text-ingest', str(source), '--source-namespace', 'installed',
+                       '--source-ref', 'docs/installed.md', '--provider', 'synthetic'],
+            check=False, capture_output=True, text=True, encoding="utf-8",
+        )
+        assert repeat.returncode == 0, repeat.stderr + repeat.stdout
+        repeated = json.loads(repeat.stdout)['data']
+        assert repeated['resource_id'] == data['resource_id']
+        assert repeated['unit_ids'] == data['unit_ids']
+        assert repeated['model_call_count'] == 0 and repeated['unchanged'] is True
+        query = subprocess.run(
+            command + ['native', 'text-search', '--text', 'needle', '--candidates', 'text',
+                       '--provider', 'synthetic', '--mode', 'semantic'],
+            check=False, capture_output=True, text=True, encoding="utf-8",
+        )
+        assert query.returncode == 0, query.stderr + query.stdout
+        found = json.loads(query.stdout)['data']
+        assert found['results'] and found['results'][0]['resource_id'] == data['resource_id']
+        assert found['space_id'] == data['space_id']
+        assert str(source) not in query.stdout
+        read = subprocess.run(command + ['read', 'unit', data['unit_ids'][0]], check=False,
+                              capture_output=True, text=True, encoding="utf-8")
+        assert read.returncode == 0, read.stderr + read.stdout
+        assert 'ёж' in read.stdout
+
+
 def main() -> None:
     network_attempts = 0
+    self_pipe_connects = 0
+    original_connect = socket.socket.connect
 
     def blocked_connect(*args: object, **kwargs: object) -> None:
-        nonlocal network_attempts
+        nonlocal network_attempts, self_pipe_connects
+        if len(args) >= 2 and _owned_asyncio_self_pipe_connect(args[0], args[1]):
+            self_pipe_connects += 1
+            return original_connect(*args, **kwargs)
         network_attempts += 1
         raise AssertionError("network is forbidden in installed-package smoke")
 
@@ -643,6 +763,7 @@ def main() -> None:
         _check_installed_raw_text_cli()
         _check_installed_image_cli()
         _check_installed_native_image()
+        _check_installed_native_text_cli()
         _check_installed_raw_audio_cli()
         _check_installed_raw_video_cli()
         parity_mode_count = _check_catalog_retrieval_parity()
@@ -664,10 +785,12 @@ def main() -> None:
                     "installed_raw_text_cli": "passed",
                     "installed_image_cli": "passed",
                     "installed_native_image_contract": "passed",
+                    "installed_native_text_contract": "passed",
                     "installed_raw_audio_cli": "passed",
                     "installed_raw_video_cli": "passed",
                     "legacy_retrieval_parity_modes": parity_mode_count,
                     "network_attempts": 0,
+                    "owned_self_pipe_connects": self_pipe_connects,
                 },
                 "meta": {"command": "installed-package-smoke"},
             },

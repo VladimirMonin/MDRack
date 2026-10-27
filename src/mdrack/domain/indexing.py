@@ -11,6 +11,7 @@ from typing import Literal, Mapping
 from mdrack.domain.blocks import JSONValue
 from mdrack.domain.documents import MetadataDiagnostic, canonical_metadata_diagnostics
 from mdrack.domain.profiles import EmbeddingProfile
+from mdrack_core import EmbeddingSpaceRecord
 
 IndexStatus = Literal["success", "partial_success", "failed"]
 
@@ -133,6 +134,7 @@ class PreparedFile:
     chunks: tuple[StoredChunk, ...]
     vectors: tuple[tuple[float, ...], ...] = ()
     embedding_profile: EmbeddingProfile | None = None
+    embedding_space: EmbeddingSpaceRecord | None = None
     embedding_model: str | None = None
     embedding_dimensions: int | None = None
     embedding_endpoint: str | None = None
@@ -141,9 +143,11 @@ class PreparedFile:
     metadata_fingerprint: str = ""
     metadata_policy_fingerprint: str = ""
     metadata_normalizer_version: str = ""
+    source_provenance: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source_metadata", MappingProxyType(dict(self.source_metadata)))
+        object.__setattr__(self, "source_provenance", MappingProxyType(dict(self.source_provenance)))
         object.__setattr__(
             self,
             "metadata_diagnostics",

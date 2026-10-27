@@ -3,6 +3,7 @@
 from mdrack.application.durable_artifacts import DurableArtifactStore
 from mdrack.application.media_search import MediaSearchRequest, MediaSearchResult, StoredUnitInput
 from mdrack.application.native_media import NativeMediaResult
+from mdrack.application.native_text import NativeTextIngestionResult
 from mdrack.application.prepared_enrichment import PreparedEnrichmentOperation
 from mdrack.application.ready_ocr import ReadyOCRError, ReadyOCROperation
 from mdrack.application.reindexing import PreparedReindex
@@ -81,4 +82,5 @@ __all__ = [
     "VisualEmbeddingProvider",
     "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
     "AudioInput", "VideoInput", "NativeMediaPolicy", "NativeMediaResult", "NativeMediaDecoder",
+    "NativeTextIngestionResult",
 ]

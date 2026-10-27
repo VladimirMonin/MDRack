@@ -38,6 +38,20 @@ The qualified producer also prevents child creation. No CPU/old-vector/caption f
 Caller-private bounded diagnostics are explicit, default off, and never public logs /
 CLI/events/support exports. Their retention is not vector admission.
 
+## Addendum 2026-10-27: ordinary text-document ingress
+
+The original decision above is preserved. The additive v2 ordinary-document surface
+`MDRackEngine.ingest_native_text(...)` plus registered `native text-ingest` /
+`native text-search` now exposes the already qualified DOCUMENT/text and QUERY/text
+roles through the normal Markdown parser, structural chunker, source revision and
+conditional publication owners. It requires an explicit injected
+`PreparedEmbeddingProvider`; it is not implicit fallback, does not change default LM
+Studio HTTP, and does not require prepared-manifest/vector/resource-ID preparation
+for the ordinary user path. `native text-ingest` derives a deterministic logical ID when
+omitted. The exact v2 complete space, prefix/byte/context refusal and caller-owned
+process lifecycle remain unchanged. The older prepared import/API/runner composition
+remains available, not removed or redefined.
+
 ## Observable product boundary
 
 Normal public ingest/search/read, source CLI and actual installed PE use the same

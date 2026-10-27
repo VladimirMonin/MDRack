@@ -43,6 +43,7 @@ EXPECTED_PUBLIC_API_EXPORTS = (
     "VisualEmbeddingProvider",
     "DurableArtifactStore", "PreparedEnrichmentOperation", "PreparedReindex",
     "AudioInput", "VideoInput", "NativeMediaPolicy", "NativeMediaResult", "NativeMediaDecoder",
+    "NativeTextIngestionResult",
 )
 FORBIDDEN_RELEASE_KEYS = {
     "id",

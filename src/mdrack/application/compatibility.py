@@ -78,6 +78,20 @@ _DIRECT_TEXT_AGGREGATION = "direct_text_v1"
 _CENTROID_TEXT_AGGREGATION = "token_weighted_centroid_v1"
 
 
+def _prepared_embedding_identity(
+    prepared: PreparedFile,
+) -> tuple[EmbeddingSpaceRecord | None, str | None]:
+    """Return the exact caller-owned space or the historical profile projection."""
+    if prepared.embedding_space is not None:
+        if prepared.embedding_profile is not None:
+            raise ValueError("embedding profile and explicit space are mutually exclusive")
+        return prepared.embedding_space, value_policy_from_space_metadata(prepared.embedding_space.metadata)
+    if prepared.embedding_profile is not None:
+        canonical = CanonicalTextEmbeddingSpace(prepared.embedding_profile)
+        return canonical.record, prepared.embedding_profile.vector_value_policy
+    return None, None
+
+
 def prepared_file_to_resource_batch(
     prepared: PreparedFile,
     *,
@@ -174,8 +188,10 @@ def prepared_file_to_resource_batch(
             "parser_name": prepared.parser_name,
             "parser_version": prepared.parser_version,
             "relative_path": prepared.relative_path,
+            **cast(dict[str, Any], dict(prepared.source_provenance)),
         },
     )
+    embedding_space, embedding_value_policy = _prepared_embedding_identity(prepared)
     representation = RepresentationRecord(
         representation_id=representation_id,
         resource_id=resource_id,
@@ -188,8 +204,8 @@ def prepared_file_to_resource_batch(
             prepared.parser_version,
             prepared.chunk_strategy_name,
             prepared.chunk_strategy_version,
-            None if prepared.embedding_profile is None else prepared.embedding_profile.fingerprint,
-            None if prepared.embedding_profile is None else prepared.embedding_profile.vector_value_policy,
+            None if embedding_space is None else embedding_space.fingerprint,
+            embedding_value_policy,
         ),
         metadata={},
     )
@@ -234,15 +250,13 @@ def prepared_file_to_resource_batch(
     spaces: tuple[EmbeddingSpaceRecord, ...] = ()
     vectors: tuple[VectorRecord, ...] = ()
     if prepared.vectors:
-        profile = prepared.embedding_profile
-        if profile is None:
-            raise ValueError("embedding profile is required when vectors are present")
+        if embedding_space is None:
+            raise ValueError("embedding profile or explicit space is required when vectors are present")
         if len(prepared.vectors) != len(units):
             raise ValueError("embedding count must match the search-unit count")
-        space = CanonicalTextEmbeddingSpace(profile)
-        spaces = (space.record,)
+        spaces = (embedding_space,)
         vectors = tuple(
-            VectorRecord(unit.unit_id, space.space_id, vector)
+            VectorRecord(unit.unit_id, embedding_space.space_id, vector)
             for unit, vector in zip(units, prepared.vectors, strict=True)
         )
 
@@ -369,8 +383,8 @@ def prepared_file_to_resource_batch(
         elif is_long and not default_whole_projection and not prepared.vectors:
             raise ValueError("long Markdown whole-resource text requires chunk vectors")
         if whole_vector is not None:
-            if prepared.embedding_profile is None:
-                raise ValueError("embedding profile is required for whole-resource vectors")
+            if embedding_space is None:
+                raise ValueError("embedding profile or explicit space is required for whole-resource vectors")
             if not whole_vector:
                 raise ValueError("whole_vector must be a non-empty vector")
             if spaces:
@@ -379,11 +393,10 @@ def prepared_file_to_resource_batch(
                     raise ValueError("whole_vector must match the chunk vector dimensions")
                 vectors = vectors + (VectorRecord(whole_unit_id, persisted_space.space_id, tuple(whole_vector)),)
             else:
-                space = CanonicalTextEmbeddingSpace(prepared.embedding_profile)
-                spaces = (space.record,)
+                spaces = (embedding_space,)
                 if len(whole_vector) != spaces[0].dimensions:
-                    raise ValueError("whole_vector must match the embedding profile dimensions")
-                vectors = (VectorRecord(whole_unit_id, space.space_id, tuple(whole_vector)),)
+                    raise ValueError("whole_vector must match the embedding space dimensions")
+                vectors = (VectorRecord(whole_unit_id, spaces[0].space_id, tuple(whole_vector)),)
         representations = representations + (whole_representation,)
 
     batch = PreparedResourceBatch(
@@ -402,10 +415,7 @@ def prepared_file_to_resource_batch(
             for facet in projection.facets
         ),
     )
-    return apply_vector_value_policy(
-        batch,
-        None if prepared.embedding_profile is None else prepared.embedding_profile.vector_value_policy,
-    )
+    return apply_vector_value_policy(batch, embedding_value_policy)
 
 
 class CoreCompatibilityMapper:

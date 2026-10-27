@@ -178,7 +178,13 @@ images. Configure the separately qualified v2 artifacts explicitly with
 `--protocol mdrack-cuda-retrieval-v2` for short UTF-8 text DOCUMENT and one text QUERY
 route over image/text candidates. Formatted bytes are at most 65,536, full token count
 at most 2,048 and native timeout at most 120 seconds; there is no silent truncation.
-This is existing prepared import/API/runner composition, not a new text-ingest command.
+For an ordinary selected Markdown file, use the additive
+`native text-ingest PATH --source-namespace NS --source-ref REF --provider external
+--host-config CONFIG` or `MDRackEngine.ingest_native_text(...)`; query with
+`native text-search --text TEXT --candidates text|image|all`. It reuses the canonical
+Markdown chunk/provenance and conditional publication owners, so the user does not
+supply a prepared manifest, vector, resource ID or private factory. Existing prepared
+import/API/runner composition remains available for caller-prepared data.
 Image QUERY/SIMILARITY, audio/video inference and document-vector reuse remain unsupported.
 Do not mix its distinct full space with v1/A/legacy vectors, rekey an old catalog,
 change pins silently, weaken refusals or infer general quality/latency. Python/Core /

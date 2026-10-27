@@ -36,7 +36,12 @@ are exercised, with a fresh D hybrid query returning both image/text evidence.
 See [ADR-0018](../decisions/0018-caller-owned-native-encoder.md), the
 [original image result](../evaluation/native-image-product-2026-10-23.md) and
 [latest text/image result](../evaluation/native-text-image-product-2026-10-24.md).
-This uses existing prepared inputs/import methods, not a new ordinary text-ingest CLI.
+The additive ordinary-document surface is `MDRackEngine.ingest_native_text(...)`
+plus new `native text-ingest` / `native text-search` CLI commands. It reuses the
+canonical Markdown parser/chunker/provenance and the existing conditional
+publication/Core graph owners; the user does not supply a prepared manifest,
+vector, resource ID or private factory. Explicit prepared-manifest/import methods
+remain available but are no longer described as the only text-document route.
 Original opening joins read identity/whole_image with PUBLIC search locator/revision
 and caller allowlist; read-unit coordinates remain redacted. Image-query/similarity,
 document-vector reuse, legacy-space compatibility, audio/video model quality, default

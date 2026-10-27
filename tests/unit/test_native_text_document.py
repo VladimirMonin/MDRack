@@ -180,3 +180,47 @@ async def test_real_adapter_formatting_normal_B_import_reopen_and_D_union(tmp_pa
     finally:
         engine.close()
         await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ordinary_document_uses_real_v2_formatter_engine_and_query(tmp_path: Path) -> None:
+    from mdrack.application.media_search import MediaSearchRequest
+    from mdrack.config.models import MDRackConfig
+    from mdrack.domain.embedding_inputs import EmbeddingResult
+    from mdrack.public_api import MDRackEngine
+    from mdrack_core import SearchScope
+
+    class SoftwareEncoder(CUDAEncoderProvider):
+        async def _execute(self, data: bytes, kind: str) -> EmbeddingResult:
+            self.wire.append((data, kind))
+            return EmbeddingResult((1.0,) + (0.0,) * 767, self.space)
+
+    cfgdir = tmp_path / "config"
+    cfgdir.mkdir()
+    provider = SoftwareEncoder(extended_config(cfgdir))
+    provider.wire = []
+    root = tmp_path / "root"
+    root.mkdir()
+    source = root / "doc.md"
+    source.write_text("# title\n\nordinary body with Unicode ёж", encoding="utf-8")
+    engine = MDRackEngine(root=root, config=MDRackConfig(), prepared_embedding_provider=provider)
+    try:
+        result = await engine.ingest_native_text(
+            source, source_namespace="fixture", source_ref="docs/doc.md",
+        )
+        assert result.space_id == provider.space.space_id
+        document_wire, document_kind = provider.wire[0]
+        assert document_kind == "document"
+        assert document_wire.startswith(b"title: none | text: ")
+        assert document_wire.count(b"title: none | text: ") == 1
+        assert document_wire.endswith(b"ordinary body with Unicode \xd1\x91\xd0\xb6")
+        assert not document_wire.startswith(b"task: search result | query: ")
+        found = await engine.search_media(MediaSearchRequest(
+            TextInput("ordinary", "query"), SearchScope(modalities=("text",)), mode="semantic",
+        ))
+        assert found.results and found.results[0]["resource_id"] == result.resource_id
+        query_wire, query_kind = provider.wire[-1]
+        assert (query_wire, query_kind) == (b"task: search result | query: ordinary", "query")
+    finally:
+        engine.close()
+        await provider.aclose()

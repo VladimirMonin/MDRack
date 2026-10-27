@@ -45,12 +45,19 @@ trusted outer composition of a caller-owned bounded CUDA process with the normal
 catalog. Missing config or config with another provider refuses with the normal one-envelope
 error; there is no implicit fallback/default or other-command factory change. The
 original v1 protocol supports image-document/text-query-for-image. Explicit
-`mdrack-cuda-retrieval-v2` additionally qualifies short text DOCUMENT through the existing
-prepared import/API/runner path and one text QUERY capability over image/text candidates.
-The same normal `image native-search --text TEXT --candidates text|image|all` command
-uses those declared candidate routes; no new ordinary text-ingest CLI is introduced.
-Image QUERY, SIMILARITY, audio/video inference and stored-document-vector reuse remain
-unsupported by this external provider.
+`mdrack-cuda-retrieval-v2` additionally qualifies short UTF-8 text DOCUMENT and one
+text QUERY capability over image/text candidates. **New ordinary text surfaces** are
+`MDRackEngine.ingest_native_text(...)`, `native text-ingest PATH`, and
+`native text-search --text TEXT`. They require an explicit prepared provider
+(`--provider external --host-config CONFIG`, or explicit `--provider synthetic`
+for offline orchestration only). `native text-ingest` reuses the canonical
+Markdown parser/chunker, source revision and conditional publication; it does not
+require the user to prepare a manifest, vector or private Python factory.
+`--resource-id` is optional and deterministic when omitted.
+`native text-search --candidates text|image|all` uses the existing media-search
+planner and `mdrack.media-search.v1` result. Image QUERY, SIMILARITY, audio/video
+inference and stored-document-vector reuse remain unsupported by this external
+provider.
 Exact private setup, lifecycle and limits: [caller recipe](../examples/native_cuda/README.md),
 [ADR-0018](decisions/0018-caller-owned-native-encoder.md). Source and actual installed PE
 product execution is qualified separately from independent real-corpus quality/SLO;

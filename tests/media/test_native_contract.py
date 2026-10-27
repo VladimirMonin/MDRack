@@ -145,13 +145,14 @@ EXPECTED_APP = [
     "NativeMediaPolicy",
     "NativeMediaResult",
     "NativeMediaDecoder",
+    "NativeTextIngestionResult",
 ]
 
 
 def test_native_exact_export_contract_and_canonical_owners():
     assert mdrack_media.__all__ == EXPECTED_MEDIA
     assert api.__all__ == EXPECTED_APP
-    assert len(api.__all__) == len(set(api.__all__)) == 45
+    assert len(api.__all__) == len(set(api.__all__)) == 46
     for name in (
         "NativeAudioObservation",
         "NativeBatchInput",

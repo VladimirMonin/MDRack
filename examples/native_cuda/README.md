@@ -32,7 +32,9 @@ The 65,536-byte formatted UTF-8 ceiling is prefix-aware; context/batch/ubatch st
 The versioned native receipt binds operation, role/mode, formatted-input SHA256, PID
 and profile; wrong/partial/stale outputs refuse. Native token count includes prefix
 and special tokens and refuses before forward, without truncation/retry/fallback.
-The actual extended producer source/binary must be qualified and pinned separately;
+When private diagnostics are retained, successful canonical stdout includes the
+complete token count; the excess-token refusal reports `token_count`, not an exact
+excess count. The actual extended producer source/binary must be qualified and pinned separately;
 a declaration alone is not a certificate. The exact bounded
 [independent text/image qualification](../../docs/evaluation/native-text-image-product-2026-10-24.md)
 records fresh installed236 SDK/ordinary PE, ten learned forwards, 96 sampled evaluated
@@ -40,8 +42,10 @@ CUDA outputs and four host refusals. It closes the named short-text B functional
 not target-corpus relevance, optional dense E, whole A–D or release acceptance.
 Image-query/similarity/audio/video and compatibility with v1/A remain unsupported.
 
-B uses the existing prepared manifest/import route, not a new text-ingest command.
-Existing `image native-search --candidates text|image|all` can select text/image/union;
+B originally used the existing prepared manifest/import route. The additive ordinary
+Markdown surface is now `MDRackEngine.ingest_native_text(...)` and `native text-ingest`,
+with `native text-search` over the same prepared port. Existing prepared
+manifest/import remains available. Existing `image native-search --candidates text|image|all` can select text/image/union;
 canonical D uses hybrid union after same-resource lexical-only enrichment (encoding0),
 then separately encodes its query. This does not qualify optional dense E product/quality.
 No evaluator rows, coverage/policy gates, SQL schema or Core ranker are changed.
@@ -90,10 +94,22 @@ mdrack --root C:/caller/project image native-search --text "a visual description
 For retrieval-v2, add `--protocol mdrack-cuda-retrieval-v2` to the configuration
 command and select its exact matching separately qualified source/executable/profile.
 Omitting that flag keeps v1; changing a name or protocol never migrates old vectors.
-The text-document path uses existing prepared manifest/import/API/runner composition,
-not a new ordinary text-ingest CLI.
+The ordinary text-document path is the additive `engine.ingest_native_text(...)` /
+`native text-ingest` route. It takes an explicit caller-selected Markdown path plus
+portable namespace/ref, derives a stable logical ID when omitted, and formats each
+chunk through the selected provider exactly once. The existing prepared
+manifest/import/API/runner composition remains available for caller-prepared data.
 
-The `image native-*` commands alone expose `--provider external --host-config`.
+With that explicitly configured retrieval-v2 host, ordinary Markdown needs no
+prepared manifest or vectors:
+
+```text
+mdrack --root C:/caller/project native text-ingest C:/caller/document.md --source-namespace caller --source-ref docs/document.md --provider external --host-config C:/caller/native-host.json
+mdrack --root C:/caller/project native text-search --text "an example document" --candidates all --provider external --host-config C:/caller/native-host.json
+```
+
+`image native-ingest`, `image native-search`, `native text-ingest` and
+`native text-search` expose `--provider external --host-config`.
 Other/default provider selection is unchanged. Host configuration is trusted local
 composition, never indexed/untrusted resource metadata. It is drift-checked on each
 call; only its explicit pinned files are read. Input bytes, not source paths/locators,

@@ -46,7 +46,7 @@
       "model", "model list", "model loaded", "model download", "model download-status",
       "model load", "model unload", "model switch",
       "status", "doctor", "rebuild", "rebuild fts", "rebuild embeddings", "benchmark", "storage-analyze",
-      "native", "native capabilities", "native ingest", "native query", "native search", "rebuild upgrade",
+      "native", "native capabilities", "native ingest", "native query", "native search", "native text-ingest", "native text-search", "rebuild upgrade",
       "resource enrich-ocr", "resource enrich-prepared", "resource enrichment-binding", "resource ocr-binding",
       "resource publication-binding", "resource read-artifact", "resource reindex", "resource withdraw"
     ],
@@ -58,7 +58,7 @@
       "export_resource_manifest_file", "find_resource_duplicates", "find_similar_resource", "find_similar_resources", "find_textually_similar_resources",
       "get_chunk", "get_chunk_source_locator", "get_file_by_path", "get_file_outline", "get_resource_metadata", "read_unit",
       "import_resource_manifest", "inspect_resource", "ingest_image", "ingest_transcript", "ingest_video", "list_metadata_facets",
-      "ingest_native_image", "search_media", "scan", "search_hybrid", "search_images_hybrid", "search_images_semantic", "search_images_text",
+      "ingest_native_image", "ingest_native_text", "search_media", "scan", "search_hybrid", "search_images_hybrid", "search_images_semantic", "search_images_text",
       "search_resource_content", "search_resources_text", "search_semantic", "search_text", "search_transcripts", "search_unified",
       "enrich_prepared", "enrich_ready_ocr", "ingest_native_media", "native_media_capabilities", "prepare_enrichment",
       "prepare_ready_ocr", "prepare_reindex_file", "prepared_enrichment_binding", "publication_binding", "publish_enrichment",

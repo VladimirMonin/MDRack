@@ -11,6 +11,7 @@ from mdrack.application.media_search import MediaSearchRequest, StoredUnitInput
 from mdrack.cli.commands.images import _close_native, _native_engine, _native_error_code, _output
 from mdrack.domain.embedding_inputs import TextInput
 from mdrack.domain.native_media import NativeMediaKind, NativeMediaPolicy
+from mdrack.domain.profiles import IncompatibleEmbeddingProfileError
 from mdrack.embeddings.synthetic import SyntheticTemporalProvider
 from mdrack.output.envelope import error, success
 from mdrack.public_api.engine import MDRackEngine
@@ -215,6 +216,121 @@ def query(
         ctx.exit(1)
         return
     _output(ctx, success(result, command="native query"))
+
+
+@native.command(name="text-ingest")
+@click.argument("path", type=click.Path(path_type=Path))
+@click.option("--source-namespace", required=True)
+@click.option("--source-ref", required=True)
+@click.option("--resource-id", default=None, help="Optional stable logical ID; derived if omitted.")
+@click.option("--expected-revision", default=None)
+@click.option("--provider", "provider_name", type=click.Choice(["external", "synthetic"]), default="external")
+@click.option("--host-config", type=click.Path(path_type=Path), default=None,
+              help="Trusted caller-owned CUDA encoder config; requires --provider external.")
+@click.pass_context
+def text_ingest(
+    ctx: click.Context,
+    path: Path,
+    source_namespace: str,
+    source_ref: str,
+    resource_id: str | None,
+    expected_revision: str | None,
+    provider_name: str,
+    host_config: Path | None,
+) -> None:
+    """Encode one ordinary UTF-8 Markdown document through the selected native host."""
+    async def execute() -> dict[str, object]:
+        engine, provider = (_native_engine(ctx, provider_name) if host_config is None
+                            else _native_engine(ctx, provider_name, host_config))
+        try:
+            result = await engine.ingest_native_text(
+                path,
+                resource_id=resource_id,
+                source_namespace=source_namespace,
+                source_ref=source_ref,
+                expected_revision=expected_revision,
+            )
+            return result.to_dict()
+        finally:
+            await _close_native(engine, provider)
+
+    try:
+        result = asyncio.run(execute())
+    except IncompatibleEmbeddingProfileError:
+        _output(ctx, error(
+            "Embedding profile is incompatible; use a new collection",
+            "EMBEDDING_ERROR",
+            "native text-ingest",
+            details={"reason_code": "incompatible_embedding_profile"},
+        ))
+        ctx.exit(1)
+        return
+    except Exception as exc:
+        _output(ctx, error(
+            "Native text preparation failed",
+            _native_error_code(exc, "NATIVE_TEXT_ERROR"),
+            "native text-ingest",
+        ))
+        ctx.exit(1)
+        return
+    _output(ctx, success(result, command="native text-ingest"))
+
+
+@native.command(name="text-search")
+@click.option("--text", required=True)
+@click.option("--candidates", type=click.Choice(["text", "image", "all"]), default="text")
+@click.option("--target", type=click.Choice(["resource", "unit"]), default="resource")
+@click.option("--mode", type=click.Choice(["text", "semantic", "hybrid"]), default="semantic")
+@click.option("--allow-partial", is_flag=True)
+@click.option("--limit", type=click.IntRange(1, 10000), default=20)
+@click.option("--candidate-budget", type=click.IntRange(1, 10000), default=100)
+@click.option("--provider", "provider_name", type=click.Choice(["external", "synthetic"]), default="external")
+@click.option("--host-config", type=click.Path(path_type=Path), default=None,
+              help="Trusted caller-owned CUDA encoder config; requires --provider external.")
+@click.pass_context
+def text_search(
+    ctx: click.Context,
+    text: str,
+    candidates: str,
+    target: str,
+    mode: str,
+    allow_partial: bool,
+    limit: int,
+    candidate_budget: int,
+    provider_name: str,
+    host_config: Path | None,
+) -> None:
+    """Query the selected native text/image union from a fresh process."""
+    async def execute() -> dict[str, object]:
+        engine, provider = (_native_engine(ctx, provider_name) if host_config is None
+                            else _native_engine(ctx, provider_name, host_config))
+        try:
+            result = await engine.search_media(
+                MediaSearchRequest(
+                    TextInput(text, "query"),
+                    SearchScope(modalities=() if candidates == "all" else (candidates,)),
+                    target,
+                    mode,
+                    allow_partial,
+                    limit,
+                    candidate_budget,
+                )
+            )
+            return result.to_dict()
+        finally:
+            await _close_native(engine, provider)
+
+    try:
+        result = asyncio.run(execute())
+    except Exception as exc:
+        _output(ctx, error(
+            "Native text query failed",
+            _native_error_code(exc, "NATIVE_TEXT_ERROR"),
+            "native text-search",
+        ))
+        ctx.exit(1)
+        return
+    _output(ctx, success(result, command="native text-search"))
 
 
 @native.command(name="capabilities")

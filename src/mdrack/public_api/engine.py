@@ -25,6 +25,7 @@ from mdrack.application.native_media import (
     native_media_capabilities,
     search_native_media,
 )
+from mdrack.application.native_text import NativeTextIngestionResult, ingest_native_text
 from mdrack.application.prepared_enrichment import PreparedArtifactService, PreparedEnrichmentOperation
 from mdrack.application.query import ReadService
 from mdrack.application.ready_ocr import ReadyOCROperation, ReadyOCRService
@@ -587,6 +588,30 @@ class MDRackEngine:
             resource_id=resource_id, source_namespace=source_namespace, source_ref=source_ref,
             expected_revision=expected_revision, resolver=resolver,
             derived_text=derived_text, derived_lexical=derived_lexical, derived_dense=derived_dense,
+        )
+
+    async def ingest_native_text(
+        self, path: Path | None, *, source_namespace: str, source_ref: str,
+        resource_id: str | None = None, expected_revision: str | None = None,
+        resolver: SourceResolver | None = None,
+    ) -> NativeTextIngestionResult:
+        """Encode one ordinary Markdown document through the injected prepared port.
+
+        This new additive surface requires an explicit ``prepared_embedding_provider``;
+        the default legacy HTTP adapter is not silently promoted to native text.
+        """
+        if self.prepared_embedding_provider is None:
+            raise ValueError("prepared_embedding_provider_required")
+        return await ingest_native_text(
+            self.prepared_embedding_provider,
+            self._application_storage(create=True),
+            path,
+            config=self.config,
+            resource_id=resource_id,
+            source_namespace=source_namespace,
+            source_ref=source_ref,
+            expected_revision=expected_revision,
+            resolver=resolver,
         )
 
     def native_media_capabilities(self) -> dict[str, object]:

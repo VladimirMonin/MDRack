@@ -167,6 +167,21 @@ image bound, uses at most 120 seconds per native call and has a distinct complet
 it does not add image-query, SIMILARITY, audio/video or reuse-document-vector roles.
 Default/v1 identity and existing catalogs are not rewritten. See the
 [independent text/image result](../evaluation/native-text-image-product-2026-10-24.md).
+The additive ordinary-document route is `MDRackEngine.ingest_native_text(...)` and
+new `native text-ingest` / `native text-search`; it uses the same v2 space, canonical
+Markdown chunk/provenance and conditional publication, not a new provider or space.
+Prepared manifest/import remains an alternative caller-owned route, not the required
+ordinary user path. The new public export `NativeTextIngestionResult` serializes as
+`mdrack.native-text-ingest.v1`. `ingest_native_text(path, source_namespace=...,
+source_ref=..., resource_id=None, expected_revision=None, resolver=None)` takes
+caller-selected source authority; omitted resource identity is deterministic.
+Its result reports raw source revision/bytes, exact space/fingerprint, representation/
+unit IDs, chunk/vector/model-call counts, prepared input bytes, publication status
+and `unchanged`. Stable replay returns `already_published` with zero DOCUMENT calls
+and no state-token advance. The common conditional publication owner rechecks current
+state; concurrent deletion, withdrawal, recreation or source/target conflict cannot
+be reported as stale success. Refusal/failure is not a partial successful publication;
+a later QUERY remains a separate encoding operation.
 
 Every call drift-checks pins/config and uses exclusive private prepared files, a fresh
 shell-free process, suspended→owned Job→resume, bounded timeout/output, actual evaluated

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from mdrack.application.media_search import MediaSearchRequest, MediaSearchResult, StoredUnitInput
 from mdrack.application.metadata_filters import MetadataFilter, MetadataFilters
+from mdrack.application.native_text import NativeTextIngestionResult
 from mdrack.application.resource_catalog import (
     MetadataFacetValue,
     MetadataInspection,
@@ -62,6 +63,7 @@ class UnifiedTextSimilarityResult:
 
 __all__ = [
     "MediaSearchRequest", "MediaSearchResult", "StoredUnitInput",
+    "NativeTextIngestionResult",
     "EmbeddingResult", "EncodingRole", "ImageInput", "InputCapability", "RouteCapabilities", "TextInput",
     "EmbeddingCapabilities",
     "EmbeddingProfile",

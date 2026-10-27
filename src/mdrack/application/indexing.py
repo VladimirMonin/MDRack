@@ -392,17 +392,50 @@ class IndexingService:
             embedding_endpoint=self._provider_attr("endpoint", "_endpoint", default=None) if vectors else None,
         )
 
+    def prepare_selected_document(
+        self,
+        *,
+        source_ref: str,
+        content: str,
+        document_logical_id: str,
+        record_id: str,
+        run_id: str,
+    ) -> PreparedFile:
+        """Prepare one caller-selected Markdown document without scanning or writing.
+
+        This reuses the canonical structural parser/chunker and provenance builder.
+        The caller owns source authority and any subsequent encoder/publication.
+        """
+        if self.parser_backend != "markdown_it":
+            raise ValueError("native_text_requires_markdown_it")
+        if not isinstance(content, str) or not content:
+            raise ValueError("document_content_required")
+        if not isinstance(source_ref, str) or not source_ref:
+            raise ValueError("source_ref_required")
+        return self._prepare_structural_file(
+            Path(source_ref),
+            run_id,
+            source_content=content,
+            document_logical_id_override=document_logical_id,
+            record_id_override=record_id,
+            lookup_existing=False,
+        )
+
     def _prepare_structural_file(
         self,
         relative_path: Path,
         run_id: str,
         *,
         identity_source: dict[str, Any] | None = None,
+        source_content: str | None = None,
+        document_logical_id_override: str | None = None,
+        record_id_override: str | None = None,
+        lookup_existing: bool = True,
     ) -> PreparedFile:
         relative = relative_path.as_posix()
-        existing = self.storage.get_file_by_path(relative) or identity_source
-        file_record_id = str(existing["id"]) if existing is not None else str(uuid.uuid4())
-        document_logical_id = (
+        existing = (self.storage.get_file_by_path(relative) if lookup_existing else None) or identity_source
+        file_record_id = record_id_override or (str(existing["id"]) if existing is not None else str(uuid.uuid4()))
+        document_logical_id = document_logical_id_override or (
             str(existing["logical_id"])
             if existing is not None and existing.get("logical_id")
             else logical_id("doc", self.root_id, relative)
@@ -412,6 +445,7 @@ class IndexingService:
 
         parsed = self.parser.parse(
             self.root / relative_path,
+            content=source_content,
             document_id=document_logical_id,
             relative_path=relative,
         )
